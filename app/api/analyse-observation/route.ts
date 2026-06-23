@@ -1,41 +1,62 @@
 import OpenAI from "openai";
+import { frameworks } from "@/lib/framework";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const body = await request.json();
+
+    const observation = body.observation;
+    const frameworkKey = body.frameworkKey || "eyfs";
+
+    const framework =
+      frameworks[frameworkKey as keyof typeof frameworks] || frameworks.eyfs;
+
+    if (!observation) {
+      return Response.json(
+        { error: "Observation is required." },
+        { status: 400 }
+      );
+    }
+
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: `
-You are an experienced EYFS teacher.
+You are an experienced early years teacher.
 
-Observation:
-Matthew built a bridge using blocks and explained
-why a wider base made the structure stronger.
+Use this framework:
+${framework.name}
 
-Tell me:
+Learning areas:
+${framework.areas.join(", ")}
 
-1. Relevant learning areas
-2. Suggested level
-3. Confidence percentage
-4. Next steps
-`,
+Analyse this observation:
+"${observation}"
+
+Return ONLY valid JSON in this exact shape:
+{
+  "confidence": 85,
+  "level": "Secure",
+  "frameworkMatches": [
+    {
+      "strand": "Mathematics",
+      "objectives": ["Child shows early mathematical reasoning."]
+    }
+  ],
+  "nextSteps": ["Provide opportunities to explain reasoning in more detail."]
+}
+      `,
     });
 
-    return Response.json({
-      success: true,
-      message: response.output_text,
-    });
+    return Response.json(JSON.parse(response.output_text));
   } catch (error) {
     console.error(error);
 
     return Response.json(
-      {
-        success: false,
-        error: "OpenAI call failed",
-      },
+      { error: "Failed to analyse observation." },
       { status: 500 }
     );
   }

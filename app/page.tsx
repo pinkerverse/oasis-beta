@@ -469,37 +469,40 @@ function toggleArea(area: string) {
 }
 
   async function handleAnalyse() {
+  if (selectedChildren.length === 0) return;
+  if (!observation.trim()) return;
 
-  
+  setLoading(true);
+  setAnalysis(null);
 
-    if (!observation.trim()) return;
-
-    setLoading(true);
-
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    setAnalysis({
-      frameworkMatches: [
-        {
-          strand: "Mathematics",
-          objectives: ["Measures using standard tools", "Records findings"],
-        },
-        {
-          strand: "Research Skills",
-          objectives: ["Collects information", "Makes observations"],
-        },
-      ],
-      confidence: 87,
-      level: "Level 3 – Secure",
-      nextSteps: [
-        "Encourage prediction making before measuring.",
-        "Introduce simple graphing activities.",
-        "Compare growth over longer periods of time.",
-      ],
+  try {
+    const response = await fetch("/api/analyse-observation", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        observation,
+        frameworkKey: "eyfs",
+        learners: selectedChildren,
+      }),
     });
 
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Analysis failed");
+    }
+
+    setAnalysis(data);
+  } catch (error) {
+    console.error(error);
+    alert("Something went wrong while analysing the observation.");
+  } finally {
     setLoading(false);
   }
+}
+
 {/* HEADER */}
 
 
