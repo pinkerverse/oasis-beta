@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 
 
 
@@ -12,6 +12,12 @@ type AnalysisResult = {
   confidence: number;
   level: string;
   nextSteps: string[];
+
+  learnerMismatch: {
+    detected: boolean;
+    mentionedNames: string[];
+    selectedNames: string[];
+  };
 };
 
 const pupilProgress = [
@@ -76,18 +82,7 @@ const snapshotData = [
   },
 ];
 
-const evidenceCoverage = [
-  { area: "Mathematics", short: "M", count: 12, lastAdded: "2 days ago" },
-  { area: "Communication", short: "C", count: 9, lastAdded: "1 day ago" },
-  { area: "Research Skills", short: "R", count: 7, lastAdded: "4 days ago" },
-  { area: "Critical Thinking", short: "CT", count: 5, lastAdded: "1 week ago" },
-  { area: "Creativity", short: "Cr", count: 3, lastAdded: "2 weeks ago" },
-  { area: "Physical", short: "P", count: 2, lastAdded: "3 weeks ago" },
-  { area: "Social Skills", short: "SS", count: 8, lastAdded: "3 days ago" },
-  { area: "Self-Management", short: "SM", count: 4, lastAdded: "6 days ago" },
-];
 
-const maxEvidenceCount = Math.max(...evidenceCoverage.map((item) => item.count));
 
 const learningJourneyData = {
   Overall: [
@@ -186,7 +181,23 @@ const classInsights = {
 };
 
 export default function Home() {
+  const [savedToJournal, setSavedToJournal] = useState(false);
+  const getLearnerNames = (ids: string[]) =>
+  ids
+    .map((id) => {
+      const learner = pupils.find((p) => p.id === id);
+      return learner
+        ? `${learner.firstName} ${learner.lastName}`
+        : id;
+    })
+    .join(", ");
+  const [showJournal, setShowJournal] = useState(false);
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+const [journalLearner, setJournalLearner] = useState("");
+const [learnerObservations, setLearnerObservations] = useState<any[]>([]);
+const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const [loadingJournal, setLoadingJournal] = useState(false);
   const [observation, setObservation] = useState("");
   const [evidenceImage, setEvidenceImage] = useState<File | null>(null);
   const [showBaselineModal, setShowBaselineModal] = useState(false);
@@ -208,6 +219,8 @@ const [assessmentPhilosophy, setAssessmentPhilosophy] =
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
 const [newLearnerLastName, setNewLearnerLastName] = useState("");
+const [learnerMismatchConfirmed, setLearnerMismatchConfirmed] =
+  useState(false);
 const [isSEND, setIsSEND] = useState(false);
 const [isEAL, setIsEAL] = useState(false);
 const [isGifted, setIsGifted] = useState(false);
@@ -222,7 +235,39 @@ const [snapshotTo, setSnapshotTo] = useState("Current");
 const [assessmentScale, setAssessmentScale] = useState(
   "Below / Developing / Secure / Exceeding"
 );
+const evidenceCoverage = learnerObservations.reduce(
+  (acc: any[], entry: any) => {
+    entry.framework_matches?.forEach((match: any) => {
+      const existing = acc.find(
+        (item: any) => item.area === match.strand
+      );
 
+      if (existing) {
+        existing.count++;
+        existing.lastAdded = new Date(entry.created_at).toLocaleDateString();
+      } else {
+        acc.push({
+          area: match.strand,
+          short: match.strand
+            .split(" ")
+            .map((w: string) => w[0])
+            .join("")
+            .toUpperCase(),
+          count: 1,
+          lastAdded: new Date(entry.created_at).toLocaleDateString(),
+        });
+      }
+    });
+
+    return acc;
+  },
+  []
+);
+
+const maxEvidenceCount =
+  evidenceCoverage.length > 0
+    ? Math.max(...evidenceCoverage.map((item: any) => item.count))
+    : 1;
 const [customLevels, setCustomLevels] = useState([
   "Level 1",
   "Level 2",
@@ -236,48 +281,57 @@ const [selectedAreas, setSelectedAreas] = useState([
   "Mathematics",
   "Communication",
 ]);
-    const [pupils, setPupils] = useState([
-  {
-    firstName: "Matthew",
-    lastName: "Smith",
-    status: "green",
-    send: false,
-eal: false,
-gifted: true,
-    lastObservation:
-      "Built a bridge using blocks and explained why a wider base made the structure stronger.",
-    lastObservationDate: "2 days ago",
-    lastLevel: "Secure",
-  },
+const [pupils, setPupils] = useState<any[]>([]);
+const [learnersLoading, setLearnersLoading] = useState(true);
+const [learnersError, setLearnersError] = useState("");
 
-   {
-    firstName: "Emma",
-    lastName: "Brown",
-    status: "yellow",
-    send: true,
-eal: true,
-gifted: false,
-    lastObservation:
-      "Worked collaboratively during group discussion.",
-    lastObservationDate: "5 days ago",
-    lastLevel: "Developing",
-  },
-  {
-    firstName: "Lucas",
-    lastName: "Chen",
-    status: "red",
-  },
-  {
-    firstName: "Olivia",
-    lastName: "Garcia",
-    status: "green",
-  },
-  {
-    firstName: "Noah",
-    lastName: "Patel",
-    status: "yellow",
-  },
-]);
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadLearners() {
+    try {
+      setLearnersLoading(true);
+      setLearnersError("");
+
+      const response = await fetch("/api/learners", {
+        cache: "no-store",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Failed to load learners."
+        );
+      }
+
+      if (!cancelled) {
+        setPupils(result.learners || []);
+      }
+    } catch (error) {
+      console.error("Failed to load learners:", error);
+
+      if (!cancelled) {
+        setPupils([]);
+        setLearnersError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load learners."
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setLearnersLoading(false);
+      }
+    }
+  }
+
+  loadLearners();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
 <div className="mt-6">
 
@@ -361,13 +415,13 @@ const evidenceDetails = [
   },
 ];
 
-function toggleChild(name: string) {
-  if (selectedChildren.includes(name)) {
+function toggleChild(id: string) {
+  if (selectedChildren.includes(id)) {
     setSelectedChildren(
-      selectedChildren.filter((child) => child !== name)
+      selectedChildren.filter((childId) => childId !== id)
     );
   } else {
-    setSelectedChildren([...selectedChildren, name]);
+    setSelectedChildren([...selectedChildren, id]);
   }
 }
 
@@ -408,6 +462,8 @@ function handleAddLearner() {
   } else {
 
     const newLearner = {
+  id: crypto.randomUUID(),
+
   firstName: newLearnerFirstName,
   lastName: newLearnerLastName || "",
   status: "yellow",
@@ -471,10 +527,10 @@ function toggleArea(area: string) {
   async function handleAnalyse() {
   if (selectedChildren.length === 0) return;
   if (!observation.trim()) return;
-
+setSavedToJournal(false);
   setLoading(true);
   setAnalysis(null);
-
+setLearnerMismatchConfirmed(false);
   try {
     const response = await fetch("/api/analyse-observation", {
       method: "POST",
@@ -484,7 +540,16 @@ function toggleArea(area: string) {
       body: JSON.stringify({
         observation,
         frameworkKey: "eyfs",
-        learners: selectedChildren,
+        learners: selectedChildren.map((id) => {
+  const pupil = pupils.find((p) => p.id === id);
+
+  return {
+    id,
+    name: pupil
+      ? `${pupil.firstName} ${pupil.lastName}`
+      : id,
+  };
+}),
       }),
     });
 
@@ -501,6 +566,100 @@ function toggleArea(area: string) {
   } finally {
     setLoading(false);
   }
+}
+
+useEffect(() => {
+  async function loadLearnerObservations() {
+    if (selectedChildren.length !== 1) {
+      setLearnerObservations([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/journal?learner=${encodeURIComponent(selectedChildren[0])}`
+      );
+
+      const result = await response.json();
+
+      setLearnerObservations(result.entries || []);
+
+    } catch (error) {
+      console.error(error);
+      setLearnerObservations([]);
+    }
+  }
+
+  loadLearnerObservations();
+}, [selectedChildren]);
+
+async function handleSaveToJournal() {
+  if (!analysis) return;
+
+  try {
+    const response = await fetch("/api/journal", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        learner_ids: selectedChildren,
+        observation,
+        image_url: evidenceImage?.name || null,
+        framework_matches: analysis.frameworkMatches,
+        ai_level: analysis.level,
+        teacher_level: teacherLevel,
+        next_steps: analysis.nextSteps,
+        teacher_notes: overrideReason,
+      }),
+    });
+
+
+
+const text = await response.text();
+
+let result = {};
+
+try {
+  result = text ? JSON.parse(text) : {};
+} catch {
+  console.error("Server returned non-JSON:", text);
+}
+
+if (!response.ok) {
+  throw new Error((result as any).error || text);
+}
+
+    setSavedToJournal(true);
+
+const savedObservation = (result as any).observation;
+
+if (savedObservation && selectedChildren.length === 1) {
+  setLearnerObservations((current) => [
+    savedObservation,
+    ...current,
+  ]);
+}
+
+  } catch (error) {
+    console.error(error);
+    alert("Failed to save observation.");
+  }
+}
+async function openJournal(name: string) {
+  setLoadingJournal(true);
+
+  const response = await fetch(
+    `/api/journal?learner=${encodeURIComponent(name)}`
+  );
+
+  const result = await response.json();
+
+  setJournalEntries(result.entries || []);
+  setJournalLearner(name);
+  setShowJournal(true);
+
+  setLoadingJournal(false);
 }
 
 {/* HEADER */}
@@ -618,17 +777,13 @@ function toggleArea(area: string) {
     {pupils.map((child) => (
       <button
         key={`${child.firstName}-${child.lastName}`}
-        onClick={() =>
-  toggleChild(`${child.firstName} ${child.lastName}`)
-}
+        onClick={() => toggleChild(child.id)}
         className="group relative flex flex-col items-center"
       >
 
         <div
           className={`relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition ${
-            selectedChildren.includes(
-  `${child.firstName} ${child.lastName}`
-)
+            selectedChildren.includes(child.id)
               ? "border-blue-500 bg-slate-300"
               : "border-slate-200 bg-slate-300"
           }`}
@@ -856,24 +1011,91 @@ function toggleArea(area: string) {
               <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-500">Analysis For</p>
-
-                   <p className="text-2xl font-bold text-slate-900">
+                    <p className="text-2xl font-bold text-slate-900">
   {selectedChildren.length > 0
-    ? selectedChildren.join(", ")
-    : "No Learners Selected"}
+  ? selectedChildren
+      .map((id) => {
+        const pupil = pupils.find((p) => p.id === id);
+        return pupil
+          ? `${pupil.firstName} ${pupil.lastName}`
+          : id;
+      })
+      .join(", ")
+  : "No Learners Selected"}
 </p>
                   </div>
 
-                  <div className="text-right">
-                    <p className="text-sm text-slate-500">Assessment Status</p>
 
-                    <p className="font-semibold text-emerald-600">Complete</p>
-                  </div>
-                </div>
+
+
+                 <div className="text-right">
+  <p className="text-sm text-slate-500">Assessment Status</p>
+
+  <p className="font-semibold text-emerald-600">Complete</p>
+
+ <button
+  type="button"
+  onClick={handleSaveToJournal}
+  disabled={
+    savedToJournal ||
+    (analysis.learnerMismatch?.detected &&
+      !learnerMismatchConfirmed)
+  }
+  className={`mt-6 rounded-xl px-6 py-3 font-medium text-white transition ${
+    savedToJournal
+      ? "cursor-default bg-emerald-600"
+      : analysis.learnerMismatch?.detected &&
+        !learnerMismatchConfirmed
+      ? "cursor-not-allowed bg-slate-300"
+      : "bg-slate-900 hover:bg-slate-700"
+  }`}
+>
+  {savedToJournal
+    ? "Saved!"
+    : analysis.learnerMismatch?.detected &&
+      !learnerMismatchConfirmed
+    ? "Confirm learner first"
+    : "Save to Journal"}
+</button>
+</div>
+                              </div>
+            </div>
+
+            {analysis.learnerMismatch?.detected && (
+              <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
+                <p className="font-semibold text-amber-900">
+                  Possible learner mismatch
+                </p>
+
+                <p className="mt-2 text-sm text-amber-800">
+                  This observation mentions{" "}
+                  <strong>
+                    {analysis.learnerMismatch.mentionedNames.join(", ")}
+                  </strong>
+                  , but the selected learner is{" "}
+                  <strong>
+                    {analysis.learnerMismatch.selectedNames.join(", ")}
+                  </strong>
+                  .
+                </p>
+
+                {!learnerMismatchConfirmed ? (
+                  <button
+                    type="button"
+                    onClick={() => setLearnerMismatchConfirmed(true)}
+                    className="mt-4 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                  >
+                    Confirm selection is correct
+                  </button>
+                ) : (
+                  <p className="mt-4 text-sm font-semibold text-amber-900">
+                    Selection confirmed by teacher.
+                  </p>
+                )}
               </div>
+            )}
 
-              <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2">
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
                   <p className="text-sm text-slate-500">AI Confidence</p>
 
@@ -935,6 +1157,9 @@ function toggleArea(area: string) {
                   </ul>
                 </div>
               </div>
+
+          
+
             </>
           )}
         </div>
@@ -983,7 +1208,7 @@ function toggleArea(area: string) {
             </h2>
 
             <p className="text-sm font-medium text-slate-500">
-  For {selectedChildren.join(", ")}
+  For {getLearnerNames(selectedChildren)}
 </p>
 
 <p className="mt-1 text-slate-500">
@@ -1043,7 +1268,7 @@ function toggleArea(area: string) {
 </h2>
 
 <p className="text-sm font-medium text-slate-500">
-  For {selectedChildren.join(", ")}
+  For {getLearnerNames(selectedChildren)}
 </p>
 
 <p className="mt-1 text-slate-500">
@@ -1052,14 +1277,21 @@ function toggleArea(area: string) {
                 </div>
 
                 <div className="text-right">
-                  <p className="text-sm text-slate-500">Total</p>
+                  <p className="text-sm text-slate-500">
+  Observations
+</p>
 
-                  <p className="text-3xl font-bold text-slate-900">
-                    {evidenceCoverage.reduce(
-                      (sum, item) => sum + item.count,
-                      0
-                    )}
-                  </p>
+<p className="text-3xl font-bold text-slate-900">
+  {learnerObservations.length}
+</p>
+
+<p className="mt-1 text-xs text-slate-500">
+  {evidenceCoverage.reduce(
+    (sum: number, item: any) => sum + item.count,
+    0
+  )} learning-area matches
+</p>
+
                 </div>
               </div>
 
@@ -1083,7 +1315,7 @@ function toggleArea(area: string) {
                       <p className="font-bold text-slate-900">{item.area}</p>
 
                       <p className="mt-1 text-xs font-medium text-slate-900">
-                        {item.count} observations
+                        {item.count} {item.count === 1 ? "match" : "matches"}
                       </p>
 
                       <p className="mt-2 text-xs text-slate-500">
@@ -1094,11 +1326,16 @@ function toggleArea(area: string) {
                 ))}
               </div>
 
-              <div className="mt-3 grid grid-cols-8 gap-2 text-center text-xs font-semibold text-slate-500">
-                {evidenceCoverage.map((item) => (
-                  <span key={item.area}>{item.short}</span>
-                ))}
-              </div>
+              <div className="mt-3 flex gap-4 text-center text-xs font-semibold text-slate-500">
+  {evidenceCoverage.map((item) => (
+    <span
+      key={item.area}
+      className="min-w-0 flex-1"
+    >
+      {item.short}
+    </span>
+  ))}
+</div>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
@@ -1109,7 +1346,7 @@ function toggleArea(area: string) {
 </h2>
 
 <p className="text-sm font-medium text-slate-500">
-  For {selectedChildren.join(", ")}
+  For {getLearnerNames(selectedChildren)}
 </p>
 
 <p className="mt-1 text-slate-500">
@@ -1227,7 +1464,7 @@ function toggleArea(area: string) {
           </h2>
 
           <p className="text-sm font-medium text-slate-500">
-            For {selectedChildren.join(", ")}
+            For {getLearnerNames(selectedChildren)}
           </p>
 
           <p className="mt-1 text-slate-500">
@@ -1795,6 +2032,13 @@ function toggleArea(area: string) {
 
             <div className="flex gap-2">
 
+<button
+  onClick={() => openJournal(child.id)}
+  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+>
+  Journal
+</button>
+
              <button
   onClick={() => {
 
@@ -1832,6 +2076,143 @@ function toggleArea(area: string) {
     </div>
 
   </div>
+)}
+
+{showJournal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+
+    <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-8 shadow-2xl">
+
+      <div className="mb-6 flex items-center justify-between">
+
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900">
+            {
+  pupils.find((child) => child.id === journalLearner)?.firstName
+} {
+  pupils.find((child) => child.id === journalLearner)?.lastName
+}
+          </h2>
+
+          <p className="text-slate-500">
+            Learning Journal
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+
+  <button
+    onClick={() => window.print()}
+    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+  >
+    Print Journal
+  </button>
+
+  <button
+    onClick={() => setShowJournal(false)}
+    className="text-2xl text-slate-400 hover:text-slate-700"
+  >
+    ×
+  </button>
+
+</div>
+
+      </div>
+
+      <div className="space-y-4">
+
+  {journalEntries.length === 0 ? (
+
+    <div className="rounded-xl border border-slate-200 p-8 text-center text-slate-500">
+      No observations yet.
+    </div>
+
+  ) : (
+
+journalEntries.map((entry: any) => {
+
+  const expanded = expandedEntry === entry.id;
+
+  return (
+
+    <div
+      key={entry.id}
+      className="rounded-2xl border border-slate-200 bg-white shadow-sm"
+    >
+
+      <button
+        onClick={() =>
+          setExpandedEntry(
+            expanded ? null : entry.id
+          )
+        }
+        className="w-full p-6 text-left"
+      >
+
+        <div className="flex items-start justify-between">
+
+          <div>
+
+            <p className="font-semibold text-slate-900">
+              {new Date(entry.created_at).toLocaleDateString()}
+            </p>
+
+            <p className="mt-2 text-sm text-slate-500">
+              {entry.framework_matches
+                ?.map((f: any) => f.strand)
+                .join(" • ")}
+            </p>
+
+            <p className="mt-3 line-clamp-3 text-slate-700">
+              {entry.observation}
+            </p>
+
+          </div>
+
+          <span className="text-xl text-slate-400">
+            {expanded ? "▼" : "▶"}
+          </span>
+
+        </div>
+
+      </button>
+
+      {expanded && (
+
+        <div className="border-t border-slate-200 px-6 pb-6">
+
+          <h3 className="mt-6 font-semibold text-slate-900">
+            Next Steps
+          </h3>
+
+          <ul className="mt-3 ml-5 list-disc space-y-2 text-slate-700">
+
+            {entry.next_steps?.map((step: string) => (
+
+              <li key={step}>
+                {step}
+              </li>
+
+            ))}
+
+          </ul>
+
+        </div>
+
+      )}
+
+    </div>
+
+  );
+
+})
+
+  )}
+
+</div>
+      </div>
+
+    </div>
 )}
 
 {showAddLearnerModal && (
@@ -2462,14 +2843,22 @@ function toggleArea(area: string) {
         </h3>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {selectedChildren.map((child) => (
-            <span
-              key={child}
-              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              {child}
-            </span>
-          ))}
+          {selectedChildren.map((id) => {
+
+  const learner = pupils.find((p) => p.id === id);
+
+  return (
+    <span
+      key={id}
+      className="rounded-full bg-white px-4 py-2 font-medium text-slate-800"
+    >
+      {learner
+        ? `${learner.firstName} ${learner.lastName}`
+        : id}
+    </span>
+  );
+
+})}
         </div>
 
       </div>
@@ -2644,14 +3033,22 @@ function toggleArea(area: string) {
         </h3>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {selectedChildren.map((child) => (
-            <span
-              key={child}
-              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              {child}
-            </span>
-          ))}
+          {selectedChildren.map((id) => {
+
+  const learner = pupils.find((p) => p.id === id);
+
+  return (
+    <span
+      key={id}
+      className="rounded-full bg-white px-4 py-2 font-medium text-slate-800"
+    >
+      {learner
+        ? `${learner.firstName} ${learner.lastName}`
+        : id}
+    </span>
+  );
+
+})}
         </div>
 
       </div>
