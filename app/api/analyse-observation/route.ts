@@ -77,6 +77,10 @@ Assessment rules:
 - Suggested level must be one of: Below, Developing, Secure, Exceeding.
 - Confidence must be a whole number from 0 to 100.
 - Next steps should be practical and teacher-friendly.
+- Give every matched learning area its own suggested level.
+- Assess each matched learning area independently, using only the evidence relevant to that area.
+- Different learning areas may have different suggested levels.
+- Give every matched learning area its own confidence score from 0 to 100.
 
 Learner mismatch rules:
 - Check whether the observation explicitly mentions a learner by name.
@@ -112,24 +116,48 @@ Learner mismatch rules:
                 ],
               },
               frameworkMatches: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    strand: {
-                      type: "string",
-                    },
-                    objectives: {
-                      type: "array",
-                      items: {
-                        type: "string",
-                      },
-                    },
-                  },
-                  required: ["strand", "objectives"],
-                },
-              },
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+
+    properties: {
+      strand: {
+        type: "string",
+      },
+
+      objectives: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+
+      suggestedLevel: {
+        type: "string",
+        enum: [
+          "Below",
+          "Developing",
+          "Secure",
+          "Exceeding",
+        ],
+      },
+
+      confidence: {
+        type: "integer",
+        minimum: 0,
+        maximum: 100,
+      },
+    },
+
+    required: [
+      "strand",
+      "objectives",
+      "suggestedLevel",
+      "confidence",
+    ],
+  },
+},
               nextSteps: {
                 type: "array",
                 items: {

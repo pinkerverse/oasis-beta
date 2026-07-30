@@ -131,3 +131,144 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// UPDATE ONE LEARNER
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+
+    const id =
+      typeof body.id === "string"
+        ? body.id.trim()
+        : "";
+
+    const firstName =
+      typeof body.firstName === "string"
+        ? body.firstName.trim()
+        : "";
+
+    const lastName =
+      typeof body.lastName === "string"
+        ? body.lastName.trim()
+        : "";
+
+    const className =
+      typeof body.className === "string"
+        ? body.className.trim()
+        : "";
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Learner ID is required." },
+        { status: 400 }
+      );
+    }
+
+    if (!firstName || !lastName) {
+      return NextResponse.json(
+        {
+          error:
+            "First name and last name are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("learners")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        class_name: className || null,
+      })
+      .eq("id", id)
+      .select(
+        `
+          id,
+          external_id,
+          first_name,
+          last_name,
+          class_name,
+          active,
+          created_at
+        `
+      )
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      learner: {
+        id: data.id,
+        externalId: data.external_id,
+        firstName: data.first_name,
+        lastName: data.last_name,
+        className: data.class_name,
+        status: "yellow",
+        send: false,
+        eal: false,
+        gifted: false,
+        lastObservation: "",
+        lastObservationDate: "",
+        lastLevel: "Not Assessed",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update learner:", error);
+
+    return NextResponse.json(
+      { error: "Failed to update learner." },
+      { status: 500 }
+    );
+  }
+}
+
+// ARCHIVE ONE LEARNER
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+
+    const id =
+      typeof body.id === "string"
+        ? body.id.trim()
+        : "";
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Learner ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabaseAdmin
+      .from("learners")
+      .update({
+        active: false,
+      })
+      .eq("id", id);
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error("Failed to archive learner:", error);
+
+    return NextResponse.json(
+      { error: "Failed to archive learner." },
+      { status: 500 }
+    );
+  }
+}

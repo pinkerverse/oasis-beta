@@ -1,16 +1,30 @@
 "use client";
-
+import Papa from "papaparse";
 import { useEffect, useState, useRef } from "react";
 
+type ImportedLearnerPreview = {
+  rowId: string;
+  externalId: string;
+  firstName: string;
+  lastName: string;
+  className: string;
+  isValid: boolean;
+};
 
+type CsvLearnerRow = Record<string, string | undefined>;
 
 type AnalysisResult = {
   frameworkMatches: {
-    strand: string;
-    objectives: string[];
-  }[];
+  strand: string;
+  objectives: string[];
+  suggestedLevel: string;
+  confidence: number;
+}[];
+
+  // Keep these for now because the current screen still uses them
   confidence: number;
   level: string;
+
   nextSteps: string[];
 
   learnerMismatch: {
@@ -19,6 +33,13 @@ type AnalysisResult = {
     selectedNames: string[];
   };
 };
+
+const defaultAssessmentLevels = [
+  "Below",
+  "Developing",
+  "Secure",
+  "Exceeding",
+];
 
 const pupilProgress = [
   { area: "Mathematics", level: "Exceeding", score: 100 },
@@ -194,6 +215,8 @@ export default function Home() {
   const [showJournal, setShowJournal] = useState(false);
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
 const [journalLearner, setJournalLearner] = useState("");
+const [isImportingLearners, setIsImportingLearners] =
+  useState(false);
 const [learnerObservations, setLearnerObservations] = useState<any[]>([]);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
@@ -207,10 +230,19 @@ const [showManageLearners, setShowManageLearners] =
   const [showOverrideModal, setShowOverrideModal] = useState(false);
 const [teacherLevel, setTeacherLevel] = useState("Secure");
 const [overrideReason, setOverrideReason] = useState("");
+const [areaLevelOverrides, setAreaLevelOverrides] =
+  useState<Record<string, string>>({});
+
+const [areaBeingOverridden, setAreaBeingOverridden] =
+  useState<string | null>(null);
+  const [areaOverrideReasons, setAreaOverrideReasons] =
+  useState<Record<string, string>>({});
   const [showObservationPanel, setShowObservationPanel] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
 const [learnerToArchive, setLearnerToArchive] = useState<any>(null);
   const [editingLearner, setEditingLearner] = useState<any>(null);
+  const [showImportLearners, setShowImportLearners] =
+  useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 const [assessmentPhilosophy, setAssessmentPhilosophy] =
   useState("Hybrid");
@@ -221,8 +253,18 @@ const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
 const [newLearnerLastName, setNewLearnerLastName] = useState("");
 const [learnerMismatchConfirmed, setLearnerMismatchConfirmed] =
   useState(false);
+  const [importMode, setImportMode] = useState<
+  "paste" | "file" | "photo"
+>("paste");
+
+const [importText, setImportText] = useState("");
+const [importPreview, setImportPreview] =
+  useState<ImportedLearnerPreview[]>([]);
+
+const [importError, setImportError] = useState("");
 const [isSEND, setIsSEND] = useState(false);
 const [isEAL, setIsEAL] = useState(false);
+const [isSavingLearner, setIsSavingLearner] = useState(false);
 const [isGifted, setIsGifted] = useState(false);
 const [newLearnerDob, setNewLearnerDob] = useState("");
   const [showFrameworkModal, setShowFrameworkModal] = useState(false);
@@ -284,6 +326,343 @@ const [selectedAreas, setSelectedAreas] = useState([
 const [pupils, setPupils] = useState<any[]>([]);
 const [learnersLoading, setLearnersLoading] = useState(true);
 const [learnersError, setLearnersError] = useState("");
+
+
+
+function handleReviewLearners() {
+  setImportError("");
+
+  const lines = importText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const rows = lines
+    .filter((line, index) => {
+      if (index !== 0) return true;
+
+      const firstLine = line.toLowerCase();
+
+      const looksLikeHeader =
+        firstLine.includes("external") ||
+        firstLine.includes("pupil id") ||
+        firstLine.includes("first name");
+
+      return !looksLikeHeader;
+    })
+    .map((line) => {
+      const separator = line.includes("\t") ? "\t" : ",";
+
+      const parts = line
+        .split(separator)
+        .map((part) => part.trim());
+
+      const [
+        externalId = "",
+        firstName = "",
+        lastName = "",
+        className = "",
+      ] = parts;
+
+      return {
+        rowId: crypto.randomUUID(),
+        externalId,
+        firstName,
+        lastName,
+        className,
+        isValid: Boolean(
+          externalId &&
+            firstName &&
+            lastName
+        ),
+      };
+    });
+
+  if (rows.length === 0) {
+    setImportPreview([]);
+    setImportError(
+      "No learners were found. Enter one learner per line."
+    );
+    return;
+  }
+
+  setImportPreview(rows);
+
+  if (rows.some((learner) => !learner.isValid)) {
+    setImportError(
+      "Some learners are missing an ID, first name or last name."
+    );
+  }
+}
+
+function updateImportPreviewRow(
+  rowId: string,
+  field:
+    | "externalId"
+    | "firstName"
+    | "lastName"
+    | "className",
+  value: string
+) {
+  setImportPreview((current) =>
+    current.map((learner) => {
+      if (learner.rowId !== rowId) {
+        return learner;
+      }
+
+      const updatedLearner = {
+        ...learner,
+        [field]: value,
+      };
+
+      return {
+        ...updatedLearner,
+        isValid: Boolean(
+          updatedLearner.externalId.trim() &&
+            updatedLearner.firstName.trim() &&
+            updatedLearner.lastName.trim()
+        ),
+      };
+    })
+  );
+
+  setImportError("");
+}
+
+function removeImportPreviewRow(rowId: string) {
+  setImportPreview((current) =>
+    current.filter((learner) => learner.rowId !== rowId)
+  );
+
+  setImportError("");
+}
+
+function getImportAction(externalId: string) {
+  const normalisedId = externalId.trim().toLowerCase();
+
+  if (!normalisedId) {
+    return "unknown";
+  }
+
+  const learnerAlreadyExists = pupils.some(
+    (learner) =>
+      learner.externalId?.trim().toLowerCase() ===
+      normalisedId
+  );
+
+  return learnerAlreadyExists ? "update" : "new";
+}
+
+function isDuplicateImportId(
+  rowId: string,
+  externalId: string
+) {
+  const normalisedId = externalId.trim().toLowerCase();
+
+  if (!normalisedId) {
+    return false;
+  }
+
+  return importPreview.some(
+    (learner) =>
+      learner.rowId !== rowId &&
+      learner.externalId.trim().toLowerCase() ===
+        normalisedId
+  );
+}
+
+async function handleCsvUpload(
+  event: React.ChangeEvent<HTMLInputElement>
+) {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  setImportError("");
+  setImportPreview([]);
+
+  if (!file.name.toLowerCase().endsWith(".csv")) {
+    setImportError("Please select a CSV file.");
+    event.target.value = "";
+    return;
+  }
+
+  const firstBytes = new Uint8Array(
+  await file.slice(0, 4).arrayBuffer()
+);
+
+const isZipFile =
+  firstBytes[0] === 0x50 &&
+  firstBytes[1] === 0x4b;
+
+if (isZipFile) {
+  setImportError(
+    "This is a Numbers or Excel document with a CSV filename. Export it as a real CSV file and try again."
+  );
+
+  event.target.value = "";
+  return;
+}
+
+
+  Papa.parse<CsvLearnerRow>(file, {
+    header: true,
+    skipEmptyLines: "greedy",
+
+    transformHeader: (header) =>
+      header
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, ""),
+
+    complete: (results) => {
+      const rows: ImportedLearnerPreview[] =
+        results.data.map((row) => {
+          const externalId =
+            row.externalid ||
+            row.pupilid ||
+            row.studentid ||
+            row.learnerid ||
+            row.id ||
+            "";
+
+          const firstName =
+            row.firstname ||
+            row.forename ||
+            row.first ||
+            "";
+
+          const lastName =
+            row.lastname ||
+            row.surname ||
+            row.familyname ||
+            row.last ||
+            "";
+
+          const className =
+            row.classname ||
+            row.class ||
+            row.group ||
+            row.registrationgroup ||
+            "";
+
+          return {
+            rowId: crypto.randomUUID(),
+            externalId: externalId.trim(),
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            className: className.trim(),
+            isValid: Boolean(
+              externalId.trim() &&
+                firstName.trim() &&
+                lastName.trim()
+            ),
+          };
+        });
+
+      if (rows.length === 0) {
+        setImportError(
+          "No learners were found in this CSV file."
+        );
+        return;
+      }
+
+      setImportPreview(rows);
+
+      if (results.errors.length > 0) {
+        setImportError(
+          "The file was read, but some CSV rows may need checking."
+        );
+      } else if (rows.some((learner) => !learner.isValid)) {
+        setImportError(
+          "Some learners are missing a pupil ID, first name or last name."
+        );
+      }
+    },
+
+    error: (error) => {
+      console.error("CSV import error:", error);
+
+      setImportError(
+        "The CSV file could not be read. Check its format and try again."
+      );
+    },
+  });
+
+  event.target.value = "";
+}
+
+async function handleImportLearners() {
+  if (importPreview.length === 0) {
+    setImportError("Review the learner list before importing.");
+    return;
+  }
+
+  if (importPreview.some((learner) => !learner.isValid)) {
+    setImportError(
+      "Fix learners marked as needing attention before importing."
+    );
+    return;
+  }
+
+  try {
+    setIsImportingLearners(true);
+    setImportError("");
+
+    const response = await fetch("/api/learners", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        learners: importPreview.map((learner) => ({
+          externalId: learner.externalId,
+          firstName: learner.firstName,
+          lastName: learner.lastName,
+          className: learner.className,
+        })),
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "Failed to import learners."
+      );
+    }
+
+    const learnersResponse = await fetch("/api/learners", {
+      cache: "no-store",
+    });
+
+    const learnersResult = await learnersResponse.json();
+
+    if (!learnersResponse.ok) {
+      throw new Error(
+        learnersResult.error ||
+          "Learners imported, but the list could not refresh."
+      );
+    }
+
+    setPupils(learnersResult.learners || []);
+
+    setImportText("");
+    setImportPreview([]);
+    setImportError("");
+    setShowImportLearners(false);
+  } catch (error) {
+    console.error("Failed to import learners:", error);
+
+    setImportError(
+      error instanceof Error
+        ? error.message
+        : "Failed to import learners."
+    );
+  } finally {
+    setIsImportingLearners(false);
+  }
+}
 
 useEffect(() => {
   let cancelled = false;
@@ -415,6 +794,14 @@ const evidenceDetails = [
   },
 ];
 
+function closeImportLearnersModal() {
+  setShowImportLearners(false);
+  setImportMode("paste");
+  setImportText("");
+  setImportPreview([]);
+  setImportError("");
+}
+
 function toggleChild(id: string) {
   if (selectedChildren.includes(id)) {
     setSelectedChildren(
@@ -440,87 +827,160 @@ function toggleChild(id: string) {
     })
     .join(" ");
 
-function handleAddLearner() {
+async function handleAddLearner() {
+  const firstName = newLearnerFirstName.trim();
+  const lastName = newLearnerLastName.trim();
 
-  if (!newLearnerFirstName.trim()) return;
-
-  if (editingIndex !== null) {
-
-    const updatedPupils = [...pupils];
-
-    updatedPupils[editingIndex] = {
-      ...updatedPupils[editingIndex],
-      firstName: newLearnerFirstName,
-      lastName: newLearnerLastName,
-      
-    };
-
-    setPupils(updatedPupils);
-
-    setEditingIndex(null);
-
-  } else {
-
-    const newLearner = {
-  id: crypto.randomUUID(),
-
-  firstName: newLearnerFirstName,
-  lastName: newLearnerLastName || "",
-  status: "yellow",
-
-  send: isSEND,
-  eal: isEAL,
-  gifted: isGifted,
-
-  lastObservation: "",
-  lastObservationDate: "",
-  lastLevel: "Not Assessed",
-};
-
-    setPupils([...pupils, newLearner]);
-
+  if (!firstName) {
+    alert("Please enter the learner's first name.");
+    return;
   }
 
-  setNewLearnerFirstName("");
-  setNewLearnerLastName("");
-  setNewLearnerDob("");
+  if (!lastName) {
+    alert("Please enter the learner's last name.");
+    return;
+  }
 
-  setShowAddLearnerModal(false);
-}
+  try {
+    setIsSavingLearner(true);
 
-function confirmArchiveLearner() {
+    if (editingLearner) {
+      const response = await fetch("/api/learners", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: editingLearner.id,
+          firstName,
+          lastName,
+          className: editingLearner.className || "",
+        }),
+      });
 
-  if (!learnerToArchive) return;
+      const result = await response.json();
 
-  setPupils(
-    pupils.filter(
-      (p) =>
-        !(
-          p.firstName === learnerToArchive.firstName &&
-          p.lastName === learnerToArchive.lastName
-        )
-    )
-  );
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Failed to update learner."
+        );
+      }
+    } else {
+      const response = await fetch("/api/learners", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          learners: [
+            {
+              externalId: `MANUAL-${crypto.randomUUID()}`,
+              firstName,
+              lastName,
+              className: "",
+            },
+          ],
+        }),
+      });
 
-  setLearnerToArchive(null);
-  setShowArchiveModal(false);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Failed to add learner."
+        );
+      }
+    }
+
+    // Reload the alphabetically sorted learner list
+    const learnersResponse = await fetch("/api/learners", {
+      cache: "no-store",
+    });
+
+    const learnersResult = await learnersResponse.json();
+
+    if (!learnersResponse.ok) {
+      throw new Error(
+        learnersResult.error ||
+          "The learner was saved, but the list could not refresh."
+      );
+    }
+
+    setPupils(learnersResult.learners || []);
+
+    setNewLearnerFirstName("");
+    setNewLearnerLastName("");
+    setNewLearnerDob("");
+
+    setEditingLearner(null);
+    setEditingIndex(null);
+
+    setShowAddLearnerModal(false);
+  } catch (error) {
+    console.error("Failed to save learner:", error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to save learner."
+    );
+  } finally {
+    setIsSavingLearner(false);
+  }
 }
 
 function toggleArea(area: string) {
+  setSelectedAreas((current) =>
+    current.includes(area)
+      ? current.filter((item) => item !== area)
+      : [...current, area]
+  );
+}
 
-  if (selectedAreas.includes(area)) {
+async function confirmArchiveLearner() {
+  if (!learnerToArchive) return;
 
-    setSelectedAreas(
-      selectedAreas.filter((a) => a !== area)
+  try {
+    const response = await fetch("/api/learners", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: learnerToArchive.id,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "Failed to archive learner."
+      );
+    }
+
+    setPupils((current) =>
+      current.filter(
+        (learner) => learner.id !== learnerToArchive.id
+      )
     );
 
-  } else {
+    setSelectedChildren((current) =>
+      current.filter(
+        (learnerId) => learnerId !== learnerToArchive.id
+      )
+    );
 
-    setSelectedAreas([
-      ...selectedAreas,
-      area,
-    ]);
+    setLearnerToArchive(null);
+    setShowArchiveModal(false);
+  } catch (error) {
+    console.error("Failed to archive learner:", error);
 
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to archive learner."
+    );
   }
 }
 
@@ -531,6 +991,9 @@ setSavedToJournal(false);
   setLoading(true);
   setAnalysis(null);
 setLearnerMismatchConfirmed(false);
+setAreaLevelOverrides({});
+setAreaBeingOverridden(null);
+setAreaOverrideReasons({});
   try {
     const response = await fetch("/api/analyse-observation", {
       method: "POST",
@@ -1096,33 +1559,155 @@ async function openJournal(name: string) {
             )}
 
             <div className="grid gap-6 md:grid-cols-2">
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-                  <p className="text-sm text-slate-500">AI Confidence</p>
-
-                  <p className="mt-2 text-5xl font-bold text-slate-900">
-                    {analysis.confidence}%
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-
-  <div className="flex items-center justify-between">
-    <p className="text-sm text-slate-500">
-      Suggested Level
-    </p>
-
-    <button
-      onClick={() => setShowOverrideModal(true)}
-      className="rounded-full border border-slate-300 px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-50"
-    >
-      Override
-    </button>
-  </div>
-
-  <p className="mt-2 text-3xl font-bold text-slate-900">
-    {analysis.level}
+            <div className="hidden">
+  <p className="text-sm text-slate-500">
+    AI Confidence
   </p>
 
+  <p className="mt-2 text-5xl font-bold text-slate-900">
+    {analysis.confidence}%
+  </p>
+</div>
+
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg md:col-span-2">
+  <div>
+    <p className="text-sm text-slate-500">
+      Area Judgements
+    </p>
+
+    <p className="mt-1 text-sm text-slate-600">
+      Each learning area is assessed independently.
+    </p>
+  </div>
+
+  <div className="mt-5 space-y-4">
+    {analysis.frameworkMatches.map((match) => {
+      const currentLevel =
+        areaLevelOverrides[match.strand] ||
+        match.suggestedLevel;
+
+      const hasOverride =
+        Boolean(areaLevelOverrides[match.strand]);
+
+      return (
+        <div
+          key={match.strand}
+          className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-900">
+                {match.strand}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                AI confidence: {match.confidence}%
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm">
+                {currentLevel}
+              </span>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setAreaBeingOverridden(match.strand)
+                }
+                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Override
+              </button>
+            </div>
+          </div>
+
+          {hasOverride && (
+            <p className="mt-2 text-xs font-medium text-blue-700">
+              Teacher override applied
+            </p>
+          )}
+
+         {areaBeingOverridden === match.strand && (
+  <div className="mt-4 border-t border-slate-200 pt-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <select
+        value={currentLevel}
+        onChange={(event) =>
+          setAreaLevelOverrides((current) => ({
+            ...current,
+            [match.strand]: event.target.value,
+          }))
+        }
+        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-900"
+      >
+        {defaultAssessmentLevels.map((level) => (
+          <option key={level} value={level}>
+            {level}
+          </option>
+        ))}
+      </select>
+
+      <button
+        type="button"
+        onClick={() => setAreaBeingOverridden(null)}
+        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+      >
+        Done
+      </button>
+
+      {hasOverride && (
+        <button
+          type="button"
+          onClick={() => {
+            setAreaLevelOverrides((current) => {
+              const updated = { ...current };
+              delete updated[match.strand];
+              return updated;
+            });
+
+            setAreaOverrideReasons((current) => {
+              const updated = { ...current };
+              delete updated[match.strand];
+              return updated;
+            });
+
+            setAreaBeingOverridden(null);
+          }}
+          className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+        >
+          Use AI suggestion
+        </button>
+      )}
+    </div>
+
+    <div className="mt-4">
+      <label className="block text-sm font-semibold text-slate-700">
+        Reason for adjusted judgement
+      </label>
+
+      <p className="mt-1 text-xs text-slate-500">
+        Optional teacher context that can help improve future assessment guidance.
+      </p>
+
+      <textarea
+        value={areaOverrideReasons[match.strand] || ""}
+        onChange={(event) =>
+          setAreaOverrideReasons((current) => ({
+            ...current,
+            [match.strand]: event.target.value,
+          }))
+        }
+        placeholder="For example: Recent independent work shows greater consistency than this observation alone."
+        className="mt-2 min-h-24 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900"
+      />
+    </div>
+  </div>
+)}
+        </div>
+      );
+    })}
+  </div>
 </div>
 
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
@@ -1986,7 +2571,7 @@ async function openJournal(name: string) {
 {showManageLearners && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
-    <div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-2xl">
+    <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
 
       <div className="flex items-start justify-between">
 
@@ -2000,12 +2585,24 @@ async function openJournal(name: string) {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowManageLearners(false)}
-          className="text-slate-500 hover:text-slate-900"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-3">
+  <button
+    type="button"
+    onClick={() => setShowImportLearners(true)}
+    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+  >
+    Import Class List
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setShowManageLearners(false)}
+    className="text-2xl text-slate-500 hover:text-slate-900"
+    aria-label="Close learner management"
+  >
+    ×
+  </button>
+</div>
 
       </div>
 
@@ -2043,9 +2640,10 @@ async function openJournal(name: string) {
   onClick={() => {
 
     setEditingIndex(index);
+setEditingLearner(child);
 
-    setNewLearnerFirstName(child.firstName);
-    setNewLearnerLastName(child.lastName);
+setNewLearnerFirstName(child.firstName);
+setNewLearnerLastName(child.lastName);
     setShowManageLearners(false);
     setShowAddLearnerModal(true);
 
@@ -2075,6 +2673,370 @@ async function openJournal(name: string) {
 
     </div>
 
+  </div>
+)}
+
+{showImportLearners && (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
+    <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900">
+            Import Class List
+          </h2>
+
+          <p className="mt-1 text-slate-500">
+            Add several learners and review them before importing.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={closeImportLearnersModal}
+          className="text-2xl text-slate-500 hover:text-slate-900"
+          aria-label="Close class-list import"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <button
+          type="button"
+          onClick={() => setImportMode("paste")}
+          className={`rounded-2xl border p-4 text-left transition ${
+            importMode === "paste"
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <p className="font-semibold">Paste a list</p>
+          <p
+            className={`mt-1 text-xs ${
+              importMode === "paste"
+                ? "text-slate-300"
+                : "text-slate-500"
+            }`}
+          >
+            Copy learner details from another system.
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setImportMode("file")}
+          className={`rounded-2xl border p-4 text-left transition ${
+            importMode === "file"
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <p className="font-semibold">Upload a file</p>
+          <p
+            className={`mt-1 text-xs ${
+              importMode === "file"
+                ? "text-slate-300"
+                : "text-slate-500"
+            }`}
+          >
+            CSV, Excel, PDF or document.
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setImportMode("photo")}
+          className={`rounded-2xl border p-4 text-left transition ${
+            importMode === "photo"
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <p className="font-semibold">Upload a photo</p>
+          <p
+            className={`mt-1 text-xs ${
+              importMode === "photo"
+                ? "text-slate-300"
+                : "text-slate-500"
+            }`}
+          >
+            Printed or handwritten class list.
+          </p>
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+        {importMode === "paste" && (
+          <div>
+            <label
+              htmlFor="class-list-text"
+              className="font-semibold text-slate-900"
+            >
+              Paste learner details
+            </label>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Enter one learner per line. We will review the information
+              before saving it.
+            </p>
+
+            <textarea
+              id="class-list-text"
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+              placeholder={`TEST-101, Ava, Clarke, Reception A
+TEST-102, Yusuf, Ali, Reception A`}
+              className="mt-4 min-h-56 w-full rounded-2xl border border-slate-300 bg-white p-4 text-slate-900 outline-none focus:border-slate-900"
+            />
+          </div>
+        )}
+
+       {importMode === "file" && (
+  <div>
+    <p className="font-semibold text-slate-900">
+      Upload a class-list CSV
+    </p>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Include columns for pupil ID, first name, last name
+      and class.
+    </p>
+
+    <label className="mt-5 flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center hover:border-slate-500 hover:bg-slate-50">
+      <span className="font-semibold text-slate-900">
+        Choose CSV file
+      </span>
+
+      <span className="mt-1 text-sm text-slate-500">
+        Files ending in .csv
+      </span>
+
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleCsvUpload}
+        className="hidden"
+      />
+    </label>
+  </div>
+)}
+
+        {importMode === "photo" && (
+          <div className="py-10 text-center">
+            <p className="font-semibold text-slate-900">
+              Photo or scanned class list
+            </p>
+
+            <p className="mt-2 text-sm text-slate-500">
+              AI extraction and teacher review will be connected next.
+            </p>
+          </div>
+        )}
+      </div>
+{importError && (
+  <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+    {importError}
+  </div>
+)}
+
+{importPreview.length > 0 && (
+  <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="font-semibold text-slate-900">
+        Learner preview
+      </p>
+
+      <p className="text-sm text-slate-500">
+        {importPreview.length} learners found
+      </p>
+    </div>
+
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[950px] text-left text-sm">
+<thead className="bg-white text-slate-500">
+  <tr>
+    <th className="px-4 py-3">Pupil ID</th>
+    <th className="px-4 py-3">First name</th>
+    <th className="px-4 py-3">Last name</th>
+    <th className="px-4 py-3">Class</th>
+    <th className="px-4 py-3">Status</th>
+    <th className="px-4 py-3">Import action</th>
+    <th className="px-4 py-3 text-right">
+      Remove
+    </th>
+  </tr>
+</thead>
+
+<tbody className="divide-y divide-slate-200">
+  {importPreview.map((learner) => (
+    <tr key={learner.rowId}>
+      <td className="px-3 py-3">
+        <input
+          type="text"
+          value={learner.externalId}
+          onChange={(event) =>
+            updateImportPreviewRow(
+              learner.rowId,
+              "externalId",
+              event.target.value
+            )
+          }
+          aria-label="Pupil ID"
+          className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
+        />
+      </td>
+
+      <td className="px-3 py-3">
+        <input
+          type="text"
+          value={learner.firstName}
+          onChange={(event) =>
+            updateImportPreviewRow(
+              learner.rowId,
+              "firstName",
+              event.target.value
+            )
+          }
+          aria-label="First name"
+          className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
+        />
+      </td>
+
+      <td className="px-3 py-3">
+        <input
+          type="text"
+          value={learner.lastName}
+          onChange={(event) =>
+            updateImportPreviewRow(
+              learner.rowId,
+              "lastName",
+              event.target.value
+            )
+          }
+          aria-label="Last name"
+          className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
+        />
+      </td>
+
+      <td className="px-3 py-3">
+        <input
+          type="text"
+          value={learner.className}
+          onChange={(event) =>
+            updateImportPreviewRow(
+              learner.rowId,
+              "className",
+              event.target.value
+            )
+          }
+          aria-label="Class"
+          className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
+        />
+      </td>
+
+     <td className="px-4 py-3">
+  <span
+    className={`whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${
+      !learner.isValid
+        ? "bg-amber-100 text-amber-700"
+        : isDuplicateImportId(
+            learner.rowId,
+            learner.externalId
+          )
+        ? "bg-red-100 text-red-700"
+        : "bg-emerald-100 text-emerald-700"
+    }`}
+  >
+    {!learner.isValid
+      ? "Needs attention"
+      : isDuplicateImportId(
+          learner.rowId,
+          learner.externalId
+        )
+      ? "Duplicate ID"
+      : "Ready"}
+  </span>
+</td>
+
+<td className="px-4 py-3">
+  {learner.isValid ? (
+    <span
+      className={`whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${
+        getImportAction(learner.externalId) === "update"
+          ? "bg-blue-100 text-blue-700"
+          : "bg-purple-100 text-purple-700"
+      }`}
+    >
+      {getImportAction(learner.externalId) === "update"
+        ? "Will update"
+        : "New learner"}
+    </span>
+  ) : (
+    <span className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">
+      Check details
+    </span>
+  )}
+</td>
+
+      <td className="px-4 py-3 text-right">
+        <button
+          type="button"
+          onClick={() =>
+            removeImportPreviewRow(learner.rowId)
+          }
+          className="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+        >
+          Remove
+        </button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+      </table>
+    </div>
+  </div>
+)}
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={closeImportLearnersModal}
+          className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+
+        {importPreview.length === 0 ? (
+  <button
+    type="button"
+    onClick={handleReviewLearners}
+    disabled={
+      importMode !== "paste" ||
+      !importText.trim()
+    }
+    className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+  >
+    Review Learners
+  </button>
+) : (
+  <button
+    type="button"
+    onClick={handleImportLearners}
+    disabled={
+      isImportingLearners ||
+      importPreview.some(
+        (learner) => !learner.isValid
+      )
+    }
+    className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+  >
+    {isImportingLearners
+      ? "Importing..."
+      : `Import ${importPreview.length} Learners`}
+  </button>
+)}
+
+      </div>
+    </div>
   </div>
 )}
 
@@ -2341,12 +3303,16 @@ journalEntries.map((entry: any) => {
         </button>
 
         <button
+  type="button"
   onClick={handleAddLearner}
-  className="rounded-xl bg-slate-900 px-5 py-3 font-medium text-white hover:bg-slate-700"
+  disabled={isSavingLearner}
+  className="rounded-xl bg-slate-900 px-5 py-3 font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
 >
-  {editingIndex !== null
-  ? "Update Learner"
-  : "Save Learner"}
+  {isSavingLearner
+    ? "Saving..."
+    : editingIndex !== null
+    ? "Update Learner"
+    : "Save Learner"}
 </button>
 
       </div>
