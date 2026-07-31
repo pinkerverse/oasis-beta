@@ -37,6 +37,40 @@ export async function POST(request: Request) {
       frameworks[frameworkKey as keyof typeof frameworks] ||
       frameworks.eyfs;
 
+      const orderedAssessmentLevels = [
+  ...framework.assessmentLevels,
+].sort((a, b) => a.order - b.order);
+
+const assessmentLevelLabels =
+  orderedAssessmentLevels.map(
+    (level) => level.label
+  );
+
+const assessmentLevelsText =
+  orderedAssessmentLevels
+    .map(
+      (level) =>
+        `- ${level.label}: ${level.description}`
+    )
+    .join("\n");
+
+const frameworkStatementsText =
+  framework.areaDefinitions
+    .map((area) => {
+      const statements =
+        area.statements.length > 0
+          ? area.statements
+              .map(
+                (statement) =>
+                  `  - ${statement.id}: ${statement.text}`
+              )
+              .join("\n")
+          : "  - No framework statements supplied.";
+
+      return `${area.name}\n${statements}`;
+    })
+    .join("\n\n");
+
     if (!observation) {
       return Response.json(
         { error: "Observation is required." },
@@ -65,22 +99,36 @@ ${selectedNames.join(", ")}
 Framework:
 ${framework.name}
 
-Learning areas:
-${framework.areas.join(", ")}
+Framework version:
+${framework.version || "Not specified"}
+
+Allowed assessment levels and their meanings:
+${assessmentLevelsText}
+
+Framework areas and statements:
+${frameworkStatementsText}
 
 Observation:
 ${observation}
 
 Assessment rules:
-- Only match learning areas that are clearly evidenced.
-- Do not overstate the judgement.
-- Suggested level must be one of: Below, Developing, Secure, Exceeding.
-- Confidence must be a whole number from 0 to 100.
-- Next steps should be practical and teacher-friendly.
-- Give every matched learning area its own suggested level.
-- Assess each matched learning area independently, using only the evidence relevant to that area.
-- Different learning areas may have different suggested levels.
-- Give every matched learning area its own confidence score from 0 to 100.
+- Only match learning areas that are clearly evidenced in the observation.
+- Only use framework statements supplied above.
+- Copy matched framework statement text exactly as supplied.
+- Do not invent, rewrite or paraphrase framework statements.
+- If no supplied statement is clearly evidenced for an area, do not match that area.
+- Assess every matched learning area independently.
+- Different learning areas may receive different levels.
+- Suggested levels must use one of the allowed assessment-level labels supplied above.
+- Base each suggested level on the relevant level description supplied above.
+- Treat each judgement as specific to this observation, not as the learner's overall attainment.
+- Confidence must be a whole number from 0 to 100 and should reflect the strength and clarity of evidence in this observation.
+- Next steps should be practical, specific and teacher-friendly.
+- For every matched framework statement, return its exact statement ID.
+- Copy the exact statement text supplied in the framework.
+- Include a short evidence excerpt or precise evidence description from the observation.
+- The evidence must explain why that specific statement was matched.
+- Set objectives to the exact text of the matched framework statements for temporary interface compatibility.
 
 Learner mismatch rules:
 - Check whether the observation explicitly mentions a learner by name.
@@ -106,15 +154,10 @@ Learner mismatch rules:
                 minimum: 0,
                 maximum: 100,
               },
-              level: {
-                type: "string",
-                enum: [
-                  "Below",
-                  "Developing",
-                  "Secure",
-                  "Exceeding",
-                ],
-              },
+             level: {
+  type: "string",
+  enum: assessmentLevelLabels,
+},
               frameworkMatches: {
   type: "array",
   items: {
@@ -133,15 +176,38 @@ Learner mismatch rules:
         },
       },
 
-      suggestedLevel: {
+statementMatches: {
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+
+    properties: {
+      statementId: {
         type: "string",
-        enum: [
-          "Below",
-          "Developing",
-          "Secure",
-          "Exceeding",
-        ],
       },
+
+      statementText: {
+        type: "string",
+      },
+
+      evidence: {
+        type: "string",
+      },
+    },
+
+    required: [
+      "statementId",
+      "statementText",
+      "evidence",
+    ],
+  },
+},
+
+     suggestedLevel: {
+  type: "string",
+  enum: assessmentLevelLabels,
+},
 
       confidence: {
         type: "integer",
@@ -151,11 +217,12 @@ Learner mismatch rules:
     },
 
     required: [
-      "strand",
-      "objectives",
-      "suggestedLevel",
-      "confidence",
-    ],
+  "strand",
+  "objectives",
+  "statementMatches",
+  "suggestedLevel",
+  "confidence",
+],
   },
 },
               nextSteps: {
@@ -213,8 +280,212 @@ Learner mismatch rules:
     }
 
     try {
+
+const validStatementsById = new Map(
+  framework.areaDefinitions.flatMap((area) =>
+    area.statements.map(
+      (statement) =>
+        [
+          statement.id,
+          {
+            areaName: area.name,
+            statementText: statement.text,
+          },
+        ] as const
+    )
+  )
+);
+
       const parsed = JSON.parse(text);
-      return Response.json(parsed);
+
+type ValidatedStatementMatch = {
+  statementId: string;
+  statementText: string;
+  evidence: string;
+};
+
+if (Array.isArray(parsed.frameworkMatches)) {
+  const matchesByStrand = new Map<string, any>();
+
+  for (const match of parsed.frameworkMatches) {
+    if (
+      !match ||
+      typeof match.strand !== "string"
+    ) {
+      continue;
+    }
+
+    const strand = match.strand.trim();
+
+    const validArea =
+      framework.areaDefinitions.find(
+        (area) => area.name === strand
+      );
+
+    // Ignore learning areas that do not exist
+    // in the active framework.
+    if (!validArea) {
+      continue;
+    }
+
+    const validatedStatementMatches: ValidatedStatementMatch[] =
+      Array.isArray(match.statementMatches)
+        ? match.statementMatches
+            .map(
+              (
+                statementMatch: any
+              ): ValidatedStatementMatch | null => {
+                const statementId =
+                  typeof statementMatch?.statementId ===
+                  "string"
+                    ? statementMatch.statementId.trim()
+                    : "";
+
+                const validStatement =
+                  validStatementsById.get(statementId);
+
+                const evidence =
+                  typeof statementMatch?.evidence ===
+                  "string"
+                    ? statementMatch.evidence.trim()
+                    : "";
+
+                // Reject invented statement IDs,
+                // statements assigned to the wrong area,
+                // and matches without evidence.
+                if (
+                  !validStatement ||
+                  validStatement.areaName !== strand ||
+                  !evidence
+                ) {
+                  return null;
+                }
+
+                return {
+                  statementId,
+                  statementText:
+                    validStatement.statementText,
+                  evidence,
+                };
+              }
+            )
+            .filter(
+              (
+                statement:
+                  | ValidatedStatementMatch
+                  | null
+              ): statement is ValidatedStatementMatch =>
+                statement !== null
+            )
+        : [];
+
+    // Remove duplicate statement IDs.
+    const uniqueStatementMatches =
+      validatedStatementMatches.filter(
+        (
+          statement: ValidatedStatementMatch,
+          index: number,
+          allStatements: ValidatedStatementMatch[]
+        ) =>
+          index ===
+          allStatements.findIndex(
+            (item: ValidatedStatementMatch) =>
+              item.statementId ===
+              statement.statementId
+          )
+      );
+
+    // Ignore areas with no valid statement matches.
+    if (uniqueStatementMatches.length === 0) {
+      continue;
+    }
+
+    const confidence = Math.min(
+      100,
+      Math.max(0, Number(match.confidence) || 0)
+    );
+
+    const normalizedMatch = {
+      ...match,
+      strand,
+      source: "ai",
+      confidence,
+      statementMatches: uniqueStatementMatches,
+      objectives: uniqueStatementMatches.map(
+        (statement: ValidatedStatementMatch) =>
+          statement.statementText
+      ),
+    };
+
+    const existingMatch =
+      matchesByStrand.get(strand);
+
+    if (!existingMatch) {
+      matchesByStrand.set(
+        strand,
+        normalizedMatch
+      );
+
+      continue;
+    }
+
+    const combinedStatementMatches: ValidatedStatementMatch[] =
+      [
+        ...(Array.isArray(
+          existingMatch.statementMatches
+        )
+          ? existingMatch.statementMatches
+          : []),
+        ...uniqueStatementMatches,
+      ].filter(
+        (
+          statement: ValidatedStatementMatch,
+          index: number,
+          allStatements: ValidatedStatementMatch[]
+        ) =>
+          index ===
+          allStatements.findIndex(
+            (item: ValidatedStatementMatch) =>
+              item.statementId ===
+              statement.statementId
+          )
+      );
+
+    const existingConfidence =
+      Number(existingMatch.confidence) || 0;
+
+    const strongerMatch =
+      confidence > existingConfidence
+        ? normalizedMatch
+        : existingMatch;
+
+    matchesByStrand.set(strand, {
+      ...existingMatch,
+      source: "ai",
+      suggestedLevel:
+        strongerMatch.suggestedLevel,
+      confidence: Math.max(
+        existingConfidence,
+        confidence
+      ),
+      statementMatches:
+        combinedStatementMatches,
+      objectives:
+        combinedStatementMatches.map(
+          (statement: ValidatedStatementMatch) =>
+            statement.statementText
+        ),
+    });
+  }
+
+  parsed.frameworkMatches = Array.from(
+    matchesByStrand.values()
+  );
+} else {
+  parsed.frameworkMatches = [];
+}
+
+return Response.json(parsed);
     } catch {
       return Response.json(
         {

@@ -1,6 +1,7 @@
 "use client";
 import Papa from "papaparse";
 import { useEffect, useState, useRef } from "react";
+import { frameworks } from "@/lib/framework";
 
 type ImportedLearnerPreview = {
   rowId: string;
@@ -16,7 +17,17 @@ type CsvLearnerRow = Record<string, string | undefined>;
 type AnalysisResult = {
   frameworkMatches: {
   strand: string;
+  source?: "ai" | "teacher";
+
+  // Kept temporarily so the current display does not break
   objectives: string[];
+
+  statementMatches: {
+    statementId: string;
+    statementText: string;
+    evidence: string;
+  }[];
+
   suggestedLevel: string;
   confidence: number;
 }[];
@@ -203,6 +214,17 @@ const classInsights = {
 
 export default function Home() {
   const [savedToJournal, setSavedToJournal] = useState(false);
+
+  const [
+  showDuplicateObservationModal,
+  setShowDuplicateObservationModal,
+] = useState(false);
+
+const [
+  duplicateSavePayload,
+  setDuplicateSavePayload,
+] = useState<Record<string, unknown> | null>(null);
+
   const getLearnerNames = (ids: string[]) =>
   ids
     .map((id) => {
@@ -246,6 +268,121 @@ const [learnerToArchive, setLearnerToArchive] = useState<any>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 const [assessmentPhilosophy, setAssessmentPhilosophy] =
   useState("Hybrid");
+const activeFramework = frameworks.eyfs;
+
+const [
+  showAddLearningAreaModal,
+  setShowAddLearningAreaModal,
+] = useState(false);
+
+const [manualAreaId, setManualAreaId] = useState("");
+
+const [manualStatementIds, setManualStatementIds] =
+  useState<string[]>([]);
+
+const [manualAreaLevel, setManualAreaLevel] =
+  useState(defaultAssessmentLevels[0]);
+
+const [manualAreaEvidence, setManualAreaEvidence] =
+  useState("");
+
+const selectedManualArea =
+  activeFramework.areaDefinitions.find(
+    (area) => area.id === manualAreaId
+  ) || null;
+
+function toggleManualStatement(statementId: string) {
+  setManualStatementIds((current) =>
+    current.includes(statementId)
+      ? current.filter((id) => id !== statementId)
+      : [...current, statementId]
+  );
+}
+
+function resetManualLearningAreaForm() {
+  setManualAreaId("");
+  setManualStatementIds([]);
+  setManualAreaLevel(defaultAssessmentLevels[0]);
+  setManualAreaEvidence("");
+}
+
+function handleAddManualLearningArea() {
+  if (!analysis || !selectedManualArea) return;
+
+  const selectedStatements =
+    selectedManualArea.statements.filter((statement) =>
+      manualStatementIds.includes(statement.id)
+    );
+
+  if (
+    selectedStatements.length === 0 ||
+    !manualAreaEvidence.trim()
+  ) {
+    return;
+  }
+
+  const areaAlreadyExists =
+    analysis.frameworkMatches.some(
+      (match) =>
+        match.strand === selectedManualArea.name
+    );
+
+  if (areaAlreadyExists) return;
+
+  setAnalysis({
+    ...analysis,
+    frameworkMatches: [
+      ...analysis.frameworkMatches,
+      {
+        strand: selectedManualArea.name,
+        source: "teacher",
+        objectives: selectedStatements.map(
+          (statement) => statement.text
+        ),
+        statementMatches: selectedStatements.map(
+          (statement) => ({
+            statementId: statement.id,
+            statementText: statement.text,
+            evidence: manualAreaEvidence.trim(),
+          })
+        ),
+        suggestedLevel: manualAreaLevel,
+        confidence: 100,
+      },
+    ],
+  });
+
+  resetManualLearningAreaForm();
+  setShowAddLearningAreaModal(false);
+}
+
+function handleRemoveManualLearningArea(strand: string) {
+  if (!analysis) return;
+
+  setAnalysis({
+    ...analysis,
+    frameworkMatches: analysis.frameworkMatches.filter(
+      (match) =>
+        !(
+          match.strand === strand &&
+          match.source === "teacher"
+        )
+    ),
+  });
+
+  setAreaLevelOverrides((current) => {
+    const updated = { ...current };
+    delete updated[strand];
+    return updated;
+  });
+
+  setAreaOverrideReasons((current) => {
+    const updated = { ...current };
+    delete updated[strand];
+    return updated;
+  });
+}
+
   const [showPTCNotes, setShowPTCNotes] = useState(false);
   const [showReportHelper, setShowReportHelper] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1059,38 +1196,104 @@ useEffect(() => {
 async function handleSaveToJournal() {
   if (!analysis) return;
 
+  const savedFrameworkMatches = analysis.frameworkMatches.map(
+  (match) => {
+    const teacherOverride =
+      areaLevelOverrides[match.strand] || null;
+
+    return {
+      strand: match.strand,
+      source: match.source || "ai",
+      objectives: match.objectives,
+      statementMatches: match.statementMatches,
+
+      suggestedLevel: match.suggestedLevel,
+      confidence: match.confidence,
+
+      teacherOverride,
+
+      finalLevel:
+        teacherOverride || match.suggestedLevel,
+
+      overrideReason: teacherOverride
+        ? areaOverrideReasons[match.strand]?.trim() || null
+        : null,
+    };
+  }
+);
+
+
   try {
-    const response = await fetch("/api/journal", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        learner_ids: selectedChildren,
-        observation,
-        image_url: evidenceImage?.name || null,
-        framework_matches: analysis.frameworkMatches,
-        ai_level: analysis.level,
-        teacher_level: teacherLevel,
-        next_steps: analysis.nextSteps,
-        teacher_notes: overrideReason,
-      }),
-    });
+type JournalSaveResponse = {
+  success?: boolean;
+  error?: string;
+  message?: string;
+};
 
+const journalPayload = {
+  learner_ids: selectedChildren,
+  observation,
+  image_url: evidenceImage?.name || null,
+  framework_matches: savedFrameworkMatches,
 
+  ai_level:
+    analysis.frameworkMatches.length === 1
+      ? analysis.frameworkMatches[0].suggestedLevel
+      : "Per-area judgements",
 
-const text = await response.text();
+  teacher_level:
+    analysis.frameworkMatches.length === 1
+      ? areaLevelOverrides[
+          analysis.frameworkMatches[0].strand
+        ] ||
+        analysis.frameworkMatches[0].suggestedLevel
+      : "Per-area judgements",
 
-let result = {};
+  next_steps: analysis.nextSteps,
 
-try {
-  result = text ? JSON.parse(text) : {};
-} catch {
-  console.error("Server returned non-JSON:", text);
+  teacher_notes:
+    Object.values(areaOverrideReasons)
+      .map((reason) => reason.trim())
+      .filter(Boolean)
+      .join(" | ") || null,
+};
+
+async function sendJournalRequest(
+  allowDuplicate: boolean
+) {
+  return fetch("/api/journal", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...journalPayload,
+      allow_duplicate: allowDuplicate,
+    }),
+  });
+}
+
+let response = await sendJournalRequest(false);
+
+let result = (await response
+  .json()
+  .catch(() => ({}))) as JournalSaveResponse;
+
+if (
+  response.status === 409 &&
+  result.error === "DUPLICATE_OBSERVATION"
+) {
+  setDuplicateSavePayload(journalPayload);
+  setShowDuplicateObservationModal(true);
+  return;
 }
 
 if (!response.ok) {
-  throw new Error((result as any).error || text);
+  throw new Error(
+    result.message ||
+      result.error ||
+      "Failed to save observation."
+  );
 }
 
     setSavedToJournal(true);
@@ -1109,6 +1312,50 @@ if (savedObservation && selectedChildren.length === 1) {
     alert("Failed to save observation.");
   }
 }
+
+async function handleConfirmDuplicateSave() {
+  if (!duplicateSavePayload) return;
+
+  try {
+    const response = await fetch("/api/journal", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...duplicateSavePayload,
+        allow_duplicate: true,
+      }),
+    });
+
+    const result = (await response
+      .json()
+      .catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+
+    if (!response.ok) {
+      console.error(
+        result.message ||
+          result.error ||
+          "Failed to save duplicate observation."
+      );
+
+      return;
+    }
+
+    setShowDuplicateObservationModal(false);
+    setDuplicateSavePayload(null);
+    setSavedToJournal(true);
+  } catch (error) {
+    console.error(
+      "Failed to save duplicate observation:",
+      error
+    );
+  }
+}
+
 async function openJournal(name: string) {
   setLoadingJournal(true);
 
@@ -1575,13 +1822,24 @@ async function openJournal(name: string) {
       Area Judgements
     </p>
 
+<button
+  type="button"
+  onClick={() => {
+    resetManualLearningAreaForm();
+    setShowAddLearningAreaModal(true);
+  }}
+  className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+>
+  + Add learning area
+</button>
+
     <p className="mt-1 text-sm text-slate-600">
       Each learning area is assessed independently.
     </p>
   </div>
 
   <div className="mt-5 space-y-4">
-    {analysis.frameworkMatches.map((match) => {
+   {analysis.frameworkMatches.map((match, matchIndex) => {
       const currentLevel =
         areaLevelOverrides[match.strand] ||
         match.suggestedLevel;
@@ -1591,7 +1849,7 @@ async function openJournal(name: string) {
 
       return (
         <div
-          key={match.strand}
+          key={`${match.strand}-${matchIndex}`}
           className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1600,9 +1858,11 @@ async function openJournal(name: string) {
                 {match.strand}
               </p>
 
-              <p className="mt-1 text-xs text-slate-500">
-                AI confidence: {match.confidence}%
-              </p>
+             <p className="text-sm text-slate-500">
+  {match.source === "teacher"
+    ? "Teacher added"
+    : `AI confidence: ${match.confidence}%`}
+</p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -1619,6 +1879,19 @@ async function openJournal(name: string) {
               >
                 Override
               </button>
+
+{match.source === "teacher" && (
+  <button
+    type="button"
+    onClick={() =>
+      handleRemoveManualLearningArea(match.strand)
+    }
+    className="rounded-full border border-red-200 bg-white px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50"
+  >
+    Remove
+  </button>
+)}
+
             </div>
           </div>
 
@@ -1715,21 +1988,78 @@ async function openJournal(name: string) {
                     Framework Matches
                   </p>
 
-                  <div className="space-y-4">
-                    {analysis.frameworkMatches.map((match) => (
-                      <div key={match.strand}>
-                        <p className="font-semibold text-slate-900">
-                          {match.strand}
-                        </p>
+                  <div className="space-y-5">
+  {analysis.frameworkMatches.map((match, matchIndex) => (
+    <div
+      key={`${match.strand}-${matchIndex}`}
+      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-semibold text-slate-900">
+            {match.strand}
+          </p>
 
-                        <ul className="ml-5 mt-1 list-disc text-slate-700">
-                          {match.objectives.map((objective) => (
-                            <li key={objective}>{objective}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {match.statementMatches?.length || 0} framework{" "}
+            {(match.statementMatches?.length || 0) === 1
+              ? "statement"
+              : "statements"}{" "}
+            matched
+          </p>
+        </div>
+
+        <div className="text-left sm:text-right">
+          <p className="text-sm font-semibold text-slate-900">
+            {areaLevelOverrides[match.strand] ||
+              match.suggestedLevel}
+          </p>
+
+          <p className="text-xs text-slate-500">
+  {match.source === "teacher"
+    ? "Teacher added"
+    : `${match.confidence}% AI confidence`}
+</p>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {match.statementMatches?.length > 0 ? (
+          match.statementMatches.map((statement) => (
+            <div
+              key={`${match.strand}-${statement.statementId}`}
+              className="rounded-xl border border-slate-200 bg-white p-4"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {statement.statementId}
+              </p>
+
+              <p className="mt-1 font-medium text-slate-900">
+                {statement.statementText}
+              </p>
+
+              <div className="mt-3 rounded-xl bg-blue-50 p-3">
+                <p className="text-xs font-semibold text-blue-700">
+                  Supporting evidence
+                </p>
+
+                <p className="mt-1 text-sm text-blue-900">
+                  {statement.evidence}
+                </p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <ul className="ml-5 list-disc text-slate-700">
+            {match.objectives.map((objective) => (
+              <li key={objective}>{objective}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  ))}
+</div>
                 </div>
 
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
@@ -2416,6 +2746,215 @@ async function openJournal(name: string) {
 </div>
 
 </div>
+
+{showDuplicateObservationModal && (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
+    <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">
+        ⚠️
+      </div>
+
+      <h2 className="mt-5 text-xl font-bold text-slate-900">
+        Possible duplicate observation
+      </h2>
+
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        This observation has already been saved for the
+        selected learner or learners.
+      </p>
+
+      <p className="mt-3 text-sm font-medium text-slate-800">
+        Would you still like to save another copy?
+      </p>
+
+      <div className="mt-7 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setShowDuplicateObservationModal(false);
+            setDuplicateSavePayload(null);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={handleConfirmDuplicateSave}
+          className="rounded-xl bg-amber-500 px-4 py-2 font-semibold text-white hover:bg-amber-600"
+        >
+          Save anyway
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showAddLearningAreaModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">
+            Add learning area
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-600">
+            Add a teacher-identified match using statements
+            from the active framework.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            resetManualLearningAreaForm();
+            setShowAddLearningAreaModal(false);
+          }}
+          className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-5">
+        <div>
+          <label className="text-sm font-semibold text-slate-800">
+            Learning area
+          </label>
+
+          <select
+            value={manualAreaId}
+            onChange={(event) => {
+              setManualAreaId(event.target.value);
+              setManualStatementIds([]);
+            }}
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
+          >
+            <option value="">Select an area</option>
+
+            {activeFramework.areaDefinitions
+              .filter(
+                (area) =>
+                  !analysis?.frameworkMatches.some(
+                    (match) => match.strand === area.name
+                  )
+              )
+              .map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        {selectedManualArea && (
+          <div>
+            <p className="text-sm font-semibold text-slate-800">
+              Framework statements
+            </p>
+
+            <div className="mt-2 space-y-2">
+              {selectedManualArea.statements.map((statement) => (
+                <label
+                  key={statement.id}
+                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={manualStatementIds.includes(
+                      statement.id
+                    )}
+                    onChange={() =>
+                      toggleManualStatement(statement.id)
+                    }
+                    className="mt-1"
+                  />
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {statement.id}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-800">
+                      {statement.text}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="text-sm font-semibold text-slate-800">
+            Teacher judgement
+          </label>
+
+          <select
+            value={manualAreaLevel}
+            onChange={(event) =>
+              setManualAreaLevel(event.target.value)
+            }
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
+          >
+            {activeFramework.assessmentLevels
+              .sort((a, b) => a.order - b.order)
+              .map((level) => (
+                <option key={level.id} value={level.label}>
+                  {level.label}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-slate-800">
+            Supporting evidence
+          </label>
+
+          <textarea
+            value={manualAreaEvidence}
+            onChange={(event) =>
+              setManualAreaEvidence(event.target.value)
+            }
+            rows={4}
+            placeholder="Explain what in the observation supports this learning area."
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            resetManualLearningAreaForm();
+            setShowAddLearningAreaModal(false);
+          }}
+          className="rounded-xl border border-slate-300 px-4 py-2 font-semibold text-slate-700"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={handleAddManualLearningArea}
+          disabled={
+            !manualAreaId ||
+            manualStatementIds.length === 0 ||
+            !manualAreaEvidence.trim()
+          }
+          className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Add learning area
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 {showOverrideModal && (
   <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm">
