@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
 function normalizeObservationText(value: unknown) {
-  if (typeof value !== "string") return "";
+  if (typeof value !== "string") {
+    return "";
+  }
 
   return value
     .trim()
@@ -11,7 +13,9 @@ function normalizeObservationText(value: unknown) {
 }
 
 function normalizeLearnerIds(value: unknown) {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
   return value
     .filter(
@@ -23,12 +27,43 @@ function normalizeLearnerIds(value: unknown) {
     .sort();
 }
 
+function normalizeObservationDate(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return "";
+  }
+
+  const parsedDate = new Date(
+    `${value}T00:00:00.000Z`
+  );
+
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !== value
+  ) {
+    return "";
+  }
+
+  const today = new Date()
+    .toISOString()
+    .slice(0, 10);
+
+  if (value > today) {
+    return "";
+  }
+
+  return value;
+}
+
 function learnerIdsMatch(
   firstLearnerIds: string[],
   secondLearnerIds: string[]
 ) {
   return (
-    firstLearnerIds.length === secondLearnerIds.length &&
+    firstLearnerIds.length ===
+      secondLearnerIds.length &&
     firstLearnerIds.every(
       (learnerId, index) =>
         learnerId === secondLearnerIds[index]
@@ -51,8 +86,27 @@ export async function POST(request: Request) {
     const normalizedObservation =
       normalizeObservationText(observationText);
 
-    const normalizedLearnerIds =
-      normalizeLearnerIds(body.learner_ids);
+    const learnerEntries =
+  Array.isArray(body.learner_entries)
+    ? body.learner_entries
+    : [];
+
+const learnerEntryIds =
+  normalizeLearnerIds(
+    learnerEntries.map(
+      (entry: any) => entry?.learner_id
+    )
+  );
+
+const normalizedLearnerIds =
+  learnerEntryIds.length > 0
+    ? learnerEntryIds
+    : normalizeLearnerIds(body.learner_ids);
+    const observationDate =
+      normalizeObservationDate(
+        body.observation_date ??
+          body.observationDate
+      );
 
     if (!normalizedObservation) {
       return NextResponse.json(
@@ -74,6 +128,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!observationDate) {
+      return NextResponse.json(
+        {
+          error:
+            "A valid observation date is required.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (body.allow_duplicate !== true) {
       const {
         data: possibleDuplicates,
@@ -81,12 +145,18 @@ export async function POST(request: Request) {
       } = await supabase
         .from("observations")
         .select(
-          "id, learner_ids, observation, created_at"
+          `
+            id,
+            learner_ids,
+            observation,
+            observation_date,
+            created_at
+          `
         )
-        .contains(
-          "learner_ids",
-          normalizedLearnerIds
-        )
+       .overlaps(
+  "learner_ids",
+  normalizedLearnerIds
+)
         .order("created_at", {
           ascending: false,
         })
@@ -101,6 +171,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
+              duplicateCheckError.message ||
               "Could not check for duplicate observations.",
           },
           { status: 500 }
@@ -120,12 +191,19 @@ export async function POST(request: Request) {
                 existingObservation.observation
               );
 
+            const existingObservationDate =
+              normalizeObservationDate(
+                existingObservation.observation_date
+              );
+
             return (
-              learnerIdsMatch(
-                existingLearnerIds,
-                normalizedLearnerIds
-              ) &&
-              existingText === normalizedObservation
+             existingLearnerIds.some((learnerId) =>
+  normalizedLearnerIds.includes(learnerId)
+) &&
+              existingText ===
+                normalizedObservation &&
+              existingObservationDate ===
+                observationDate
             );
           }
         );
@@ -133,36 +211,95 @@ export async function POST(request: Request) {
       if (duplicateObservation) {
         return NextResponse.json(
           {
-            error: "DUPLICATE_OBSERVATION",
+            error:
+              "DUPLICATE_OBSERVATION",
             message:
-              "This observation has already been saved for the selected learner or learners.",
+              "This observation has already been saved for the selected learner or learners on this date.",
             duplicateObservationId:
               duplicateObservation.id,
             duplicateCreatedAt:
               duplicateObservation.created_at,
+            duplicateObservationDate:
+              duplicateObservation.observation_date,
           },
           { status: 409 }
         );
       }
     }
 
-    // Do not send allow_duplicate to Supabase because
-    // it is a request option, not a database column.
-    const {
-      allow_duplicate: _allowDuplicate,
-      ...observationToSave
-    } = body;
+// Remove request-only properties before
+// sending rows to Supabase.
+const {
+  allow_duplicate: _allowDuplicate,
+  observationDate: _observationDate,
+  observation_date: _observationDateSnake,
+  learner_entries: _learnerEntries,
+  learner_ids: _learnerIds,
+  ...observationToSave
+} = body;
 
-    const { data, error } = await supabase
-      .from("observations")
-      .insert([
+const rowsToInsert =
+  learnerEntries.length > 0
+    ? normalizedLearnerIds.map((learnerId) => {
+        const learnerEntry =
+          learnerEntries.find(
+            (entry: any) =>
+              entry?.learner_id === learnerId
+          ) ?? {};
+
+        return {
+          ...observationToSave,
+
+          observation: observationText,
+          observation_date: observationDate,
+
+          // Important: one database row per learner
+          learner_ids: [learnerId],
+
+          framework_matches:
+            Array.isArray(
+              learnerEntry.framework_matches
+            )
+              ? learnerEntry.framework_matches
+              : [],
+
+          ai_level:
+            learnerEntry.ai_level ??
+            "Per-area judgements",
+
+          teacher_level:
+            learnerEntry.teacher_level ??
+            learnerEntry.ai_level ??
+            "Per-area judgements",
+
+          next_steps:
+            Array.isArray(
+              learnerEntry.next_steps
+            )
+              ? learnerEntry.next_steps
+              : [],
+
+          teacher_notes:
+            typeof learnerEntry.teacher_notes ===
+              "string" &&
+            learnerEntry.teacher_notes.trim()
+              ? learnerEntry.teacher_notes.trim()
+              : null,
+        };
+      })
+    : [
         {
           ...observationToSave,
           observation: observationText,
+          observation_date: observationDate,
           learner_ids: normalizedLearnerIds,
         },
-      ])
-      .select();
+      ];
+
+const { data, error } = await supabase
+  .from("observations")
+  .insert(rowsToInsert)
+  .select();
 
     if (error) {
       return NextResponse.json(
@@ -173,10 +310,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      observation: data[0],
+      observation: data?.[0] || null,
     });
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error(
+      "Failed to save observation:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -192,32 +332,53 @@ export async function POST(request: Request) {
 // LOAD JOURNAL
 // --------------------
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+  try {
+    const { searchParams } = new URL(
+      request.url
+    );
 
-  const learner = searchParams.get("learner");
+    const learner =
+      searchParams.get("learner");
 
-  if (!learner) {
+    if (!learner) {
+      return NextResponse.json({
+        entries: [],
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("observations")
+      .select("*")
+      .contains("learner_ids", [learner])
+      .order("observation_date", {
+        ascending: false,
+      })
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
-      entries: [],
+      entries: data || [],
     });
-  }
+  } catch (error) {
+    console.error(
+      "Failed to load journal:",
+      error
+    );
 
-  const { data, error } = await supabase
-    .from("observations")
-    .select("*")
-    .contains("learner_ids", [learner])
-    .order("created_at", {
-      ascending: false,
-    });
-
-  if (error) {
     return NextResponse.json(
-      { error: error.message },
+      {
+        error:
+          "Failed to load journal.",
+      },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({
-    entries: data,
-  });
 }

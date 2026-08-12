@@ -1,7 +1,10 @@
 "use client";
 import Papa from "papaparse";
 import { useEffect, useState, useRef } from "react";
-import { frameworks } from "@/lib/framework";
+import {
+  frameworks,
+  type FrameworkDefinition,
+} from "@/lib/framework";
 
 type ImportedLearnerPreview = {
   rowId: string;
@@ -9,6 +12,7 @@ type ImportedLearnerPreview = {
   firstName: string;
   lastName: string;
   className: string;
+  dateOfBirth: string;
   isValid: boolean;
 };
 
@@ -31,7 +35,28 @@ type AnalysisResult = {
   suggestedLevel: string;
   confidence: number;
 }[];
+learnerAnalyses: {
+  learnerId: string;
+  learnerName: string;
+  confidence: number;
 
+  frameworkMatches: {
+    strand: string;
+    source?: "ai" | "teacher";
+    objectives: string[];
+
+    statementMatches: {
+      statementId: string;
+      statementText: string;
+      evidence: string;
+    }[];
+
+    suggestedLevel: string;
+    confidence: number;
+  }[];
+
+  nextSteps: string[];
+}[];
   // Keep these for now because the current screen still uses them
   confidence: number;
   level: string;
@@ -43,6 +68,43 @@ type AnalysisResult = {
     mentionedNames: string[];
     selectedNames: string[];
   };
+  
+assessmentContext: {
+  observationDate: string;
+  learners: {
+    id: string;
+    name: string;
+    ageInMonths: number | null;
+    suggestedStage: {
+      id: string;
+      label: string;
+      order: number;
+    } | null;
+  }[];
+  learnerAnalyses: {
+  learnerId: string;
+  learnerName: string;
+  confidence: number;
+
+  frameworkMatches: {
+    strand: string;
+    source?: "ai" | "teacher";
+    objectives: string[];
+
+    statementMatches: {
+      statementId: string;
+      statementText: string;
+      evidence: string;
+    }[];
+
+    suggestedLevel: string;
+    confidence: number;
+  }[];
+
+  nextSteps: string[];
+}[];
+};
+
 };
 
 const defaultAssessmentLevels = [
@@ -244,9 +306,21 @@ const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [loadingJournal, setLoadingJournal] = useState(false);
   const [observation, setObservation] = useState("");
+  const [observationDate, setObservationDate] = useState(
+  () => new Date().toISOString().slice(0, 10)
+);
   const [evidenceImage, setEvidenceImage] = useState<File | null>(null);
   const [showBaselineModal, setShowBaselineModal] = useState(false);
   const [showAddLearnerModal, setShowAddLearnerModal] = useState(false);
+  const [
+  showMissingDobModal,
+  setShowMissingDobModal,
+] = useState(false);
+
+const [
+  missingDobLearnerNames,
+  setMissingDobLearnerNames,
+] = useState<string[]>([]);
 const [showManageLearners, setShowManageLearners] =
   useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
@@ -254,7 +328,10 @@ const [teacherLevel, setTeacherLevel] = useState("Secure");
 const [overrideReason, setOverrideReason] = useState("");
 const [areaLevelOverrides, setAreaLevelOverrides] =
   useState<Record<string, string>>({});
-
+const [
+  activeSavedFramework,
+  setActiveSavedFramework,
+] = useState<FrameworkDefinition | null>(null);
 const [areaBeingOverridden, setAreaBeingOverridden] =
   useState<string | null>(null);
   const [areaOverrideReasons, setAreaOverrideReasons] =
@@ -268,8 +345,55 @@ const [learnerToArchive, setLearnerToArchive] = useState<any>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 const [assessmentPhilosophy, setAssessmentPhilosophy] =
   useState("Hybrid");
-const activeFramework = frameworks.eyfs;
+const activeFramework =
+  activeSavedFramework ?? frameworks.eyfs;
+function getAssessmentLevelColours(levelLabel: string) {
+  const orderedLevels = [
+    ...activeFramework.assessmentLevels,
+  ].sort((a, b) => a.order - b.order);
 
+  const levelIndex = orderedLevels.findIndex(
+    (level) => level.label === levelLabel
+  );
+
+  if (levelIndex < 0) {
+    return {
+      badge: "bg-slate-100 text-slate-600",
+      bar: "bg-slate-400",
+    };
+  }
+
+  const progress =
+    orderedLevels.length <= 1
+      ? 1
+      : levelIndex / (orderedLevels.length - 1);
+
+  if (progress <= 0.15) {
+    return {
+      badge: "bg-purple-100 text-purple-700",
+      bar: "bg-purple-500",
+    };
+  }
+
+  if (progress <= 0.45) {
+    return {
+      badge: "bg-yellow-100 text-yellow-700",
+      bar: "bg-yellow-500",
+    };
+  }
+
+  if (progress <= 0.75) {
+    return {
+      badge: "bg-green-100 text-green-700",
+      bar: "bg-green-500",
+    };
+  }
+
+  return {
+    badge: "bg-blue-100 text-blue-700",
+    bar: "bg-blue-500",
+  };
+}
 const [
   showAddLearningAreaModal,
   setShowAddLearningAreaModal,
@@ -388,16 +512,35 @@ function handleRemoveManualLearningArea(strand: string) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
 const [newLearnerLastName, setNewLearnerLastName] = useState("");
+const [newLearnerClassName, setNewLearnerClassName] =
+  useState("");
 const [learnerMismatchConfirmed, setLearnerMismatchConfirmed] =
   useState(false);
   const [importMode, setImportMode] = useState<
   "paste" | "file" | "photo"
 >("paste");
 
+const areaAbbreviations: Record<string, string> = {
+  "Communication and Language": "C&L",
+  "Personal, Social and Emotional Development": "PSED",
+  "Physical Development": "PD",
+  Literacy: "Literacy",
+  Mathematics: "Maths",
+  "Understanding the World": "UTW",
+  "Expressive Arts and Design": "EAD",
+};
+
+function getAreaShortLabel(area: string) {
+  return areaAbbreviations[area] || area;
+}
+
 const [importText, setImportText] = useState("");
 const [importPreview, setImportPreview] =
   useState<ImportedLearnerPreview[]>([]);
-
+const [
+  frameworkSaveMessage,
+  setFrameworkSaveMessage,
+] = useState("");
 const [importError, setImportError] = useState("");
 const [isSEND, setIsSEND] = useState(false);
 const [isEAL, setIsEAL] = useState(false);
@@ -405,9 +548,99 @@ const [isSavingLearner, setIsSavingLearner] = useState(false);
 const [isGifted, setIsGifted] = useState(false);
 const [newLearnerDob, setNewLearnerDob] = useState("");
   const [showFrameworkModal, setShowFrameworkModal] = useState(false);
+  const [frameworkText, setFrameworkText] =
+  useState("");
+const [
+  frameworkFile,
+  setFrameworkFile,
+] = useState<File | null>(null);
+const [
+  frameworkExtraction,
+  setFrameworkExtraction,
+] = useState<{
+  type: string;
+  tables: {
+    pageNumber: number;
+    tableNumber: number;
+    rows: string[][];
+  }[];
+} | null>(null);
+const [
+  isExtractingFramework,
+  setIsExtractingFramework,
+] = useState(false);
+const [
+  isMappingFramework,
+  setIsMappingFramework,
+] = useState(false);
+
+const [
+  frameworkMappingError,
+  setFrameworkMappingError,
+] = useState("");
+
+const [
+  mappedFrameworkPreview,
+  setMappedFrameworkPreview,
+] = useState<FrameworkDefinition | null>(
+  null
+);
+const [
+  frameworkHasUnsavedChanges,
+  setFrameworkHasUnsavedChanges,
+] = useState(false);
+
+const [
+  savedFrameworks,
+  setSavedFrameworks,
+] = useState<
+  {
+    id: string;
+    framework_key: string;
+    name: string;
+    version: string;
+    status: string;
+    definition: FrameworkDefinition;
+    source_text: string | null;
+    activated_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }[]
+>([]);
+
+const [
+  frameworkConfirm,
+  setFrameworkConfirm,
+] = useState<{
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+} | null>(null);
+const frameworkValidationErrors =
+  mappedFrameworkPreview
+    ? getFrameworkValidationErrors(
+        mappedFrameworkPreview
+      )
+    : [];
+
+const frameworkIsValid =
+  frameworkValidationErrors.length === 0;
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [
+  selectedAnalysisLearnerId,
+  setSelectedAnalysisLearnerId,
+] = useState("");
+const displayedLearnerAnalysis =
+  analysis?.learnerAnalyses?.find(
+    (learner) =>
+      learner.learnerId ===
+      selectedAnalysisLearnerId
+  ) ??
+  analysis?.learnerAnalyses?.[0] ??
+  null;
   const [selectedJourney, setSelectedJourney] = useState("Overall");
   const [snapshotFrom, setSnapshotFrom] = useState("Baseline");
 const [snapshotTo, setSnapshotTo] = useState("Current");
@@ -423,7 +656,9 @@ const evidenceCoverage = learnerObservations.reduce(
 
       if (existing) {
         existing.count++;
-        existing.lastAdded = new Date(entry.created_at).toLocaleDateString();
+        existing.lastAdded = new Date(
+  entry.observation_date || entry.created_at
+).toLocaleDateString();
       } else {
         acc.push({
           area: match.strand,
@@ -433,7 +668,9 @@ const evidenceCoverage = learnerObservations.reduce(
             .join("")
             .toUpperCase(),
           count: 1,
-          lastAdded: new Date(entry.created_at).toLocaleDateString(),
+          lastAdded: new Date(
+  entry.observation_date || entry.created_at
+).toLocaleDateString(),
         });
       }
     });
@@ -447,14 +684,254 @@ const maxEvidenceCount =
   evidenceCoverage.length > 0
     ? Math.max(...evidenceCoverage.map((item: any) => item.count))
     : 1;
+const liveLearnerProgress = (() => {
+  const orderedLevels = [
+    ...activeFramework.assessmentLevels,
+  ].sort((a, b) => a.order - b.order);
+
+  const latestJudgementByArea = new Map<
+    string,
+    {
+      area: string;
+      level: string;
+      score: number;
+    }
+  >();
+
+  // Journal entries arrive newest first.
+  for (const entry of learnerObservations) {
+    const frameworkMatches = Array.isArray(
+      entry.framework_matches
+    )
+      ? entry.framework_matches
+      : [];
+
+    for (const match of frameworkMatches) {
+      const area =
+        typeof match?.strand === "string"
+          ? match.strand.trim()
+          : "";
+
+      // Keep only the newest judgement for each area.
+      if (
+        !area ||
+        latestJudgementByArea.has(area)
+      ) {
+        continue;
+      }
+
+      const level =
+        match.finalLevel ||
+        match.teacherOverride ||
+        match.suggestedLevel;
+
+      if (
+        typeof level !== "string" ||
+        !level.trim()
+      ) {
+        continue;
+      }
+
+      const levelIndex = orderedLevels.findIndex(
+        (assessmentLevel) =>
+          assessmentLevel.label === level
+      );
+
+      const score =
+        levelIndex >= 0 && orderedLevels.length > 0
+          ? Math.round(
+              ((levelIndex + 1) /
+                orderedLevels.length) *
+                100
+            )
+          : 0;
+
+      latestJudgementByArea.set(area, {
+        area,
+        level,
+        score,
+      });
+    }
+  }
+
+// Display known framework areas in framework order,
+// but do not discard saved areas if a name differs.
+const frameworkAreaOrder = new Map(
+  activeFramework.areaDefinitions.map(
+    (area, index) => [area.name, index]
+  )
+);
+
+return Array.from(
+  latestJudgementByArea.values()
+).sort(
+  (first, second) =>
+    (frameworkAreaOrder.get(first.area) ??
+      Number.MAX_SAFE_INTEGER) -
+    (frameworkAreaOrder.get(second.area) ??
+      Number.MAX_SAFE_INTEGER)
+);
+})();
+
+type LiveJourneyPoint = {
+  id: string;
+  label: string;
+  fullDate: string;
+  level: number;
+  levelLabel: string;
+  area: string;
+  observation: string;
+  confidence: number | null;
+};
+
+const liveJourneyData = (() => {
+const orderedJourneyLevels = [
+  ...activeFramework.assessmentLevels,
+].sort((a, b) => a.order - b.order);
+
+const levelNumbers: Record<string, number> =
+  Object.fromEntries(
+    orderedJourneyLevels.map((level, index) => [
+      level.label,
+      index + 1,
+    ])
+  );
+
+const result: Record<string, LiveJourneyPoint[]> = {};
+
+  // Build the journey from oldest to newest.
+ const oldestFirst = [...learnerObservations].sort(
+  (first, second) =>
+    new Date(
+      first.observation_date || first.created_at
+    ).getTime() -
+    new Date(
+      second.observation_date || second.created_at
+    ).getTime()
+);
+
+  for (const entry of oldestFirst) {
+    const frameworkMatches = Array.isArray(
+      entry.framework_matches
+    )
+      ? entry.framework_matches
+      : [];
+
+    const validMatches: {
+      area: string;
+      level: number;
+      levelLabel: string;
+      confidence: number | null;
+    }[] = [];
+
+    for (const match of frameworkMatches) {
+      const area =
+        typeof match?.strand === "string"
+          ? match.strand.trim()
+          : "";
+
+      const levelLabel =
+        match?.finalLevel ||
+        match?.teacherOverride ||
+        match?.suggestedLevel ||
+        "";
+
+      const level =
+        typeof levelLabel === "string"
+          ? levelNumbers[levelLabel.trim()] || 0
+          : 0;
+
+      if (!area || level === 0) {
+        continue;
+      }
+
+      validMatches.push({
+        area,
+        level,
+        levelLabel: levelLabel.trim(),
+        confidence:
+          typeof match.confidence === "number"
+            ? match.confidence
+            : null,
+      });
+    }
+
+    // Older test entries without per-area levels are ignored.
+    if (validMatches.length === 0) {
+      continue;
+    }
+
+   const date = new Date(
+  entry.observation_date || entry.created_at
+);
+
+    const label = Number.isNaN(date.getTime())
+      ? "Saved"
+      : date.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        });
+
+    const fullDate = Number.isNaN(date.getTime())
+      ? "Date unavailable"
+      : date.toLocaleDateString();
+
+
+
+    for (const match of validMatches) {
+      if (!result[match.area]) {
+        result[match.area] = [];
+      }
+
+      result[match.area].push({
+        id: `${entry.id}-${match.area}`,
+        label,
+        fullDate,
+        level: match.level,
+        levelLabel: match.levelLabel,
+        area: match.area,
+        observation: entry.observation || "",
+        confidence: match.confidence,
+      });
+    }
+  }
+
+  return result;
+})();
+
+const journeyAreaOrder = new Map(
+  activeFramework.areaDefinitions.map(
+    (area, index) => [area.name, index]
+  )
+);
+
+const liveJourneyAreas = Object.keys(
+  liveJourneyData
+).sort(
+
+    (first, second) =>
+      (journeyAreaOrder.get(first) ??
+        Number.MAX_SAFE_INTEGER) -
+      (journeyAreaOrder.get(second) ??
+        Number.MAX_SAFE_INTEGER)
+  );
+
+const activeJourneyArea =
+  liveJourneyAreas.includes(selectedJourney)
+    ? selectedJourney
+    : liveJourneyAreas[0] || "";
+
+const journey = activeJourneyArea
+  ? liveJourneyData[activeJourneyArea] || []
+  : [];
+
 const [customLevels, setCustomLevels] = useState([
   "Level 1",
   "Level 2",
   "Level 3",
 ]);
 const [showTodaysFocus, setShowTodaysFocus] = useState(false);
-  const journey =
-    learningJourneyData[selectedJourney as keyof typeof learningJourneyData];
+
     const showLearnerOverview = selectedChildren.length === 1;
 const [selectedAreas, setSelectedAreas] = useState([
   "Mathematics",
@@ -494,25 +971,42 @@ function handleReviewLearners() {
         .split(separator)
         .map((part) => part.trim());
 
-      const [
-        externalId = "",
-        firstName = "",
-        lastName = "",
-        className = "",
-      ] = parts;
+let externalId = "";
+let firstName = "";
+let lastName = "";
+let className = "";
+let dateOfBirth = "";
 
-      return {
-        rowId: crypto.randomUUID(),
-        externalId,
-        firstName,
-        lastName,
-        className,
-        isValid: Boolean(
-          externalId &&
-            firstName &&
-            lastName
-        ),
-      };
+if (parts.length >= 5) {
+  [
+    externalId,
+    firstName,
+    lastName,
+    className,
+    dateOfBirth,
+  ] = parts;
+} else {
+  [
+    firstName,
+    lastName,
+    className,
+    dateOfBirth,
+  ] = parts;
+}
+
+return {
+  rowId: crypto.randomUUID(),
+  externalId,
+  firstName,
+  lastName,
+  className,
+  dateOfBirth,
+  isValid: Boolean(
+    firstName &&
+      lastName &&
+      dateOfBirth
+  ),
+};
     });
 
   if (rows.length === 0) {
@@ -527,18 +1021,19 @@ function handleReviewLearners() {
 
   if (rows.some((learner) => !learner.isValid)) {
     setImportError(
-      "Some learners are missing an ID, first name or last name."
-    );
+  "Some learners are missing a first name, last name or date of birth."
+);
   }
 }
 
 function updateImportPreviewRow(
   rowId: string,
   field:
-    | "externalId"
-    | "firstName"
-    | "lastName"
-    | "className",
+  | "externalId"
+  | "firstName"
+  | "lastName"
+  | "className"
+  | "dateOfBirth",
   value: string
 ) {
   setImportPreview((current) =>
@@ -554,11 +1049,11 @@ function updateImportPreviewRow(
 
       return {
         ...updatedLearner,
-        isValid: Boolean(
-          updatedLearner.externalId.trim() &&
-            updatedLearner.firstName.trim() &&
-            updatedLearner.lastName.trim()
-        ),
+isValid: Boolean(
+  updatedLearner.firstName.trim() &&
+    updatedLearner.lastName.trim() &&
+    updatedLearner.dateOfBirth.trim()
+),
       };
     })
   );
@@ -578,7 +1073,7 @@ function getImportAction(externalId: string) {
   const normalisedId = externalId.trim().toLowerCase();
 
   if (!normalisedId) {
-    return "unknown";
+    return "new";
   }
 
   const learnerAlreadyExists = pupils.some(
@@ -683,18 +1178,25 @@ if (isZipFile) {
             row.registrationgroup ||
             "";
 
+            const dateOfBirth =
+  row.dateofbirth ||
+  row.dob ||
+  row.birthdate ||
+  "";
+
           return {
-            rowId: crypto.randomUUID(),
-            externalId: externalId.trim(),
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            className: className.trim(),
-            isValid: Boolean(
-              externalId.trim() &&
-                firstName.trim() &&
-                lastName.trim()
-            ),
-          };
+  rowId: crypto.randomUUID(),
+  externalId: externalId.trim(),
+  firstName: firstName.trim(),
+  lastName: lastName.trim(),
+  className: className.trim(),
+  dateOfBirth: dateOfBirth.trim(),
+isValid: Boolean(
+  firstName.trim() &&
+    lastName.trim() &&
+    dateOfBirth.trim()
+),
+};
         });
 
       if (rows.length === 0) {
@@ -712,8 +1214,8 @@ if (isZipFile) {
         );
       } else if (rows.some((learner) => !learner.isValid)) {
         setImportError(
-          "Some learners are missing a pupil ID, first name or last name."
-        );
+  "Some learners are missing a first name, last name or date of birth."
+);
       }
     },
 
@@ -757,6 +1259,7 @@ async function handleImportLearners() {
           firstName: learner.firstName,
           lastName: learner.lastName,
           className: learner.className,
+          dateOfBirth: learner.dateOfBirth,
         })),
       }),
     });
@@ -949,16 +1452,59 @@ function toggleChild(id: string) {
   }
 }
 
-  const levelToY = (level: number) => {
-    if (level === 4) return 35;
-    if (level === 3) return 85;
-    if (level === 2) return 135;
-    return 185;
-  };
+const journeyLevelCount =
+  activeFramework.assessmentLevels.length;
 
+const levelToY = (level: number) => {
+  const top = 35;
+  const bottom = 185;
+
+  if (journeyLevelCount <= 1) {
+    return (top + bottom) / 2;
+  }
+
+  const clampedLevel = Math.min(
+    Math.max(level, 1),
+    journeyLevelCount
+  );
+
+  return (
+    bottom -
+    ((clampedLevel - 1) /
+      (journeyLevelCount - 1)) *
+      (bottom - top)
+  );
+};
+const journeyPlotStartX = 170;
+const journeyPlotEndX = 390;
+const journeyDotRadius =
+  journey.length <= 8
+    ? 8
+    : journey.length <= 14
+    ? 6
+    : 4;
+const getJourneyX = (
+  index: number,
+  totalPoints: number
+) => {
+  if (totalPoints <= 1) {
+    return (
+      (journeyPlotStartX + journeyPlotEndX) / 2
+    );
+  }
+
+  return (
+    journeyPlotStartX +
+    (index / (totalPoints - 1)) *
+      (journeyPlotEndX - journeyPlotStartX)
+  );
+};
   const journeyPoints = journey
     .map((point, index) => {
-      const x = 110 + index * 65;
+      const x = getJourneyX(
+  index,
+  journey.length
+);
       const y = levelToY(point.level);
       return `${x},${y}`;
     })
@@ -966,7 +1512,9 @@ function toggleChild(id: string) {
 
 async function handleAddLearner() {
   const firstName = newLearnerFirstName.trim();
-  const lastName = newLearnerLastName.trim();
+const lastName = newLearnerLastName.trim();
+const className = newLearnerClassName.trim();
+const dateOfBirth = newLearnerDob.trim();
 
   if (!firstName) {
     alert("Please enter the learner's first name.");
@@ -975,6 +1523,20 @@ async function handleAddLearner() {
 
   if (!lastName) {
     alert("Please enter the learner's last name.");
+    return;
+  }
+
+  if (!dateOfBirth) {
+    alert("Please enter the learner's date of birth.");
+    return;
+  }
+
+  const today = new Date()
+    .toISOString()
+    .slice(0, 10);
+
+  if (dateOfBirth > today) {
+    alert("The learner's date of birth cannot be in the future.");
     return;
   }
 
@@ -991,7 +1553,8 @@ async function handleAddLearner() {
           id: editingLearner.id,
           firstName,
           lastName,
-          className: editingLearner.className || "",
+          className,
+          dateOfBirth,
         }),
       });
 
@@ -1014,7 +1577,8 @@ async function handleAddLearner() {
               externalId: `MANUAL-${crypto.randomUUID()}`,
               firstName,
               lastName,
-              className: "",
+              className,
+              dateOfBirth,
             },
           ],
         }),
@@ -1029,12 +1593,15 @@ async function handleAddLearner() {
       }
     }
 
-    // Reload the alphabetically sorted learner list
-    const learnersResponse = await fetch("/api/learners", {
-      cache: "no-store",
-    });
+    const learnersResponse = await fetch(
+      "/api/learners",
+      {
+        cache: "no-store",
+      }
+    );
 
-    const learnersResult = await learnersResponse.json();
+    const learnersResult =
+      await learnersResponse.json();
 
     if (!learnersResponse.ok) {
       throw new Error(
@@ -1045,16 +1612,19 @@ async function handleAddLearner() {
 
     setPupils(learnersResult.learners || []);
 
-    setNewLearnerFirstName("");
-    setNewLearnerLastName("");
-    setNewLearnerDob("");
+  setNewLearnerFirstName("");
+setNewLearnerLastName("");
+setNewLearnerClassName("");
+setNewLearnerDob("");
 
     setEditingLearner(null);
     setEditingIndex(null);
-
     setShowAddLearnerModal(false);
   } catch (error) {
-    console.error("Failed to save learner:", error);
+    console.error(
+      "Failed to save learner:",
+      error
+    );
 
     alert(
       error instanceof Error
@@ -1121,6 +1691,374 @@ async function confirmArchiveLearner() {
   }
 }
 
+function getFrameworkValidationErrors(
+  framework: FrameworkDefinition
+) {
+  const errors: string[] = [];
+
+  if (!framework.name.trim()) {
+    errors.push("Framework name is required.");
+  }
+if (!framework.version?.trim()) {
+  errors.push("Framework version is required.");
+}
+  const areaIds = new Set<string>();
+  const statementIds = new Set<string>();
+
+  framework.areaDefinitions.forEach((area) => {
+    if (!area.name.trim()) {
+      errors.push("Every learning area needs a name.");
+    }
+
+    if (areaIds.has(area.id)) {
+      errors.push(
+        `Duplicate learning area ID: ${area.id}`
+      );
+    }
+
+    areaIds.add(area.id);
+
+    area.statements.forEach((statement) => {
+      if (!statement.text.trim()) {
+        errors.push(
+          `Statement ${statement.id} has no text.`
+        );
+      }
+
+      if (statementIds.has(statement.id)) {
+        errors.push(
+          `Duplicate statement ID: ${statement.id}`
+        );
+      }
+
+      statementIds.add(statement.id);
+    });
+  });
+
+  framework.stages?.forEach((stage) => {
+    if (!stage.label.trim()) {
+      errors.push(
+        "Every developmental stage needs a name."
+      );
+    }
+
+    if (
+      typeof stage.minAgeMonths === "number" &&
+      typeof stage.maxAgeMonths === "number" &&
+      stage.minAgeMonths > stage.maxAgeMonths
+    ) {
+      errors.push(
+        `${stage.label}: minimum age cannot be greater than maximum age.`
+      );
+    }
+  });
+
+  framework.assessmentLevels.forEach((level) => {
+    if (!level.label.trim()) {
+      errors.push(
+        "Every assessment level needs a name."
+      );
+    }
+
+    if (level.order < 1) {
+      errors.push(
+        `${level.label || "Assessment level"} must have an order of 1 or higher.`
+      );
+    }
+  });
+
+  return errors;
+}
+async function loadSavedFrameworks() {
+  try {
+    const response = await fetch("/api/frameworks");
+
+    const result = await response
+      .json()
+      .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result.error ||
+          "Saved frameworks could not be loaded."
+      );
+    }
+
+const frameworksFromApi: typeof savedFrameworks =
+  Array.isArray(result.frameworks)
+    ? result.frameworks
+    : [];
+
+setSavedFrameworks(frameworksFromApi);
+
+const activeFrameworkRecord =
+  frameworksFromApi.find(
+    (framework) => framework.status === "active"
+  ) ?? null;
+
+setActiveSavedFramework(
+  activeFrameworkRecord?.definition ?? null
+);
+  } catch (error) {
+    console.error(
+      "Saved framework load failed:",
+      error
+    );
+
+    setSavedFrameworks([]);
+  }
+}
+function updateFrameworkPreview(
+  updater: (
+    current: FrameworkDefinition | null
+  ) => FrameworkDefinition | null
+) {
+  setFrameworkHasUnsavedChanges(true);
+  setFrameworkSaveMessage("");
+  setMappedFrameworkPreview(updater);
+}
+
+function handleCloseFrameworkModal() {
+  if (frameworkHasUnsavedChanges) {
+    setFrameworkConfirm({
+      title: "Discard unsaved changes?",
+      message:
+        "You have changes to this framework that have not been saved. If you close now, those changes will be lost.",
+      confirmLabel: "Discard changes",
+     onConfirm: () => {
+  setFrameworkHasUnsavedChanges(false);
+  setFrameworkText("");
+  setFrameworkFile(null);
+  setFrameworkExtraction(null);
+  setMappedFrameworkPreview(null);
+  setFrameworkSaveMessage("");
+  setFrameworkMappingError("");
+  setShowFrameworkModal(false);
+},
+    });
+
+    return;
+  }
+
+setFrameworkText("");
+setFrameworkFile(null);
+setFrameworkExtraction(null);
+setMappedFrameworkPreview(null);
+setFrameworkMappingError("");
+setFrameworkSaveMessage("");
+setShowFrameworkModal(false);
+}
+
+async function handleSaveFrameworkDraft() {
+  if (
+    !mappedFrameworkPreview ||
+    !frameworkIsValid
+  ) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "/api/frameworks",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          definition:
+            mappedFrameworkPreview,
+          sourceText: frameworkText,
+        }),
+      }
+    );
+
+   const responseText = await response.text();
+
+console.log(
+  "Framework save response:",
+  response.status,
+  responseText
+);
+
+let result: {
+  error?: string;
+  code?: string;
+} = {};
+
+try {
+  result = responseText
+    ? JSON.parse(responseText)
+    : {};
+} catch {
+  result = {
+    error: responseText,
+  };
+}
+
+    if (!response.ok) {
+      throw new Error(
+        result.error ||
+          "The framework could not be saved."
+      );
+    }
+
+  setFrameworkSaveMessage(
+  "Framework draft saved successfully."
+);
+setFrameworkHasUnsavedChanges(false);
+await loadSavedFrameworks();
+setFrameworkText("");
+setFrameworkFile(null);
+setFrameworkExtraction(null);
+setMappedFrameworkPreview(null);
+
+  } catch (error) {
+    console.error(
+      "Framework draft save failed:",
+      error
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "The framework could not be saved."
+    );
+  }
+}
+async function handleFrameworkFileUpload() {
+  if (!frameworkFile) {
+    setFrameworkMappingError(
+      "Choose a framework file first."
+    );
+    return;
+  }
+
+ try {
+  setIsExtractingFramework(true);
+  setFrameworkMappingError("");
+
+    const formData = new FormData();
+    formData.append("file", frameworkFile);
+
+    const response = await fetch(
+      "/api/extract-framework",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const result = await response
+      .json()
+      .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result.error ||
+          "The framework file could not be uploaded."
+      );
+    }
+
+if (
+  !result.text ||
+  !result.text.trim()
+) {
+  throw new Error(
+    "The file was uploaded, but no readable text was extracted."
+  );
+}
+
+setFrameworkText(result.text);
+
+setFrameworkExtraction(
+  result.extraction ?? null
+);
+
+setMappedFrameworkPreview(null);
+setFrameworkHasUnsavedChanges(false);
+  } catch (error) {
+    setFrameworkMappingError(
+      error instanceof Error
+        ? error.message
+        : "The framework file could not be uploaded."
+    );
+  } finally {
+    setIsExtractingFramework(false);
+  }
+}
+
+async function handleMapFramework() {
+  const trimmedFrameworkText =
+    frameworkText.trim();
+
+  setFrameworkMappingError("");
+
+  if (trimmedFrameworkText.length < 100) {
+    setFrameworkMappingError(
+      "Paste more of the framework before mapping it."
+    );
+    return;
+  }
+
+  try {
+    setIsMappingFramework(true);
+    setMappedFrameworkPreview(null);
+
+    const response = await fetch(
+      "/api/map-framework",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+  frameworkText:
+    trimmedFrameworkText,
+
+  frameworkExtraction,
+}),
+      }
+    );
+
+    const result = await response
+      .json()
+      .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result.error ||
+          "The framework could not be mapped."
+      );
+    }
+
+    if (!result.mappedFramework) {
+      throw new Error(
+        "The framework mapping was empty."
+      );
+    }
+
+    setMappedFrameworkPreview(
+      result.mappedFramework
+    );
+setFrameworkHasUnsavedChanges(true);
+
+  } catch (error) {
+    console.error(
+      "Framework mapping failed:",
+      error
+    );
+
+    setFrameworkMappingError(
+      error instanceof Error
+        ? error.message
+        : "The framework could not be mapped."
+    );
+  } finally {
+    setIsMappingFramework(false);
+  }
+}
+
   async function handleAnalyse() {
   if (selectedChildren.length === 0) return;
   if (!observation.trim()) return;
@@ -1137,29 +2075,53 @@ setAreaOverrideReasons({});
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        observation,
-        frameworkKey: "eyfs",
+     body: JSON.stringify({
+  observation,
+  observationDate,
+  frameworkKey: activeFramework.key,
         learners: selectedChildren.map((id) => {
   const pupil = pupils.find((p) => p.id === id);
 
-  return {
-    id,
-    name: pupil
-      ? `${pupil.firstName} ${pupil.lastName}`
-      : id,
-  };
+ return {
+  id,
+  name: pupil
+    ? `${pupil.firstName} ${pupil.lastName}`
+    : id,
+  dateOfBirth: pupil?.dateOfBirth || null,
+};
 }),
       }),
     });
 
-    const data = await response.json();
+const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error || "Analysis failed");
-    }
+if (!response.ok) {
+  if (
+    response.status === 400 &&
+    data.code === "MISSING_LEARNER_DOB"
+  ) {
+    setMissingDobLearnerNames(
+      Array.isArray(data.learners)
+        ? data.learners
+        : []
+    );
 
-    setAnalysis(data);
+    setShowMissingDobModal(true);
+    return;
+  }
+
+  throw new Error(
+    data.error || "Analysis failed"
+  );
+}
+
+setAnalysis(data);
+setSelectedAnalysisLearnerId(
+  Array.isArray(data.learnerAnalyses) &&
+    data.learnerAnalyses.length > 0
+    ? data.learnerAnalyses[0].learnerId
+    : ""
+);
   } catch (error) {
     console.error(error);
     alert("Something went wrong while analysing the observation.");
@@ -1167,6 +2129,10 @@ setAreaOverrideReasons({});
     setLoading(false);
   }
 }
+
+useEffect(() => {
+  loadSavedFrameworks();
+}, []);
 
 useEffect(() => {
   async function loadLearnerObservations() {
@@ -1196,28 +2162,72 @@ useEffect(() => {
 async function handleSaveToJournal() {
   if (!analysis) return;
 
-  const savedFrameworkMatches = analysis.frameworkMatches.map(
-  (match) => {
-    const teacherOverride =
-      areaLevelOverrides[match.strand] || null;
+const learnerEntries = analysis.learnerAnalyses.map(
+  (learnerAnalysis) => {
+    const savedFrameworkMatches =
+      learnerAnalysis.frameworkMatches.map((match) => {
+        const overrideKey = `${learnerAnalysis.learnerId}::${match.strand}`;
+
+        const teacherOverride =
+          areaLevelOverrides[overrideKey] || null;
+
+        return {
+          strand: match.strand,
+          source: match.source || "ai",
+          objectives: match.objectives,
+          statementMatches: match.statementMatches,
+
+          suggestedLevel: match.suggestedLevel,
+          confidence: match.confidence,
+
+          teacherOverride,
+
+          finalLevel:
+            teacherOverride ||
+            match.suggestedLevel,
+
+          overrideReason: teacherOverride
+            ? areaOverrideReasons[
+                overrideKey
+              ]?.trim() || null
+            : null,
+        };
+      });
+
+    const teacherNotes =
+      learnerAnalysis.frameworkMatches
+        .map((match) => {
+          const overrideKey = `${learnerAnalysis.learnerId}::${match.strand}`;
+
+          return areaOverrideReasons[
+            overrideKey
+          ]?.trim();
+        })
+        .filter(Boolean)
+        .join(" | ") || null;
+
+    const aiLevel =
+      learnerAnalysis.frameworkMatches.length === 1
+        ? learnerAnalysis.frameworkMatches[0]
+            .suggestedLevel
+        : "Per-area judgements";
+
+    const teacherLevel =
+      learnerAnalysis.frameworkMatches.length === 1
+        ? areaLevelOverrides[
+            `${learnerAnalysis.learnerId}::${learnerAnalysis.frameworkMatches[0].strand}`
+          ] ||
+          learnerAnalysis.frameworkMatches[0]
+            .suggestedLevel
+        : "Per-area judgements";
 
     return {
-      strand: match.strand,
-      source: match.source || "ai",
-      objectives: match.objectives,
-      statementMatches: match.statementMatches,
-
-      suggestedLevel: match.suggestedLevel,
-      confidence: match.confidence,
-
-      teacherOverride,
-
-      finalLevel:
-        teacherOverride || match.suggestedLevel,
-
-      overrideReason: teacherOverride
-        ? areaOverrideReasons[match.strand]?.trim() || null
-        : null,
+      learner_id: learnerAnalysis.learnerId,
+      framework_matches: savedFrameworkMatches,
+      ai_level: aiLevel,
+      teacher_level: teacherLevel,
+      next_steps: learnerAnalysis.nextSteps,
+      teacher_notes: teacherNotes,
     };
   }
 );
@@ -1232,30 +2242,12 @@ type JournalSaveResponse = {
 
 const journalPayload = {
   learner_ids: selectedChildren,
+  learner_entries: learnerEntries,
+
   observation,
+  observation_date: observationDate,
+  assessment_context: analysis.assessmentContext,
   image_url: evidenceImage?.name || null,
-  framework_matches: savedFrameworkMatches,
-
-  ai_level:
-    analysis.frameworkMatches.length === 1
-      ? analysis.frameworkMatches[0].suggestedLevel
-      : "Per-area judgements",
-
-  teacher_level:
-    analysis.frameworkMatches.length === 1
-      ? areaLevelOverrides[
-          analysis.frameworkMatches[0].strand
-        ] ||
-        analysis.frameworkMatches[0].suggestedLevel
-      : "Per-area judgements",
-
-  next_steps: analysis.nextSteps,
-
-  teacher_notes:
-    Object.values(areaOverrideReasons)
-      .map((reason) => reason.trim())
-      .filter(Boolean)
-      .join(" | ") || null,
 };
 
 async function sendJournalRequest(
@@ -1606,6 +2598,23 @@ async function openJournal(name: string) {
     <div className="mt-6">
 
       <div>
+        
+        <div className="mb-4">
+  <label className="block text-sm font-semibold text-slate-700">
+    Observation Date
+  </label>
+
+  <input
+    type="date"
+    value={observationDate}
+    onChange={(event) =>
+      setObservationDate(event.target.value)
+    }
+    max={new Date().toISOString().slice(0, 10)}
+    className="mt-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-black"
+  />
+</div>
+        
         <label className="block text-sm font-semibold text-slate-700">
           Observation
         </label>
@@ -1733,6 +2742,36 @@ async function openJournal(name: string) {
       .join(", ")
   : "No Learners Selected"}
 </p>
+
+{analysis.assessmentContext?.learners?.length > 0 && (
+  <div className="mt-2 flex flex-wrap gap-2">
+    {analysis.assessmentContext.learners.map(
+      (learner) => {
+        const ageLabel =
+          typeof learner.ageInMonths === "number"
+            ? `${Math.floor(
+                learner.ageInMonths / 12
+              )} years, ${
+                learner.ageInMonths % 12
+              } months`
+            : "Age unavailable";
+
+        return (
+          <span
+            key={learner.id}
+            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+          >
+            {ageLabel}
+            {" · "}
+            {learner.suggestedStage?.label ||
+              "Framework stage not mapped"}
+          </span>
+        );
+      }
+    )}
+  </div>
+)}
+
                   </div>
 
 
@@ -1770,7 +2809,35 @@ async function openJournal(name: string) {
 </div>
                               </div>
             </div>
+{analysis.learnerAnalyses?.length > 1 && (
+  <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+    <p className="mb-3 text-sm font-medium text-slate-500">
+      View assessment for
+    </p>
 
+    <div className="flex flex-wrap gap-2">
+      {analysis.learnerAnalyses.map((learner) => (
+        <button
+          key={learner.learnerId}
+          type="button"
+          onClick={() =>
+            setSelectedAnalysisLearnerId(
+              learner.learnerId
+            )
+          }
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            selectedAnalysisLearnerId ===
+            learner.learnerId
+              ? "bg-slate-900 text-white"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+          }`}
+        >
+          {learner.learnerName}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
             {analysis.learnerMismatch?.detected && (
               <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
                 <p className="font-semibold text-amber-900">
@@ -1839,13 +2906,17 @@ async function openJournal(name: string) {
   </div>
 
   <div className="mt-5 space-y-4">
-   {analysis.frameworkMatches.map((match, matchIndex) => {
-      const currentLevel =
-        areaLevelOverrides[match.strand] ||
-        match.suggestedLevel;
+   {(displayedLearnerAnalysis?.frameworkMatches ?? []).map(
+  (match, matchIndex) => {
+    const overrideKey = `${
+  displayedLearnerAnalysis?.learnerId ?? "unknown"
+}::${match.strand}`;
+     const currentLevel =
+  areaLevelOverrides[overrideKey] ||
+  match.suggestedLevel;
 
-      const hasOverride =
-        Boolean(areaLevelOverrides[match.strand]);
+const hasOverride =
+  Boolean(areaLevelOverrides[overrideKey]);
 
       return (
         <div
@@ -1873,8 +2944,8 @@ async function openJournal(name: string) {
               <button
                 type="button"
                 onClick={() =>
-                  setAreaBeingOverridden(match.strand)
-                }
+  setAreaBeingOverridden(overrideKey)
+}
                 className="rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Override
@@ -1901,7 +2972,7 @@ async function openJournal(name: string) {
             </p>
           )}
 
-         {areaBeingOverridden === match.strand && (
+         {areaBeingOverridden === overrideKey && (
   <div className="mt-4 border-t border-slate-200 pt-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <select
@@ -1909,7 +2980,7 @@ async function openJournal(name: string) {
         onChange={(event) =>
           setAreaLevelOverrides((current) => ({
             ...current,
-            [match.strand]: event.target.value,
+            [overrideKey]: event.target.value,
           }))
         }
         className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-900"
@@ -1935,13 +3006,13 @@ async function openJournal(name: string) {
           onClick={() => {
             setAreaLevelOverrides((current) => {
               const updated = { ...current };
-              delete updated[match.strand];
+              delete updated[overrideKey];
               return updated;
             });
 
             setAreaOverrideReasons((current) => {
               const updated = { ...current };
-              delete updated[match.strand];
+              delete updated[overrideKey];
               return updated;
             });
 
@@ -1964,11 +3035,11 @@ async function openJournal(name: string) {
       </p>
 
       <textarea
-        value={areaOverrideReasons[match.strand] || ""}
+       value={areaOverrideReasons[overrideKey] || ""}
         onChange={(event) =>
           setAreaOverrideReasons((current) => ({
             ...current,
-            [match.strand]: event.target.value,
+            [overrideKey]: event.target.value,
           }))
         }
         placeholder="For example: Recent independent work shows greater consistency than this observation alone."
@@ -1989,7 +3060,8 @@ async function openJournal(name: string) {
                   </p>
 
                   <div className="space-y-5">
-  {analysis.frameworkMatches.map((match, matchIndex) => (
+  {(displayedLearnerAnalysis?.frameworkMatches ?? []).map(
+  (match, matchIndex) => (
     <div
       key={`${match.strand}-${matchIndex}`}
       className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
@@ -2011,8 +3083,11 @@ async function openJournal(name: string) {
 
         <div className="text-left sm:text-right">
           <p className="text-sm font-semibold text-slate-900">
-            {areaLevelOverrides[match.strand] ||
-              match.suggestedLevel}
+           {areaLevelOverrides[
+  `${
+    displayedLearnerAnalysis?.learnerId ?? "unknown"
+  }::${match.strand}`
+] || match.suggestedLevel}
           </p>
 
           <p className="text-xs text-slate-500">
@@ -2066,7 +3141,8 @@ async function openJournal(name: string) {
                   <p className="mb-4 text-sm text-slate-500">Next Steps</p>
 
                   <ul className="ml-5 list-disc space-y-2 text-slate-700">
-                    {analysis.nextSteps.map((step) => (
+                    {(displayedLearnerAnalysis?.nextSteps ?? []).map(
+  (step) => (
                       <li key={step}>{step}</li>
                     ))}
                   </ul>
@@ -2130,48 +3206,50 @@ async function openJournal(name: string) {
   Current attainment across learning areas
 </p>
 
-            <div className="mt-8 space-y-5">
-              {pupilProgress.map((item) => (
-                <div key={item.area}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="font-medium text-slate-900">
-                      {item.area}
-                    </span>
+<div className="mt-8">
+  {liveLearnerProgress.length > 0 ? (
+    <div className="space-y-5">
+      {liveLearnerProgress.map((item) => (
+        <div key={item.area}>
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <span className="font-medium text-slate-900">
+              {item.area}
+            </span>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-sm font-medium ${
-                        item.level === "Exceeding"
-                          ? "bg-blue-100 text-blue-700"
-                          : item.level === "Secure"
-                          ? "bg-green-100 text-green-700"
-                          : item.level === "Developing"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-purple-100 text-purple-700"
-                      }`}
-                    >
-                      {item.level}
-                    </span>
-                  </div>
+            <span
+              className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${
+  getAssessmentLevelColours(item.level).badge
+}`}
+            >
+              {item.level}
+            </span>
+          </div>
 
-                  <div className="h-3 w-full rounded-full bg-slate-200">
-                    <div
-                      className={`h-full rounded-full ${
-                        item.level === "Exceeding"
-                          ? "bg-blue-500"
-                          : item.level === "Secure"
-                          ? "bg-green-500"
-                          : item.level === "Developing"
-                          ? "bg-yellow-500"
-                          : "bg-purple-500"
-                      }`}
-                      style={{
-                        width: `${item.score}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+            <div
+              className={`h-full rounded-full transition-all ${
+  getAssessmentLevelColours(item.level).bar
+}`}
+              style={{
+                width: `${item.score}%`,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+      <p className="font-medium text-slate-700">
+        No assessment judgements yet
+      </p>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Save an observation for this learner to begin showing progress.
+      </p>
+    </div>
+  )}
+</div>
           </div>
 
           <div className="space-y-6">
@@ -2269,49 +3347,66 @@ async function openJournal(name: string) {
 </p>
                 </div>
 
-                <select
-                  value={selectedJourney}
-                  onChange={(e) => setSelectedJourney(e.target.value)}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-black"
-                >
-                  <option>Overall</option>
-                  <option>Mathematics</option>
-                  <option>Communication</option>
-                  <option>Research Skills</option>
-                  <option>Critical Thinking</option>
-                  <option>Creativity</option>
-                  <option>Physical</option>
-                  <option>Social Skills</option>
-                  <option>Self-Management</option>
-                </select>
+<select
+  value={activeJourneyArea}
+  onChange={(event) =>
+    setSelectedJourney(event.target.value)
+  }
+  disabled={liveJourneyAreas.length === 0}
+  className="w-40 shrink-0 rounded-xl border border-slate-300 px-3 py-2 text-sm text-black disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+>
+  {liveJourneyAreas.length > 0 ? (
+    liveJourneyAreas.map((area) => (
+<option key={area} value={area}>
+  {getAreaShortLabel(area)}
+</option>
+    ))
+  ) : (
+    <option value="">
+      No assessed areas
+    </option>
+  )}
+</select>
               </div>
 
               <div className="mt-6">
                 <svg viewBox="0 0 420 230" className="h-72 w-full">
-                  {[35, 85, 135, 185].map((y) => (
-                    <line
-                      key={y}
-                      x1="95"
-                      y1={y}
-                      x2="390"
-                      y2={y}
-                      stroke="#e2e8f0"
-                      strokeWidth="1"
-                    />
-                  ))}
+                  {[...activeFramework.assessmentLevels]
+  .sort((a, b) => b.order - a.order)
+  .map((level) => {
+    const orderedLevels = [
+      ...activeFramework.assessmentLevels,
+    ].sort((a, b) => a.order - b.order);
 
-                  <text x="8" y="39" fontSize="12" fill="#64748b">
-                    Exceeding
-                  </text>
-                  <text x="8" y="89" fontSize="12" fill="#64748b">
-                    Secure
-                  </text>
-                  <text x="8" y="139" fontSize="12" fill="#64748b">
-                    Developing
-                  </text>
-                  <text x="8" y="189" fontSize="12" fill="#64748b">
-                    Below
-                  </text>
+    const levelNumber =
+      orderedLevels.findIndex(
+        (item) => item.id === level.id
+      ) + 1;
+
+    const y = levelToY(levelNumber);
+
+    return (
+      <g key={level.id}>
+        <line
+          x1="155"
+          y1={y}
+          x2="390"
+          y2={y}
+          stroke="#e2e8f0"
+          strokeWidth="1"
+        />
+
+        <text
+          x="8"
+          y={y + 4}
+          fontSize="12"
+          fill="#64748b"
+        >
+          {level.label}
+        </text>
+      </g>
+    );
+  })}
 
                   <polyline
                     fill="none"
@@ -2321,34 +3416,45 @@ async function openJournal(name: string) {
                   />
 
                   {journey.map((point, index) => {
-                    const x = 110 + index * 65;
+                    const x = getJourneyX(
+  index,
+  journey.length
+);
                     const y = levelToY(point.level);
+const labelEvery =
+  journey.length <= 8
+    ? 1
+    : Math.ceil(journey.length / 6);
 
+const showDateLabel =
+  index === 0 ||
+  index === journey.length - 1 ||
+  index % labelEvery === 0;
                     return (
-                      <g key={point.label}>
+                     <g key={point.id}>
                         <circle
   cx={x}
   cy={y}
-  r="8"
+  r={journeyDotRadius}
   fill="#0f172a"
   stroke="white"
   strokeWidth="3"
   className="cursor-pointer"
-  onClick={() =>
-    setSelectedEvidence(evidenceDetails[index])
-  }
+  onClick={() => setSelectedEvidence(point)}
 />
                           
 
-                        <text
-                          x={x}
-                          y="218"
-                          textAnchor="middle"
-                          fontSize="12"
-                          fill="#64748b"
-                        >
-                          {point.label}
-                        </text>
+                        {showDateLabel && (
+  <text
+    x={x}
+    y="218"
+    textAnchor="middle"
+    fontSize="12"
+    fill="#64748b"
+  >
+    {point.label}
+  </text>
+)}
                       </g>
                     );
                   })}
@@ -2746,6 +3852,132 @@ async function openJournal(name: string) {
 </div>
 
 </div>
+
+{frameworkConfirm && (
+  <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <h2 className="text-xl font-bold text-slate-900">
+        {frameworkConfirm.title}
+      </h2>
+
+      <p className="mt-3 text-sm leading-6 text-slate-600">
+        {frameworkConfirm.message}
+      </p>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() =>
+            setFrameworkConfirm(null)
+          }
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            frameworkConfirm.onConfirm();
+            setFrameworkConfirm(null);
+          }}
+          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+        >
+          {frameworkConfirm.confirmLabel}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showMissingDobModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">
+        🎂
+      </div>
+
+      <h2 className="mt-4 text-xl font-bold text-slate-900">
+        Date of birth needed
+      </h2>
+
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        OASIS needs a date of birth to calculate the
+        learner&apos;s age on the observation date and apply
+        the framework accurately.
+      </p>
+
+      {missingDobLearnerNames.length > 0 && (
+        <div className="mt-4 rounded-2xl bg-amber-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+            Learner to update
+          </p>
+
+          <p className="mt-1 font-semibold text-amber-950">
+            {missingDobLearnerNames.join(", ")}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setShowMissingDobModal(false);
+            setMissingDobLearnerNames([]);
+          }}
+          className="rounded-xl border border-slate-300 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const learnerName =
+              missingDobLearnerNames[0] || "";
+
+            const learner = pupils.find(
+              (pupil) =>
+                `${pupil.firstName} ${pupil.lastName}` ===
+                learnerName
+            );
+
+            setShowMissingDobModal(false);
+
+            if (!learner) {
+              setShowManageLearners(true);
+              return;
+            }
+
+            setEditingLearner(learner);
+            setNewLearnerFirstName(
+              learner.firstName || ""
+            );
+            setNewLearnerLastName(
+              learner.lastName || ""
+            );
+            setNewLearnerClassName(
+              learner.className || ""
+            );
+            setNewLearnerDob(
+              learner.dateOfBirth || ""
+            );
+
+            setIsSEND(Boolean(learner.send));
+            setIsEAL(Boolean(learner.eal));
+            setIsGifted(Boolean(learner.gifted));
+
+            setShowAddLearnerModal(true);
+          }}
+          className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white hover:bg-slate-700"
+        >
+          Edit learner
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 {showDuplicateObservationModal && (
   <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
@@ -3177,16 +4409,22 @@ async function openJournal(name: string) {
 
              <button
   onClick={() => {
+  setEditingLearner(child);
+  setEditingIndex(index);
 
-    setEditingIndex(index);
-setEditingLearner(child);
+  setNewLearnerFirstName(child.firstName || "");
+  setNewLearnerLastName(child.lastName || "");
+  setNewLearnerDob(child.dateOfBirth || "");
+  setNewLearnerClassName(child.className || "");
 
-setNewLearnerFirstName(child.firstName);
-setNewLearnerLastName(child.lastName);
-    setShowManageLearners(false);
-    setShowAddLearnerModal(true);
+  setIsSEND(Boolean(child.send));
+  setIsEAL(Boolean(child.eal));
+  setIsGifted(Boolean(child.gifted));
 
-  }}
+  setShowManageLearners(false);
+  setShowAddLearnerModal(true);
+}}
+
   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
 >
   Edit
@@ -3278,7 +4516,7 @@ setNewLearnerLastName(child.lastName);
                 : "text-slate-500"
             }`}
           >
-            CSV, Excel, PDF or document.
+            Upload a CSV class list.
           </p>
         </button>
 
@@ -3315,16 +4553,17 @@ setNewLearnerLastName(child.lastName);
             </label>
 
             <p className="mt-1 text-sm text-slate-500">
-              Enter one learner per line. We will review the information
-              before saving it.
-            </p>
+ Enter one learner per line: first name, last name, class
+and date of birth. Use YYYY-MM-DD for dates. You may add
+a pupil ID as the first column if your school already uses one.
+</p>
 
             <textarea
               id="class-list-text"
               value={importText}
               onChange={(event) => setImportText(event.target.value)}
-              placeholder={`TEST-101, Ava, Clarke, Reception A
-TEST-102, Yusuf, Ali, Reception A`}
+              placeholder={`Ava, Clarke, Reception A, 2021-04-18
+Yusuf, Ali, Reception A, 2021-09-02`}
               className="mt-4 min-h-56 w-full rounded-2xl border border-slate-300 bg-white p-4 text-slate-900 outline-none focus:border-slate-900"
             />
           </div>
@@ -3337,9 +4576,17 @@ TEST-102, Yusuf, Ali, Reception A`}
     </p>
 
     <p className="mt-1 text-sm text-slate-500">
-      Include columns for pupil ID, first name, last name
-      and class.
-    </p>
+  Required columns: first name, last name and date of birth.
+Class and pupil ID are optional. Use YYYY-MM-DD for dates.
+</p>
+
+<a
+  href="/oasis-learner-import-template.csv"
+  download
+  className="mt-4 inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+>
+  ↓ Download CSV template
+</a>
 
     <label className="mt-5 flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center hover:border-slate-500 hover:bg-slate-50">
       <span className="font-semibold text-slate-900">
@@ -3391,14 +4638,20 @@ TEST-102, Yusuf, Ali, Reception A`}
     </div>
 
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[950px] text-left text-sm">
+      <table className="w-full min-w-[1120px] text-left text-sm">
 <thead className="bg-white text-slate-500">
   <tr>
-    <th className="px-4 py-3">Pupil ID</th>
+    <th className="px-4 py-3">
+  Pupil ID
+  <span className="ml-1 text-xs font-normal text-slate-400">
+    (optional)
+  </span>
+</th>
     <th className="px-4 py-3">First name</th>
     <th className="px-4 py-3">Last name</th>
-    <th className="px-4 py-3">Class</th>
-    <th className="px-4 py-3">Status</th>
+<th className="px-4 py-3">Class</th>
+<th className="px-4 py-3">Date of birth</th>
+<th className="px-4 py-3">Status</th>
     <th className="px-4 py-3">Import action</th>
     <th className="px-4 py-3 text-right">
       Remove
@@ -3412,6 +4665,7 @@ TEST-102, Yusuf, Ali, Reception A`}
       <td className="px-3 py-3">
         <input
           type="text"
+          placeholder="Optional"
           value={learner.externalId}
           onChange={(event) =>
             updateImportPreviewRow(
@@ -3472,6 +4726,23 @@ TEST-102, Yusuf, Ali, Reception A`}
           className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
         />
       </td>
+
+<td className="px-3 py-3">
+  <input
+    type="date"
+    value={learner.dateOfBirth}
+    onChange={(event) =>
+      updateImportPreviewRow(
+        learner.rowId,
+        "dateOfBirth",
+        event.target.value
+      )
+    }
+    max={new Date().toISOString().slice(0, 10)}
+    aria-label="Date of birth"
+    className="w-full min-w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
+  />
+</td>
 
      <td className="px-4 py-3">
   <span
@@ -3655,18 +4926,58 @@ journalEntries.map((entry: any) => {
           <div>
 
             <p className="font-semibold text-slate-900">
-              {new Date(entry.created_at).toLocaleDateString()}
+              {new Date(
+  entry.observation_date || entry.created_at
+).toLocaleDateString()}
             </p>
 
-            <p className="mt-2 text-sm text-slate-500">
-              {entry.framework_matches
-                ?.map((f: any) => f.strand)
-                .join(" • ")}
-            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+  {Array.isArray(entry.framework_matches) &&
+  entry.framework_matches.length > 0 ? (
+    entry.framework_matches.map(
+      (match: any, matchIndex: number) => {
+        const finalLevel =
+          match.finalLevel ||
+          match.teacherOverride ||
+          match.suggestedLevel ||
+          "Not assessed";
 
-            <p className="mt-3 line-clamp-3 text-slate-700">
-              {entry.observation}
-            </p>
+        const levelClasses =
+          finalLevel === "Exceeding"
+            ? "bg-blue-100 text-blue-700"
+            : finalLevel === "Secure"
+            ? "bg-green-100 text-green-700"
+            : finalLevel === "Developing"
+            ? "bg-amber-100 text-amber-700"
+            : finalLevel === "Below"
+            ? "bg-purple-100 text-purple-700"
+            : "bg-slate-100 text-slate-600";
+
+        return (
+         <span
+  key={`${entry.id}-${match.strand}-${matchIndex}`}
+  title={match.strand}
+  className={`rounded-full px-3 py-1 text-xs font-semibold ${levelClasses}`}
+>
+  {getAreaShortLabel(match.strand)} · {finalLevel}
+</span>
+        );
+      }
+    )
+  ) : (
+    <span className="text-sm text-slate-500">
+      No area judgements
+    </span>
+  )}
+</div>
+
+<p
+  className={`mt-3 whitespace-pre-wrap text-slate-700 ${
+    expanded ? "" : "line-clamp-3"
+  }`}
+>
+  {entry.observation}
+</p>
 
           </div>
 
@@ -3678,29 +4989,164 @@ journalEntries.map((entry: any) => {
 
       </button>
 
-      {expanded && (
+{expanded && (
+  <div className="border-t border-slate-200 px-6 pb-6">
+   
 
-        <div className="border-t border-slate-200 px-6 pb-6">
 
-          <h3 className="mt-6 font-semibold text-slate-900">
-            Next Steps
-          </h3>
+    <div className="mt-6">
+      <h3 className="font-semibold text-slate-900">
+        Area judgements
+      </h3>
 
-          <ul className="mt-3 ml-5 list-disc space-y-2 text-slate-700">
+      <div className="mt-3 space-y-3">
+        {Array.isArray(entry.framework_matches) &&
+        entry.framework_matches.length > 0 ? (
+          entry.framework_matches.map(
+            (match: any, matchIndex: number) => {
+              const finalLevel =
+                match.finalLevel ||
+                match.teacherOverride ||
+                match.suggestedLevel ||
+                "Not assessed";
 
-            {entry.next_steps?.map((step: string) => (
+              return (
+                <div
+                  key={`${entry.id}-${match.strand}-${matchIndex}`}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {match.strand}
+                      </p>
 
-              <li key={step}>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {match.source === "teacher"
+                          ? "Teacher added"
+                          : `${match.confidence ?? 0}% AI confidence`}
+                      </p>
+                    </div>
+
+                    <span className="w-fit rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm">
+                      {finalLevel}
+                    </span>
+                  </div>
+
+                  {match.teacherOverride && (
+                    <p className="mt-3 text-xs font-semibold text-blue-700">
+                      AI suggestion:{" "}
+                      {match.suggestedLevel || "Not recorded"} → Teacher
+                      judgement: {match.teacherOverride}
+                    </p>
+                  )}
+
+                  {match.overrideReason && (
+                    <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                      <p className="text-xs font-semibold text-blue-700">
+                        Reason for adjusted judgement
+                      </p>
+
+                      <p className="mt-1 text-sm text-blue-900">
+                        {match.overrideReason}
+                      </p>
+                    </div>
+                  )}
+
+{Array.isArray(match.statementMatches) &&
+match.statementMatches.length > 0 ? (
+  <div className="mt-4 space-y-3">
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Matched framework evidence
+    </p>
+
+    {match.statementMatches.map(
+      (statement: any, statementIndex: number) => (
+        <div
+          key={`${entry.id}-${matchIndex}-${statement.statementId}-${statementIndex}`}
+          className="rounded-xl border border-slate-200 bg-white p-4"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {statement.statementId}
+          </p>
+
+          <p className="mt-1 text-sm font-medium text-slate-900">
+            {statement.statementText}
+          </p>
+
+          {statement.evidence && (
+            <div className="mt-3 rounded-xl bg-blue-50 p-3">
+              <p className="text-xs font-semibold text-blue-700">
+                Supporting evidence
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-blue-900">
+                {statement.evidence}
+              </p>
+            </div>
+          )}
+        </div>
+      )
+    )}
+  </div>
+) : Array.isArray(match.objectives) &&
+  match.objectives.length > 0 ? (
+  <div className="mt-4">
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Framework matches
+    </p>
+
+    <ul className="ml-5 mt-2 list-disc space-y-1 text-sm text-slate-700">
+      {match.objectives.map(
+        (objective: string, objectiveIndex: number) => (
+          <li
+            key={`${entry.id}-${matchIndex}-objective-${objectiveIndex}`}
+          >
+            {objective}
+          </li>
+        )
+      )}
+    </ul>
+  </div>
+) : null}
+
+
+                </div>
+              );
+            }
+          )
+        ) : (
+          <p className="text-sm text-slate-500">
+            No area judgements were recorded.
+          </p>
+        )}
+      </div>
+    </div>
+
+    <div className="mt-6">
+      <h3 className="font-semibold text-slate-900">
+        Next Steps
+      </h3>
+
+      {Array.isArray(entry.next_steps) &&
+      entry.next_steps.length > 0 ? (
+        <ul className="ml-5 mt-3 list-disc space-y-2 text-slate-700">
+          {entry.next_steps.map(
+            (step: string, stepIndex: number) => (
+              <li key={`${entry.id}-step-${stepIndex}`}>
                 {step}
               </li>
-
-            ))}
-
-          </ul>
-
-        </div>
-
+            )
+          )}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">
+          No next steps were recorded.
+        </p>
       )}
+    </div>
+  </div>
+)}
 
     </div>
 
@@ -3775,6 +5221,21 @@ journalEntries.map((entry: any) => {
             placeholder="Smith"
           />
         </div>
+
+<div>
+  <label className="block text-sm font-semibold text-slate-700">
+    Class
+  </label>
+
+  <input
+    value={newLearnerClassName}
+    onChange={(e) =>
+      setNewLearnerClassName(e.target.value)
+    }
+    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
+    placeholder="For example: Pre-K 3/4"
+  />
+</div>
 
 <div className="mt-6">
 
@@ -3879,7 +5340,8 @@ journalEntries.map((entry: any) => {
         </div>
 
         <button
-          onClick={() => setShowFrameworkModal(false)}
+          type="button"
+  onClick={handleCloseFrameworkModal}
           className="text-slate-500 hover:text-slate-900"
         >
           ✕
@@ -3887,262 +5349,1601 @@ journalEntries.map((entry: any) => {
 
       </div>
 
-      <div className="mt-8 rounded-3xl border-2 border-dashed border-slate-300 p-12 text-center">
-
-        <div className="mx-auto max-w-md">
-
-          <h3 className="text-xl font-bold text-slate-900">
-            Drop Framework Here
-          </h3>
-
-          <p className="mt-3 text-slate-500">
-            PDF, Word, Excel or curriculum document
-          </p>
-
-          <button className="mt-6 rounded-xl bg-slate-900 px-5 py-3 text-white hover:bg-slate-700">
-            Browse Files
-          </button>
-
-        </div>
-
-      </div>
-
-      <div className="mt-8 grid gap-6 md:grid-cols-3">
-
-        <div className="rounded-2xl bg-slate-100 p-5">
-          <h3 className="font-bold text-slate-900">
-            Detect Strands
-          </h3>
-
-          <p className="mt-2 text-sm text-slate-600">
-            AI identifies learning areas and categories automatically.
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-100 p-5">
-          <h3 className="font-bold text-slate-900">
-            Detect Objectives
-          </h3>
-
-          <p className="mt-2 text-sm text-slate-600">
-            Learning objectives are extracted and organised.
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-100 p-5">
-          <h3 className="font-bold text-slate-900">
-            Choose Assessment Scale and Philosophy
-          </h3>
-
-          <p className="mt-2 text-sm text-slate-600">
-            This will setup the UI to your school bespoke needs.
-          </p>
-        </div>
-
-      </div>
-
-      <div className="mt-8 rounded-2xl bg-blue-50 p-5">
-
-  <h3 className="font-bold text-slate-900">
-    Example AI Workflow
-  </h3>
-
-  <div className="mt-3 text-sm text-slate-700">
-
-    <p>Uploaded framework:</p>
-
-    <p className="mt-2 font-medium">
-      Early Years Learning Framework.pdf
-    </p>
-
-    <div className="mt-4 rounded-xl bg-white p-4">
-
-      <div className="flex flex-wrap items-center justify-between gap-4">
-
-        <div>
-          <p>✓ 8 strands detected</p>
-          <p>✓ 62 objectives detected</p>
-        </div>
-
-      </div>
-
-      <div className="my-6 border-t border-slate-200" />
-
-      <h3 className="text-lg font-semibold text-slate-900">
-        Assessment Scale
+{savedFrameworks.length > 0 && (
+  <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+    <div>
+      <h3 className="font-bold text-slate-900">
+        Saved Frameworks
       </h3>
 
       <p className="mt-1 text-sm text-slate-500">
-        Choose or create the attainment levels your school uses.
+        Continue working on a previously saved framework.
+      </p>
+    </div>
+
+    <div className="mt-4 space-y-3">
+      {savedFrameworks.map((savedFramework) => (
+        <div
+          key={savedFramework.id}
+          className={`flex items-center justify-between gap-4 rounded-xl border p-4 ${
+  savedFramework.status === "active"
+    ? "border-emerald-200 bg-emerald-50/40"
+    : savedFramework.status === "draft"
+    ? "border-amber-200 bg-amber-50/30"
+    : "border-slate-200 bg-slate-50"
+}`}
+        >
+          <div>
+            <p className="font-semibold text-slate-900">
+              {savedFramework.name}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Version {savedFramework.version}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+  <span
+    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+      savedFramework.status === "draft"
+        ? "bg-amber-100 text-amber-800"
+        : savedFramework.status === "active"
+        ? "bg-emerald-100 text-emerald-800"
+        : "bg-slate-100 text-slate-600"
+    }`}
+  >
+    {savedFramework.status
+      .charAt(0)
+      .toUpperCase() +
+      savedFramework.status.slice(1)}
+  </span>
+
+{savedFramework.status === "active" && (
+  <button
+    type="button"
+    onClick={() => {
+      setMappedFrameworkPreview({
+        ...savedFramework.definition,
+        version: "",
+      });
+setFrameworkHasUnsavedChanges(true);
+      setFrameworkText(
+        savedFramework.source_text || ""
+      );
+
+      setFrameworkSaveMessage("");
+      setFrameworkMappingError("");
+    }}
+    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+  >
+    Create new version
+  </button>
+)}
+
+  {savedFramework.status === "draft" && (
+    <button
+      type="button"
+      onClick={() => {
+        setMappedFrameworkPreview(
+          savedFramework.definition
+        );
+setFrameworkHasUnsavedChanges(false);
+        setFrameworkText(
+          savedFramework.source_text || ""
+        );
+
+        setFrameworkSaveMessage("");
+        setFrameworkMappingError("");
+      }}
+      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+    >
+      Open draft
+    </button>
+  )}
+
+  {savedFramework.status === "draft" && (
+  <button
+    type="button"
+    onClick={() => {
+      setFrameworkConfirm({
+        title: "Activate framework?",
+        message: `This will make "${savedFramework.name}" version ${savedFramework.version} the active framework. Any currently active version of this same framework will be archived.`,
+        confirmLabel: "Activate framework",
+        onConfirm: async () => {
+          try {
+            const response = await fetch(
+              "/api/frameworks",
+              {
+                method: "PATCH",
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+                body: JSON.stringify({
+                  id: savedFramework.id,
+                  action: "activate",
+                }),
+              }
+            );
+
+            const result = await response
+              .json()
+              .catch(() => ({}));
+
+            if (!response.ok) {
+              throw new Error(
+                result.error ||
+                  "The framework could not be activated."
+              );
+            }
+
+            await loadSavedFrameworks();
+
+            setFrameworkSaveMessage(
+              "Framework activated successfully."
+            );
+          } catch (error) {
+            console.error(
+              "Framework activation failed:",
+              error
+            );
+
+            alert(
+              error instanceof Error
+                ? error.message
+                : "The framework could not be activated."
+            );
+          }
+        },
+      });
+    }}
+    className="rounded-xl bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-200"
+  >
+    Activate
+  </button>
+)}
+
+{savedFramework.status === "draft" && (
+  <button
+    type="button"
+    onClick={() => {
+      setFrameworkConfirm({
+        title: "Delete framework draft?",
+        message: `This will permanently delete "${savedFramework.name}" version ${savedFramework.version}. This action cannot be undone.`,
+        confirmLabel: "Delete draft",
+        onConfirm: async () => {
+          try {
+            const response = await fetch(
+              `/api/frameworks?id=${encodeURIComponent(
+                savedFramework.id
+              )}`,
+              {
+                method: "DELETE",
+              }
+            );
+
+            const result = await response
+              .json()
+              .catch(() => ({}));
+
+            if (!response.ok) {
+              throw new Error(
+                result.error ||
+                  "The framework draft could not be deleted."
+              );
+            }
+
+            setSavedFrameworks((current) =>
+              current.filter(
+                (framework) =>
+                  framework.id !==
+                  savedFramework.id
+              )
+            );
+
+            setFrameworkSaveMessage("");
+          } catch (error) {
+            console.error(
+              "Framework draft delete failed:",
+              error
+            );
+
+            alert(
+              error instanceof Error
+                ? error.message
+                : "The framework draft could not be deleted."
+            );
+          }
+        },
+      });
+    }}
+    className="rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-200"
+  >
+    Delete draft
+  </button>
+)}
+
+</div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+
+
+<div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <h3 className="text-xl font-bold text-slate-900">
+        Paste framework text
+      </h3>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Paste the framework content below. OASIS will identify
+        stages, learning areas, statements and assessment levels.
+      </p>
+    </div>
+
+    <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+      Teacher review required
+    </span>
+  </div>
+<div
+  className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6"
+  onDragOver={(event) => {
+    event.preventDefault();
+  }}
+  onDrop={(event) => {
+    event.preventDefault();
+
+    const droppedFile =
+      event.dataTransfer.files?.[0] ?? null;
+
+    setFrameworkFile(droppedFile);
+    setFrameworkMappingError("");
+  }}
+>
+  <label className="block text-sm font-semibold text-slate-800">
+    Upload framework file
+  </label>
+
+  <p className="mt-1 text-xs text-slate-500">
+    Choose a PDF, Word document, or text file.
+  </p>
+
+<div className="mt-4">
+  <div className="flex flex-wrap items-center gap-3">
+    <label className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+      Choose file
+
+      <input
+        type="file"
+        accept=".pdf,.docx,.txt"
+        className="hidden"
+        onChange={(event) => {
+          const selectedFile =
+            event.target.files?.[0] ?? null;
+
+          setFrameworkFile(selectedFile);
+          setFrameworkMappingError("");
+        }}
+      />
+    </label>
+
+    <span className="text-sm text-slate-500">
+      or drag and drop a file here
+    </span>
+  </div>
+
+  {frameworkFile && (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3">
+      <p className="min-w-0 truncate text-sm font-medium text-slate-600">
+        Selected: {frameworkFile.name}
       </p>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+<button
+  type="button"
+  onClick={handleFrameworkFileUpload}
+  disabled={isExtractingFramework}
+  className="shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+>
+{isExtractingFramework
+  ? "Extracting framework..."
+  : "Extract framework text"}
+</button>
+    </div>
+  )}
+</div>
 
-        {[
-          "Below / Developing / Secure / Exceeding",
-          "Working Towards / At / Above",
-          "Emerging / Expected / Exceeding",
-          "Custom Scale",
-        ].map((scale) => (
-          <button
-            key={scale}
-            onClick={() => setAssessmentScale(scale)}
-            className={`rounded-xl border p-4 text-left text-sm font-medium ${
-              assessmentScale === scale
-                ? "border-slate-900 bg-slate-100 text-slate-900"
-                : "border-slate-300 bg-white text-slate-700"
-            }`}
-          >
-            {scale}
-          </button>
-        ))}
+
+</div>
+  <textarea
+    value={frameworkText}
+    onChange={(event) => {
+      setFrameworkText(event.target.value);
+      setFrameworkExtraction(null);
+      setFrameworkMappingError("");
+      setMappedFrameworkPreview(null);
+    }}
+    
+    placeholder="Paste the framework text here..."
+    className="mt-5 min-h-72 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-900"
+  />
+
+  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+    <p className="text-xs text-slate-500">
+      {frameworkText.trim().length.toLocaleString()} characters
+    </p>
+
+    <button
+      type="button"
+      onClick={handleMapFramework}
+      disabled={
+        isMappingFramework ||
+        frameworkText.trim().length < 100
+      }
+      className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+    >
+      {isMappingFramework ? (
+  <span className="flex flex-col items-center">
+    <span>Mapping framework…</span>
+    <span className="mt-1 text-xs font-medium opacity-80">
+      This may take a few minutes — please keep this page open
+    </span>
+  </span>
+) : (
+  "Map Framework with AI"
+)}
+    </button>
+  </div>
+
+  {frameworkMappingError && (
+    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+      <p className="text-sm font-medium text-red-700">
+        {frameworkMappingError}
+      </p>
+    </div>
+  )}
+
+  {mappedFrameworkPreview && (
+    <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+            Mapping complete
+          </p>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+  <div>
+    <label className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+      Framework name
+    </label>
+
+    <input
+      type="text"
+      value={mappedFrameworkPreview.name}
+      onChange={(event) =>
+        updateFrameworkPreview((current) =>
+          current
+            ? {
+                ...current,
+                name: event.target.value,
+              }
+            : current
+        )
+      }
+      className="mt-1 w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 font-semibold text-slate-900 outline-none focus:border-emerald-600"
+    />
+  </div>
+
+  <div>
+    <label className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+      Version
+    </label>
+
+    <input
+      type="text"
+      value={mappedFrameworkPreview.version || ""}
+      onChange={(event) =>
+        updateFrameworkPreview((current) =>
+          current
+            ? {
+                ...current,
+                version:
+                  event.target.value || undefined,
+              }
+            : current
+        )
+      }
+      placeholder="Not specified"
+      className="mt-1 w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-slate-900 outline-none focus:border-emerald-600"
+    />
+  </div>
+</div>
+        </div>
+
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+          Ready to review
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl bg-white p-4">
+          <p className="text-2xl font-bold text-slate-900">
+            {mappedFrameworkPreview.stages?.length || 0}
+          </p>
+
+          <p className="text-sm text-slate-500">
+            Stages or age bands
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-white p-4">
+          <p className="text-2xl font-bold text-slate-900">
+            {mappedFrameworkPreview.areaDefinitions.length}
+          </p>
+
+          <p className="text-sm text-slate-500">
+            Learning areas
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-white p-4">
+          <p className="text-2xl font-bold text-slate-900">
+            {mappedFrameworkPreview.areaDefinitions.reduce(
+              (total, area) =>
+                total + area.statements.length,
+              0
+            )}
+          </p>
+
+          <p className="text-sm text-slate-500">
+            Framework statements
+          </p>
+        </div>
+
+<div className="rounded-xl bg-white p-4">
+  <p className="text-2xl font-bold text-slate-900">
+    {mappedFrameworkPreview.assessmentLevels.length}
+  </p>
+
+  <p className="text-sm text-slate-500">
+    Assessment levels
+  </p>
+</div>
 
       </div>
 
-      {assessmentScale === "Custom Scale" && (
-        <div className="mt-6 rounded-2xl bg-slate-50 p-5">
+{getFrameworkValidationErrors(
+  mappedFrameworkPreview
+).length > 0 && (
+  <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
+    <h3 className="font-bold text-amber-900">
+      Framework needs attention
+    </h3>
 
-          <h4 className="font-semibold text-slate-900">
-            Custom Levels
-          </h4>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Start with three levels and add more if needed.
-          </p>
-
-          <div className="mt-4 space-y-3">
-
-            {customLevels.map((level, index) => (
-              <input
-                key={index}
-                value={level}
-                onChange={(e) => {
-                  const updated = [...customLevels];
-                  updated[index] = e.target.value;
-                  setCustomLevels(updated);
-                }}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
-                placeholder={`Level ${index + 1}`}
-              />
-            ))}
-
-          </div>
-
-          <button
-            onClick={() =>
-              setCustomLevels([
-                ...customLevels,
-                `Level ${customLevels.length + 1}`,
-              ])
-            }
-            className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            + Add Level
-          </button>
-
-        </div>
-        
-      )}
-
-<div className="mt-8 border-t border-slate-200 pt-6">
-
-  <h3 className="text-lg font-semibold text-slate-900">
-    Assessment Philosophy
-  </h3>
-
-  <p className="mt-1 text-sm text-slate-500">
-    Choose how progress should be tracked throughout the year.
-  </p>
-
-  <div className="mt-4 space-y-3">
-
-  </div>
-
-<button
-  onClick={() => setAssessmentPhilosophy("Fixed")}
-  className={`w-full rounded-xl border p-4 text-left ${
-    assessmentPhilosophy === "Fixed"
-      ? "border-slate-900 bg-slate-100"
-      : "border-slate-300 bg-white"
-  }`}
->
-  <p className="font-medium">
-    Fixed Progression
-  </p>
-
-  <p className="mt-1 text-sm text-slate-500">
-    Example: Developing → Secure → Exceeding
-  </p>
-</button>
-
-<button
-  onClick={() => setAssessmentPhilosophy("Rolling")}
-  className={`w-full rounded-xl border p-4 text-left ${
-    assessmentPhilosophy === "Rolling"
-      ? "border-slate-900 bg-slate-100"
-      : "border-slate-300 bg-white"
-  }`}
->
-  <p className="font-medium">
-    Rolling Expectations
-  </p>
-
-  <p className="mt-1 text-sm text-slate-500">
-    Example: Secure → Secure → Secure
-  </p>
-</button>
-
-      <button
-  onClick={() => setAssessmentPhilosophy("Hybrid")}
-  className={`w-full rounded-xl border p-4 text-left ${
-    assessmentPhilosophy === "Hybrid"
-      ? "border-slate-900 bg-slate-100"
-      : "border-slate-300 bg-white"
-  }`}
->
-  <div className="flex items-center gap-2">
-
-    <p className="font-medium">
-      Hybrid
+    <p className="mt-1 text-sm text-amber-800">
+      Fix the following before saving or activating this
+      framework:
     </p>
 
-    <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-      Recommended
-    </span>
+    <ul className="mt-3 space-y-2">
+      {getFrameworkValidationErrors(
+        mappedFrameworkPreview
+      ).map((error, index) => (
+        <li
+          key={`${error}-${index}`}
+          className="flex gap-2 text-sm text-amber-900"
+        >
+          <span>•</span>
+          <span>{error}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
 
+<div className="mt-6 rounded-2xl bg-white p-5">
+  <div>
+    <h3 className="text-lg font-bold text-slate-900">
+      Developmental Stages
+    </h3>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Review the stages and age ranges identified by AI.
+    </p>
   </div>
 
-  <p className="mt-1 text-sm text-slate-500">
-    Track both attainment and growth separately.
-  </p>
-</button>
-
-</div>
-</div>
-
-
-<div className="mt-8 border-t border-slate-200 pt-6">
-
-  <div className="flex justify-end">
-
-    <button
-      className="rounded-xl bg-slate-900 px-6 py-3 font-medium text-white hover:bg-slate-700"
+  {mappedFrameworkPreview.stages &&
+  mappedFrameworkPreview.stages.length > 0 ? (
+    <div className="mt-4 space-y-3">
+{[...mappedFrameworkPreview.stages]
+  .sort(
+    (first, second) =>
+      first.order - second.order
+  )
+  .map((stage) => (
+    <div
+      key={stage.id}
+      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
     >
-      Convert Framework
-    </button>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+         <div className="flex items-center justify-between gap-3">
+  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    Stage name
+  </label>
 
+  <button
+    type="button"
+onClick={() => {
+  const linkedStatementCount =
+    mappedFrameworkPreview?.areaDefinitions.reduce(
+      (total, area) =>
+        total +
+        area.statements.filter((statement) =>
+          statement.stageIds?.includes(stage.id)
+        ).length,
+      0
+    ) ?? 0;
+
+  setFrameworkConfirm({
+    title: "Remove developmental stage?",
+    message:
+      linkedStatementCount > 0
+        ? `This will remove "${stage.label}" and unlink it from ${linkedStatementCount} framework statement${linkedStatementCount === 1 ? "" : "s"}. This action cannot be undone.`
+        : `This will remove "${stage.label}". This action cannot be undone.`,
+    confirmLabel: "Remove stage",
+    onConfirm: () => {
+      updateFrameworkPreview((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          stages: current.stages?.filter(
+            (currentStage) =>
+              currentStage.id !== stage.id
+          ),
+
+          areaDefinitions:
+            current.areaDefinitions.map(
+              (currentArea) => ({
+                ...currentArea,
+                statements:
+                  currentArea.statements.map(
+                    (currentStatement) => ({
+                      ...currentStatement,
+                      stageIds:
+                        currentStatement.stageIds?.filter(
+                          (stageId) =>
+                            stageId !== stage.id
+                        ),
+                    })
+                  ),
+              })
+            ),
+        };
+      });
+    },
+  });
+}}
+    className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+  >
+    Remove stage
+  </button>
+</div>
+
+          <input
+            type="text"
+            value={stage.label}
+            onChange={(event) =>
+              updateFrameworkPreview((current) =>
+                current
+                  ? {
+                      ...current,
+                      stages: current.stages?.map(
+                        (currentStage) =>
+                          currentStage.id === stage.id
+                            ? {
+                                ...currentStage,
+                                label: event.target.value,
+                              }
+                            : currentStage
+                      ),
+                    }
+                  : current
+              )
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-900 outline-none focus:border-slate-900"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Minimum age in months
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            value={stage.minAgeMonths ?? ""}
+            onChange={(event) =>
+              updateFrameworkPreview((current) =>
+                current
+                  ? {
+                      ...current,
+                      stages: current.stages?.map(
+                        (currentStage) =>
+                          currentStage.id === stage.id
+                            ? {
+                                ...currentStage,
+                                minAgeMonths:
+                                  event.target.value === ""
+                                    ? undefined
+                                    : Number(event.target.value),
+                              }
+                            : currentStage
+                      ),
+                    }
+                  : current
+              )
+            }
+            placeholder="Not specified"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Maximum age in months
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            value={stage.maxAgeMonths ?? ""}
+            onChange={(event) =>
+              updateFrameworkPreview((current) =>
+                current
+                  ? {
+                      ...current,
+                      stages: current.stages?.map(
+                        (currentStage) =>
+                          currentStage.id === stage.id
+                            ? {
+                                ...currentStage,
+                                maxAgeMonths:
+                                  event.target.value === ""
+                                    ? undefined
+                                    : Number(event.target.value),
+                              }
+                            : currentStage
+                      ),
+                    }
+                  : current
+              )
+            }
+            placeholder="Not specified"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
+          />
+        </div>
+      </div>
+
+      {stage.aliases && stage.aliases.length > 0 && (
+        <p className="mt-3 text-xs text-slate-500">
+          Also called: {stage.aliases.join(", ")}
+        </p>
+      )}
+    </div>
+  ))}
+    </div>
+  ) : (
+    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+      <p className="text-sm text-slate-600">
+        No developmental stages or age bands were
+        identified in this framework.
+      </p>
+    </div>
+  )}
+
+<button
+    type="button"
+    onClick={() => {
+      updateFrameworkPreview((current) => {
+        if (!current) return current;
+
+        const currentStages =
+          current.stages ?? [];
+
+        const existingIds = new Set(
+          currentStages.map(
+            (currentStage) => currentStage.id
+          )
+        );
+
+        let nextNumber =
+          currentStages.length + 1;
+
+        let newStageId =
+          `stage-${nextNumber}`;
+
+        while (existingIds.has(newStageId)) {
+          nextNumber += 1;
+          newStageId = `stage-${nextNumber}`;
+        }
+
+        const nextOrder =
+          currentStages.length > 0
+            ? Math.max(
+                ...currentStages.map(
+                  (currentStage) =>
+                    currentStage.order
+                )
+              ) + 1
+            : 1;
+
+        return {
+          ...current,
+          stages: [
+            ...currentStages,
+            {
+              id: newStageId,
+              label: "New stage",
+              aliases: [],
+              order: nextOrder,
+            },
+          ],
+        };
+      });
+    }}
+    className="mt-4 w-full rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:bg-slate-50"
+  >
+    + Add developmental stage
+  </button>
+
+</div>
+<div className="mt-6 rounded-2xl bg-white p-5">
+  <div>
+    <h3 className="text-lg font-bold text-slate-900">
+      Assessment Levels
+    </h3>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Review the attainment scale identified by AI.
+    </p>
   </div>
+
+  {mappedFrameworkPreview.assessmentLevels.length > 0 ? (
+    <div className="mt-4 space-y-3">
+{[...mappedFrameworkPreview.assessmentLevels]
+  .sort(
+    (first, second) =>
+      first.order - second.order
+  )
+  .map((level) => (
+    <div
+      key={level.id}
+      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+    >
+      <div className="grid gap-3 sm:grid-cols-[80px_1fr]">
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Order
+          </label>
+
+          <input
+            type="number"
+            min="1"
+            value={level.order}
+            onChange={(event) =>
+              updateFrameworkPreview((current) =>
+                current
+                  ? {
+                      ...current,
+                      assessmentLevels:
+                        current.assessmentLevels.map(
+                          (currentLevel) =>
+                            currentLevel.id === level.id
+                              ? {
+                                  ...currentLevel,
+                                  order:
+                                    Number(
+                                      event.target.value
+                                    ) || 1,
+                                }
+                              : currentLevel
+                        ),
+                    }
+                  : current
+              )
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-3">
+  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    Level name
+  </label>
+
+  <button
+    type="button"
+    disabled={
+      mappedFrameworkPreview.assessmentLevels.length <= 1
+    }
+onClick={() => {
+  setFrameworkConfirm({
+    title: "Remove assessment level?",
+    message: `This will remove "${level.label}" from the framework assessment scale. This action cannot be undone.`,
+    confirmLabel: "Remove level",
+    onConfirm: () => {
+      updateFrameworkPreview((current) => {
+        if (
+          !current ||
+          current.assessmentLevels.length <= 1
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          assessmentLevels:
+            current.assessmentLevels.filter(
+              (currentLevel) =>
+                currentLevel.id !== level.id
+            ),
+        };
+      });
+    },
+  });
+}}
+    className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+  >
+    Remove level
+  </button>
+</div>
+
+          <input
+            type="text"
+            value={level.label}
+            onChange={(event) =>
+              updateFrameworkPreview((current) =>
+                current
+                  ? {
+                      ...current,
+                      assessmentLevels:
+                        current.assessmentLevels.map(
+                          (currentLevel) =>
+                            currentLevel.id === level.id
+                              ? {
+                                  ...currentLevel,
+                                  label:
+                                    event.target.value,
+                                }
+                              : currentLevel
+                        ),
+                    }
+                  : current
+              )
+            }
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-900 outline-none focus:border-slate-900"
+          />
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Description
+        </label>
+
+        <textarea
+          value={level.description}
+          onChange={(event) =>
+            updateFrameworkPreview((current) =>
+              current
+                ? {
+                    ...current,
+                    assessmentLevels:
+                      current.assessmentLevels.map(
+                        (currentLevel) =>
+                          currentLevel.id === level.id
+                            ? {
+                                ...currentLevel,
+                                description:
+                                  event.target.value,
+                              }
+                            : currentLevel
+                      ),
+                  }
+                : current
+            )
+          }
+          className="mt-1 min-h-20 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none focus:border-slate-900"
+        />
+      </div>
+    </div>
+  ))}
+    </div>
+  ) : (
+    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+      <p className="text-sm text-slate-600">
+        No assessment levels were identified. OASIS will
+        use its default assessment scale until the teacher
+        chooses another scale.
+      </p>
+    </div>
+  )}
+
+<button
+    type="button"
+    onClick={() => {
+      updateFrameworkPreview((current) => {
+        if (!current) return current;
+
+        const existingIds = new Set(
+          current.assessmentLevels.map(
+            (currentLevel) => currentLevel.id
+          )
+        );
+
+        let nextNumber =
+          current.assessmentLevels.length + 1;
+
+        let newLevelId = `level-${nextNumber}`;
+
+        while (existingIds.has(newLevelId)) {
+          nextNumber += 1;
+          newLevelId = `level-${nextNumber}`;
+        }
+
+        const nextOrder =
+          current.assessmentLevels.length > 0
+            ? Math.max(
+                ...current.assessmentLevels.map(
+                  (currentLevel) =>
+                    currentLevel.order
+                )
+              ) + 1
+            : 1;
+
+        return {
+          ...current,
+          assessmentLevels: [
+            ...current.assessmentLevels,
+            {
+              id: newLevelId,
+              label: "New assessment level",
+              description:
+                "Describe what this level means.",
+              order: nextOrder,
+            },
+          ],
+        };
+      });
+    }}
+    className="mt-4 w-full rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:bg-slate-50"
+  >
+    + Add assessment level
+  </button>
 
 </div>
     </div>
+  )}
+</div>
+
+<div className="mt-6 rounded-2xl bg-white p-5">
+  <div>
+    <h3 className="text-lg font-bold text-slate-900">
+      Learning Areas and Statements
+    </h3>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Review the learning areas and framework statements
+      identified by AI.
+    </p>
+  </div>
+
+  <div className="mt-4 space-y-3">
+    {mappedFrameworkPreview?.areaDefinitions.map(
+  (area, areaIndex) => (
+        <details
+          key={area.id}
+          className="group rounded-xl border border-slate-200 bg-slate-50"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4">
+            <div>
+             <input
+  type="text"
+  value={area.name}
+  onClick={(event) =>
+    event.stopPropagation()
+  }
+  onChange={(event) => {
+    const newAreaName = event.target.value;
+
+    updateFrameworkPreview((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+
+        areas: current.areas.map(
+          (currentAreaName, currentIndex) =>
+            currentIndex === areaIndex
+              ? newAreaName
+              : currentAreaName
+        ),
+
+        areaDefinitions:
+          current.areaDefinitions.map(
+            (currentArea, currentIndex) =>
+              currentIndex === areaIndex
+                ? {
+                    ...currentArea,
+                    name: newAreaName,
+                  }
+                : currentArea
+          ),
+      };
+    });
+  }}
+  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-900 outline-none focus:border-slate-900"
+/>
+
+              <p className="mt-1 text-xs text-slate-500">
+                {area.statements.length}{" "}
+                {area.statements.length === 1
+                  ? "statement"
+                  : "statements"}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+  <button
+    type="button"
+    onClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const shouldRemove = window.confirm(
+        `Remove the "${area.name}" learning area and all its statements?`
+      );
+
+      if (!shouldRemove) return;
+
+      updateFrameworkPreview((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          areas: current.areas.filter(
+            (_, currentIndex) =>
+              currentIndex !== areaIndex
+          ),
+          areaDefinitions:
+            current.areaDefinitions.filter(
+              (_, currentIndex) =>
+                currentIndex !== areaIndex
+            ),
+        };
+      });
+    }}
+    className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+  >
+    Remove area
+  </button>
+
+  <span className="text-lg text-slate-500 transition group-open:rotate-180">
+    ⌄
+  </span>
+</div>
+          </summary>
+
+          <div className="border-t border-slate-200 p-4">
+            {area.statements.length > 0 ? (
+              <div className="space-y-3">
+                {area.statements.map(
+                  (statement) => {
+                    const availableStages =
+  mappedFrameworkPreview?.stages ?? [];
+
+                    return (
+                      <div
+                        key={statement.id}
+                        className="rounded-xl bg-white p-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+    {statement.id}
+  </p>
+
+  <button
+    type="button"
+ onClick={() => {
+  setFrameworkConfirm({
+    title: "Remove framework statement?",
+    message: `This will remove statement ${statement.id} from ${area.name}. This action cannot be undone.`,
+    confirmLabel: "Remove statement",
+    onConfirm: () => {
+      updateFrameworkPreview((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          areaDefinitions:
+            current.areaDefinitions.map(
+              (currentArea) =>
+                currentArea.id === area.id
+                  ? {
+                      ...currentArea,
+                      statements:
+                        currentArea.statements.filter(
+                          (currentStatement) =>
+                            currentStatement.id !==
+                            statement.id
+                        ),
+                    }
+                  : currentArea
+            ),
+        };
+      });
+    },
+  });
+}}
+    className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+  >
+    Remove
+  </button>
+</div>
+
+                        <textarea
+  value={statement.text}
+  onChange={(event) => {
+    const newStatementText =
+      event.target.value;
+
+    updateFrameworkPreview((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        areaDefinitions:
+          current.areaDefinitions.map(
+            (currentArea) =>
+              currentArea.id === area.id
+                ? {
+                    ...currentArea,
+                    statements:
+                      currentArea.statements.map(
+                        (currentStatement) =>
+                          currentStatement.id ===
+                          statement.id
+                            ? {
+                                ...currentStatement,
+                                text: newStatementText,
+                              }
+                            : currentStatement
+                      ),
+                  }
+                : currentArea
+          ),
+      };
+    });
+  }}
+  className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-medium leading-6 text-slate-900 outline-none focus:border-slate-900"
+/>
+{statement.progression &&
+  statement.progression.length > 0 && (
+    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+        Developmental progression
+      </p>
+
+      <div className="mt-3 space-y-3">
+        {[...statement.progression]
+          .sort(
+            (first, second) =>
+              first.level - second.level
+          )
+          .map((progressionLevel) => (
+            <div
+              key={`${statement.id}-level-${progressionLevel.level}`}
+              className="rounded-lg border border-blue-100 bg-white p-3"
+            >
+              <p className="text-sm font-semibold text-slate-900">
+                Level {progressionLevel.level}
+                {progressionLevel.label
+                  ? ` — ${progressionLevel.label}`
+                  : ""}
+              </p>
+
+              <div className="mt-2 space-y-2">
+                {progressionLevel.descriptors.map(
+                  (descriptor, descriptorIndex) => (
+                   <textarea
+  key={`${statement.id}-${progressionLevel.level}-${descriptorIndex}`}
+  value={descriptor}
+  onChange={(event) => {
+    const newDescriptor = event.target.value;
+
+    updateFrameworkPreview((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        areaDefinitions:
+          current.areaDefinitions.map(
+            (currentArea) =>
+              currentArea.id === area.id
+                ? {
+                    ...currentArea,
+                    statements:
+                      currentArea.statements.map(
+                        (currentStatement) =>
+                          currentStatement.id ===
+                          statement.id
+                            ? {
+                                ...currentStatement,
+                                progression:
+                                  currentStatement.progression?.map(
+                                    (currentLevel) =>
+                                      currentLevel.level ===
+                                      progressionLevel.level
+                                        ? {
+                                            ...currentLevel,
+                                            descriptors:
+                                              currentLevel.descriptors.map(
+                                                (
+                                                  currentDescriptor,
+                                                  currentDescriptorIndex
+                                                ) =>
+                                                  currentDescriptorIndex ===
+                                                  descriptorIndex
+                                                    ? newDescriptor
+                                                    : currentDescriptor
+                                              ),
+                                          }
+                                        : currentLevel
+                                  ) ?? [],
+                              }
+                            : currentStatement
+                      ),
+                  }
+                : currentArea
+          ),
+      };
+    });
+  }}
+  className="min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-400"
+/>
+                  )
+                )}
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+  )}
+                        <div className="mt-3">
+  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    Guidance notes
+  </label>
+
+  <textarea
+    value={statement.guidance || ""}
+    onChange={(event) => {
+      const newGuidance = event.target.value;
+
+      updateFrameworkPreview((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          areaDefinitions:
+            current.areaDefinitions.map(
+              (currentArea) =>
+                currentArea.id === area.id
+                  ? {
+                      ...currentArea,
+                      statements:
+                        currentArea.statements.map(
+                          (currentStatement) =>
+                            currentStatement.id ===
+                            statement.id
+                              ? {
+                                  ...currentStatement,
+                                  guidance:
+                                    newGuidance ||
+                                    undefined,
+                                }
+                              : currentStatement
+                        ),
+                    }
+                  : currentArea
+            ),
+        };
+      });
+    }}
+    placeholder="Add optional guidance for teachers"
+    className="mt-1 min-h-20 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none focus:border-slate-900"
+  />
+</div>
+
+                        <div className="mt-3">
+  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    Linked stages
+  </p>
+
+  {availableStages.length > 0 ? (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {availableStages.map((stage) => {
+        const isLinked =
+          statement.stageIds?.includes(stage.id) ??
+          false;
+
+        return (
+          <label
+            key={`${statement.id}-${stage.id}`}
+            className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold ${
+              isLinked
+                ? "border-blue-300 bg-blue-50 text-blue-700"
+                : "border-slate-300 bg-white text-slate-600"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={isLinked}
+              onChange={(event) => {
+                const shouldLink =
+                  event.target.checked;
+
+                updateFrameworkPreview(
+                  (current) => {
+                    if (!current) return current;
+
+                    return {
+                      ...current,
+                      areaDefinitions:
+                        current.areaDefinitions.map(
+                          (currentArea) =>
+                            currentArea.id === area.id
+                              ? {
+                                  ...currentArea,
+                                  statements:
+                                    currentArea.statements.map(
+                                      (
+                                        currentStatement
+                                      ) =>
+                                        currentStatement.id ===
+                                        statement.id
+                                          ? {
+                                              ...currentStatement,
+                                              stageIds:
+                                                shouldLink
+                                                  ? Array.from(
+                                                      new Set([
+                                                        ...(currentStatement.stageIds ??
+                                                          []),
+                                                        stage.id,
+                                                      ])
+                                                    )
+                                                  : (
+                                                      currentStatement.stageIds ??
+                                                      []
+                                                    ).filter(
+                                                      (
+                                                        stageId
+                                                      ) =>
+                                                        stageId !==
+                                                        stage.id
+                                                    ),
+                                            }
+                                          : currentStatement
+                                    ),
+                                }
+                              : currentArea
+                        ),
+                    };
+                  }
+                );
+              }}
+              className="h-4 w-4"
+            />
+
+            {stage.label}
+          </label>
+        );
+      })}
+    </div>
+  ) : (
+    <p className="mt-2 text-sm text-slate-500">
+      This framework has no developmental stages to link.
+    </p>
+  )}
+
+
+  
+</div>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
+                No statements were identified for this
+                learning area.
+              </p>
+            )}
+
+<button
+  type="button"
+  onClick={() => {
+    updateFrameworkPreview((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        areaDefinitions:
+          current.areaDefinitions.map(
+            (currentArea) => {
+              if (currentArea.id !== area.id) {
+                return currentArea;
+              }
+
+              const prefix =
+                currentArea.name
+                  .split(/\s+/)
+                  .map((word) => word[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 4) || "NEW";
+
+              const existingIds = new Set(
+                currentArea.statements.map(
+                  (currentStatement) =>
+                    currentStatement.id
+                )
+              );
+
+              let nextNumber =
+                currentArea.statements.length + 1;
+
+              let newStatementId =
+                `${prefix}${nextNumber}`;
+
+              while (
+                existingIds.has(newStatementId)
+              ) {
+                nextNumber += 1;
+                newStatementId =
+                  `${prefix}${nextNumber}`;
+              }
+
+              return {
+                ...currentArea,
+                statements: [
+                  ...currentArea.statements,
+                  {
+  id: newStatementId,
+  text: "New framework statement",
+  guidance: undefined,
+  stageIds: [],
+
+  progression:
+    currentArea.statements.find(
+      (currentStatement) =>
+        Array.isArray(
+          currentStatement.progression
+        ) &&
+        currentStatement.progression.length > 0
+    )?.progression?.map(
+      (progressionLevel) => ({
+        level: progressionLevel.level,
+        label: progressionLevel.label,
+        descriptors: [""],
+      })
+    ) ?? [],
+},
+                ],
+              };
+            }
+          ),
+      };
+    });
+  }}
+  className="mt-4 w-full rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:bg-slate-50"
+>
+  + Add statement
+</button>
+
+          </div>
+        </details>
+      )
+    )}
+    
+<button
+      type="button"
+      onClick={() => {
+        updateFrameworkPreview((current) => {
+          if (!current) return current;
+
+          const existingIds = new Set(
+            current.areaDefinitions.map(
+              (currentArea) => currentArea.id
+            )
+          );
+
+          let nextNumber =
+            current.areaDefinitions.length + 1;
+
+          let newAreaId = `area-${nextNumber}`;
+
+          while (existingIds.has(newAreaId)) {
+            nextNumber += 1;
+            newAreaId = `area-${nextNumber}`;
+          }
+
+          const newAreaName = "New learning area";
+
+          return {
+            ...current,
+            areas: [
+              ...current.areas,
+              newAreaName,
+            ],
+            areaDefinitions: [
+              ...current.areaDefinitions,
+              {
+                id: newAreaId,
+                name: newAreaName,
+                statements: [],
+              },
+            ],
+          };
+        });
+      }}
+      className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:bg-slate-50"
+    >
+      + Add learning area
+    </button>
+
+
+  </div>
+</div>
+
+<div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-6">
+
+{frameworkSaveMessage && (
+  <div className="mr-auto rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+    <p className="text-sm font-semibold text-emerald-800">
+      ✓ {frameworkSaveMessage}
+    </p>
+  </div>
+)}
+
+  {!frameworkIsValid && (
+    <p className="mr-auto text-sm font-medium text-amber-700">
+      Fix the framework warnings before saving.
+    </p>
+  )}
+
+  <button
+    type="button"
+    onClick={handleSaveFrameworkDraft}
+    disabled={!frameworkIsValid}
+    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+  >
+    Save as draft
+  </button>
+</div>
 
   </div>
 
 </div>
-
-        </div>
-
-
 
 )}
       {showBaselineModal && (
@@ -4240,78 +7041,83 @@ journalEntries.map((entry: any) => {
 
   </div>
 )}
-      {selectedEvidence && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-
-    <div className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
-
-      <div className="flex items-start justify-between">
-
+{selectedEvidence && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-xl font-bold text-slate-900">
             Evidence Detail
           </h2>
 
-          <p className="text-slate-500">
-            {selectedEvidence.month}
+          <p className="mt-1 text-sm text-slate-500">
+            {selectedEvidence.fullDate ||
+              selectedEvidence.label}
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => setSelectedEvidence(null)}
-          className="text-slate-500 hover:text-slate-900"
+          className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          aria-label="Close evidence detail"
         >
           ✕
         </button>
-
       </div>
 
-      <div className="mt-6 space-y-5">
-
+      <div className="mt-5 space-y-4">
         <div>
-          <p className="text-sm text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Learning Area
           </p>
 
-          <p className="font-semibold text-slate-900">
+          <p className="mt-1 font-semibold text-slate-900">
             {selectedEvidence.area}
           </p>
         </div>
 
         <div>
-          <p className="text-sm text-slate-500">
-            Suggested Level
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Final Level
           </p>
 
-          <p className="font-semibold text-slate-900">
-            {selectedEvidence.level}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-sm text-slate-500">
-            AI Confidence
-          </p>
-
-          <p className="font-semibold text-slate-900">
-            {selectedEvidence.confidence}%
+          <p className="mt-1 font-semibold text-slate-900">
+            {selectedEvidence.levelLabel}
           </p>
         </div>
 
+        {typeof selectedEvidence.confidence ===
+          "number" && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              AI Confidence
+            </p>
+
+            <p className="mt-1 font-semibold text-slate-900">
+              {selectedEvidence.confidence}%
+            </p>
+          </div>
+        )}
+
         <div>
-          <p className="text-sm text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Observation
           </p>
 
-          <div className="mt-2 rounded-2xl bg-slate-100 p-4 text-slate-900">
-            {selectedEvidence.observation}
+          <div className="mt-2 rounded-2xl bg-slate-100 p-4">
+            <p className="line-clamp-4 text-sm leading-6 text-slate-900">
+              {selectedEvidence.observation}
+            </p>
           </div>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Open the learner journal to read the full
+            observation.
+          </p>
         </div>
-
       </div>
-
     </div>
-
   </div>
 )}
 

@@ -5,11 +5,46 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const dynamic = "force-dynamic";
 
 type ImportedLearner = {
-  externalId: string;
+  externalId?: string;
   firstName: string;
   lastName: string;
   className?: string;
+  dateOfBirth?: string;
 };
+
+function normaliseDateOfBirth(value: unknown) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const dateOfBirth = value.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+    return "";
+  }
+
+  const parsedDate = new Date(
+    `${dateOfBirth}T00:00:00.000Z`
+  );
+
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !==
+      dateOfBirth
+  ) {
+    return "";
+  }
+
+  const today = new Date()
+    .toISOString()
+    .slice(0, 10);
+
+  if (dateOfBirth > today) {
+    return "";
+  }
+
+  return dateOfBirth;
+}
 
 // LOAD ACTIVE LEARNERS
 export async function GET() {
@@ -23,6 +58,7 @@ export async function GET() {
           first_name,
           last_name,
           class_name,
+          date_of_birth,
           active,
           created_at
         `
@@ -44,6 +80,7 @@ export async function GET() {
       firstName: learner.first_name,
       lastName: learner.last_name,
       className: learner.class_name,
+      dateOfBirth: learner.date_of_birth,
       status: "yellow",
       send: false,
       eal: false,
@@ -76,32 +113,48 @@ export async function POST(request: Request) {
       );
     }
 
-    const learners: ImportedLearner[] = body.learners;
+    const learners: ImportedLearner[] =
+      body.learners;
 
     const invalidLearner = learners.some(
-      (learner) =>
-        !learner.externalId?.trim() ||
-        !learner.firstName?.trim() ||
-        !learner.lastName?.trim()
-    );
+  (learner) =>
+    !learner.firstName?.trim() ||
+    !learner.lastName?.trim() ||
+    !normaliseDateOfBirth(
+      learner.dateOfBirth
+    )
+);
 
     if (invalidLearner) {
       return NextResponse.json(
         {
           error:
-            "Each learner requires an externalId, firstName and lastName.",
+            "Each learner requires a first name, last name and valid date of birth."
         },
         { status: 400 }
       );
     }
 
-    const rows = learners.map((learner) => ({
-      external_id: learner.externalId.trim(),
+const rows = learners.map((learner) => {
+  const suppliedExternalId =
+    typeof learner.externalId === "string"
+      ? learner.externalId.trim()
+      : "";
+
+  return {
+    external_id:
+      suppliedExternalId ||
+      `IMPORT-${crypto.randomUUID()}`,
       first_name: learner.firstName.trim(),
       last_name: learner.lastName.trim(),
-      class_name: learner.className?.trim() || null,
-      active: true,
-    }));
+      class_name:
+        learner.className?.trim() || null,
+      date_of_birth: normaliseDateOfBirth(
+        learner.dateOfBirth
+      ),
+         active: true,
+  };
+});
 
     const { data, error } = await supabaseAdmin
       .from("learners")
@@ -123,7 +176,10 @@ export async function POST(request: Request) {
       learners: data || [],
     });
   } catch (error) {
-    console.error("Failed to import learners:", error);
+    console.error(
+      "Failed to import learners:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Failed to import learners." },
@@ -157,6 +213,11 @@ export async function PATCH(request: Request) {
         ? body.className.trim()
         : "";
 
+    const dateOfBirth =
+      normaliseDateOfBirth(
+        body.dateOfBirth
+      );
+
     if (!id) {
       return NextResponse.json(
         { error: "Learner ID is required." },
@@ -164,36 +225,43 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (!firstName || !lastName) {
+    if (
+      !firstName ||
+      !lastName ||
+      !dateOfBirth
+    ) {
       return NextResponse.json(
         {
           error:
-            "First name and last name are required.",
+            "First name, last name and a valid date of birth are required.",
         },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("learners")
-      .update({
-        first_name: firstName,
-        last_name: lastName,
-        class_name: className || null,
-      })
-      .eq("id", id)
-      .select(
-        `
-          id,
-          external_id,
-          first_name,
-          last_name,
-          class_name,
-          active,
-          created_at
-        `
-      )
-      .single();
+    const { data, error } =
+      await supabaseAdmin
+        .from("learners")
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          class_name: className || null,
+          date_of_birth: dateOfBirth,
+        })
+        .eq("id", id)
+        .select(
+          `
+            id,
+            external_id,
+            first_name,
+            last_name,
+            class_name,
+            date_of_birth,
+            active,
+            created_at
+          `
+        )
+        .single();
 
     if (error) {
       return NextResponse.json(
@@ -210,6 +278,7 @@ export async function PATCH(request: Request) {
         firstName: data.first_name,
         lastName: data.last_name,
         className: data.class_name,
+        dateOfBirth: data.date_of_birth,
         status: "yellow",
         send: false,
         eal: false,
@@ -220,7 +289,10 @@ export async function PATCH(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Failed to update learner:", error);
+    console.error(
+      "Failed to update learner:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Failed to update learner." },
@@ -264,7 +336,10 @@ export async function DELETE(request: Request) {
       success: true,
     });
   } catch (error) {
-    console.error("Failed to archive learner:", error);
+    console.error(
+      "Failed to archive learner:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Failed to archive learner." },

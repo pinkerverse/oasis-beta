@@ -1,5 +1,11 @@
 import OpenAI from "openai";
-import { frameworks } from "@/lib/framework";
+
+import {
+  frameworks,
+  type FrameworkDefinition,
+} from "@/lib/framework";
+
+import { supabase } from "@/lib/supabase";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -8,7 +14,104 @@ const openai = new OpenAI({
 type SelectedLearner = {
   id: string;
   name: string;
+  dateOfBirth?: string | null;
 };
+
+function parseDateOfBirth(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return null;
+  }
+
+  const [year, month, day] = value
+    .split("-")
+    .map(Number);
+
+  const date = new Date(
+    Date.UTC(year, month - 1, day)
+  );
+
+  const isValid =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+
+  return isValid ? date : null;
+}
+
+function getAgeInMonthsAtDate(
+  dateOfBirth: unknown,
+  referenceDate: Date
+) {
+  const birthDate =
+    parseDateOfBirth(dateOfBirth);
+
+  if (!birthDate) {
+    return null;
+  }
+
+  let ageInMonths =
+    (referenceDate.getUTCFullYear() -
+      birthDate.getUTCFullYear()) *
+      12 +
+    (referenceDate.getUTCMonth() -
+      birthDate.getUTCMonth());
+
+  if (
+    referenceDate.getUTCDate() <
+    birthDate.getUTCDate()
+  ) {
+    ageInMonths -= 1;
+  }
+
+  return ageInMonths >= 0
+    ? ageInMonths
+    : null;
+}
+
+function resolveSuggestedFrameworkStage(
+  framework: FrameworkDefinition,
+  ageInMonths: number | null
+) {
+  if (
+    ageInMonths === null ||
+    !Array.isArray(framework.stages) ||
+    framework.stages.length === 0
+  ) {
+    return null;
+  }
+
+  const orderedStages = [...framework.stages].sort(
+    (first, second) =>
+      first.order - second.order
+  );
+
+  const matchingStage = orderedStages.find(
+    (stage) => {
+      const meetsMinimum =
+        typeof stage.minAgeMonths !== "number" ||
+        ageInMonths >= stage.minAgeMonths;
+
+      const meetsMaximum =
+        typeof stage.maxAgeMonths !== "number" ||
+        ageInMonths <= stage.maxAgeMonths;
+
+      return meetsMinimum && meetsMaximum;
+    }
+  );
+
+  if (!matchingStage) {
+    return null;
+  }
+
+  return {
+    id: matchingStage.id,
+    label: matchingStage.label,
+    order: matchingStage.order,
+  };
+}
 
 export async function POST(request: Request) {
   try {
@@ -32,10 +135,92 @@ export async function POST(request: Request) {
       : [];
 
     const selectedNames = learners.map((learner) => learner.name);
+const selectedLearnerIds = learners.map(
+  (learner) => learner.id
+);
+const { data: activeFrameworkRecord, error: frameworkError } =
+  await supabase
+    .from("framework_versions")
+    .select("definition")
+    .eq("framework_key", frameworkKey)
+    .eq("status", "active")
+    .maybeSingle();
 
-    const framework =
-      frameworks[frameworkKey as keyof typeof frameworks] ||
-      frameworks.eyfs;
+if (frameworkError) {
+  console.error(
+    "Active framework lookup failed:",
+    frameworkError
+  );
+}
+
+const framework: FrameworkDefinition =
+  (activeFrameworkRecord?.definition as
+    | FrameworkDefinition
+    | null) ||
+  frameworks[
+    frameworkKey as keyof typeof frameworks
+  ] ||
+  frameworks.eyfs;
+
+const requestedObservationDate =
+  typeof body.observationDate === "string"
+    ? body.observationDate.trim()
+    : "";
+
+const observationDate =
+  /^\d{4}-\d{2}-\d{2}$/.test(
+    requestedObservationDate
+  )
+    ? new Date(
+        `${requestedObservationDate}T00:00:00.000Z`
+      )
+    : new Date(NaN);
+
+const observationDateText =
+  requestedObservationDate;
+
+const learnerAges = learners.map((learner) => {
+  const ageInMonths = getAgeInMonthsAtDate(
+    learner.dateOfBirth,
+    observationDate
+  );
+
+  return {
+    id: learner.id,
+    name: learner.name,
+    ageInMonths,
+    suggestedStage:
+      resolveSuggestedFrameworkStage(
+        framework,
+        ageInMonths
+      ),
+  };
+});
+
+const learnersWithoutValidDob = learnerAges
+  .filter(
+    (learner) => learner.ageInMonths === null
+  )
+  .map((learner) => learner.name);
+
+const learnerAgeContext = learnerAges
+  .map((learner) => {
+    if (learner.ageInMonths === null) {
+      return `- ${learner.name}: age unavailable`;
+    }
+
+    const years = Math.floor(
+      learner.ageInMonths / 12
+    );
+
+    const remainingMonths =
+      learner.ageInMonths % 12;
+
+    return `- ${learner.name}: ${learner.ageInMonths} months (${years} years, ${remainingMonths} months)`;
+  })
+  .join("\n");
+
+
 
       const orderedAssessmentLevels = [
   ...framework.assessmentLevels,
@@ -78,13 +263,52 @@ const frameworkStatementsText =
       );
     }
 
+    if (
+  !requestedObservationDate ||
+  Number.isNaN(observationDate.getTime()) ||
+  observationDate.toISOString().slice(0, 10) !==
+    requestedObservationDate
+) {
+  return Response.json(
+    {
+      error:
+        "A valid observation date is required.",
+    },
+    { status: 400 }
+  );
+}
+
+const today = new Date()
+  .toISOString()
+  .slice(0, 10);
+
+if (requestedObservationDate > today) {
+  return Response.json(
+    {
+      error:
+        "The observation date cannot be in the future.",
+    },
+    { status: 400 }
+  );
+}
+
     if (selectedNames.length === 0) {
       return Response.json(
         { error: "At least one learner must be selected." },
         { status: 400 }
       );
     }
-
+if (learnersWithoutValidDob.length > 0) {
+  return Response.json(
+    {
+      code: "MISSING_LEARNER_DOB",
+      error:
+        "A date of birth is required before this observation can be analysed.",
+      learners: learnersWithoutValidDob,
+    },
+    { status: 400 }
+  );
+}
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
 
@@ -95,6 +319,9 @@ Analyse the observation using the selected framework.
 
 Selected learners:
 ${selectedNames.join(", ")}
+
+Learner ages on the observation date (${observationDateText}):
+${learnerAgeContext}
 
 Framework:
 ${framework.name}
@@ -129,6 +356,15 @@ Assessment rules:
 - Include a short evidence excerpt or precise evidence description from the observation.
 - The evidence must explain why that specific statement was matched.
 - Set objectives to the exact text of the matched framework statements for temporary interface compatibility.
+- Return one learnerAnalyses entry for every selected learner, using that learner's exact supplied ID and name.
+- Assess each learner independently.
+- Only assign evidence to a learner when the observation clearly attributes that evidence to that learner.
+- Never copy evidence, framework matches, levels, confidence or next steps from one learner to another.
+- If a selected learner has no clearly attributable evidence in the observation, return that learner with an empty frameworkMatches array.
+- Do not infer that an action performed by one named learner was also performed by another learner.
+- For group observations, separate each learner's individual contribution before making assessment judgements.
+- Each learner's nextSteps must be based only on that learner's own evidenced learning.
+
 
 Learner mismatch rules:
 - Check whether the observation explicitly mentions a learner by name.
@@ -225,6 +461,115 @@ statementMatches: {
 ],
   },
 },
+learnerAnalyses: {
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+
+    properties: {
+      learnerId: {
+        type: "string",
+        enum: selectedLearnerIds,
+      },
+
+      learnerName: {
+        type: "string",
+        enum: selectedNames,
+      },
+
+      confidence: {
+        type: "integer",
+        minimum: 0,
+        maximum: 100,
+      },
+
+      frameworkMatches: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+
+          properties: {
+            strand: {
+              type: "string",
+            },
+
+            objectives: {
+              type: "array",
+              items: {
+                type: "string",
+              },
+            },
+
+            statementMatches: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+
+                properties: {
+                  statementId: {
+                    type: "string",
+                  },
+
+                  statementText: {
+                    type: "string",
+                  },
+
+                  evidence: {
+                    type: "string",
+                  },
+                },
+
+                required: [
+                  "statementId",
+                  "statementText",
+                  "evidence",
+                ],
+              },
+            },
+
+            suggestedLevel: {
+              type: "string",
+              enum: assessmentLevelLabels,
+            },
+
+            confidence: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100,
+            },
+          },
+
+          required: [
+            "strand",
+            "objectives",
+            "statementMatches",
+            "suggestedLevel",
+            "confidence",
+          ],
+        },
+      },
+
+      nextSteps: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+    },
+
+    required: [
+      "learnerId",
+      "learnerName",
+      "confidence",
+      "frameworkMatches",
+      "nextSteps",
+    ],
+  },
+},
+
               nextSteps: {
                 type: "array",
                 items: {
@@ -262,6 +607,7 @@ statementMatches: {
               "confidence",
               "level",
               "frameworkMatches",
+              "learnerAnalyses",
               "nextSteps",
               "learnerMismatch",
             ],
@@ -304,14 +650,44 @@ type ValidatedStatementMatch = {
   evidence: string;
 };
 
-if (Array.isArray(parsed.frameworkMatches)) {
-  const matchesByStrand = new Map<string, any>();
+type ValidatedFrameworkMatch = {
+  strand: string;
+  source: "ai";
+  objectives: string[];
+  statementMatches: ValidatedStatementMatch[];
+  suggestedLevel: string;
+  confidence: number;
+};
 
-  for (const match of parsed.frameworkMatches) {
+type ValidatedLearnerAnalysis = {
+  learnerId: string;
+  learnerName: string;
+  confidence: number;
+  frameworkMatches: ValidatedFrameworkMatch[];
+  nextSteps: string[];
+};
+
+function validateFrameworkMatches(
+  rawMatches: unknown
+): ValidatedFrameworkMatch[] {
+  if (!Array.isArray(rawMatches)) {
+    return [];
+  }
+
+  const matchesByStrand =
+    new Map<string, ValidatedFrameworkMatch>();
+
+  for (const rawMatch of rawMatches) {
     if (
-      !match ||
-      typeof match.strand !== "string"
+      !rawMatch ||
+      typeof rawMatch !== "object"
     ) {
+      continue;
+    }
+
+    const match = rawMatch as any;
+
+    if (typeof match.strand !== "string") {
       continue;
     }
 
@@ -322,13 +698,24 @@ if (Array.isArray(parsed.frameworkMatches)) {
         (area) => area.name === strand
       );
 
-    // Ignore learning areas that do not exist
-    // in the active framework.
     if (!validArea) {
       continue;
     }
 
-    const validatedStatementMatches: ValidatedStatementMatch[] =
+    const suggestedLevel =
+      typeof match.suggestedLevel === "string" &&
+      assessmentLevelLabels.includes(
+        match.suggestedLevel
+      )
+        ? match.suggestedLevel
+        : "";
+
+    if (!suggestedLevel) {
+      continue;
+    }
+
+    const validatedStatementMatches:
+      ValidatedStatementMatch[] =
       Array.isArray(match.statementMatches)
         ? match.statementMatches
             .map(
@@ -342,7 +729,9 @@ if (Array.isArray(parsed.frameworkMatches)) {
                     : "";
 
                 const validStatement =
-                  validStatementsById.get(statementId);
+                  validStatementsById.get(
+                    statementId
+                  );
 
                 const evidence =
                   typeof statementMatch?.evidence ===
@@ -350,12 +739,10 @@ if (Array.isArray(parsed.frameworkMatches)) {
                     ? statementMatch.evidence.trim()
                     : "";
 
-                // Reject invented statement IDs,
-                // statements assigned to the wrong area,
-                // and matches without evidence.
                 if (
                   !validStatement ||
-                  validStatement.areaName !== strand ||
+                  validStatement.areaName !==
+                    strand ||
                   !evidence
                 ) {
                   return null;
@@ -379,42 +766,46 @@ if (Array.isArray(parsed.frameworkMatches)) {
             )
         : [];
 
-    // Remove duplicate statement IDs.
     const uniqueStatementMatches =
       validatedStatementMatches.filter(
         (
-          statement: ValidatedStatementMatch,
-          index: number,
-          allStatements: ValidatedStatementMatch[]
+          statement,
+          index,
+          allStatements
         ) =>
           index ===
           allStatements.findIndex(
-            (item: ValidatedStatementMatch) =>
+            (item) =>
               item.statementId ===
               statement.statementId
           )
       );
 
-    // Ignore areas with no valid statement matches.
     if (uniqueStatementMatches.length === 0) {
       continue;
     }
 
     const confidence = Math.min(
       100,
-      Math.max(0, Number(match.confidence) || 0)
+      Math.max(
+        0,
+        Number(match.confidence) || 0
+      )
     );
 
-    const normalizedMatch = {
-      ...match,
+    const normalizedMatch:
+      ValidatedFrameworkMatch = {
       strand,
       source: "ai",
+      objectives:
+        uniqueStatementMatches.map(
+          (statement) =>
+            statement.statementText
+        ),
+      statementMatches:
+        uniqueStatementMatches,
+      suggestedLevel,
       confidence,
-      statementMatches: uniqueStatementMatches,
-      objectives: uniqueStatementMatches.map(
-        (statement: ValidatedStatementMatch) =>
-          statement.statementText
-      ),
     };
 
     const existingMatch =
@@ -425,37 +816,28 @@ if (Array.isArray(parsed.frameworkMatches)) {
         strand,
         normalizedMatch
       );
-
       continue;
     }
 
-    const combinedStatementMatches: ValidatedStatementMatch[] =
-      [
-        ...(Array.isArray(
-          existingMatch.statementMatches
+    const combinedStatementMatches = [
+      ...existingMatch.statementMatches,
+      ...uniqueStatementMatches,
+    ].filter(
+      (
+        statement,
+        index,
+        allStatements
+      ) =>
+        index ===
+        allStatements.findIndex(
+          (item) =>
+            item.statementId ===
+            statement.statementId
         )
-          ? existingMatch.statementMatches
-          : []),
-        ...uniqueStatementMatches,
-      ].filter(
-        (
-          statement: ValidatedStatementMatch,
-          index: number,
-          allStatements: ValidatedStatementMatch[]
-        ) =>
-          index ===
-          allStatements.findIndex(
-            (item: ValidatedStatementMatch) =>
-              item.statementId ===
-              statement.statementId
-          )
-      );
-
-    const existingConfidence =
-      Number(existingMatch.confidence) || 0;
+    );
 
     const strongerMatch =
-      confidence > existingConfidence
+      confidence > existingMatch.confidence
         ? normalizedMatch
         : existingMatch;
 
@@ -465,27 +847,117 @@ if (Array.isArray(parsed.frameworkMatches)) {
       suggestedLevel:
         strongerMatch.suggestedLevel,
       confidence: Math.max(
-        existingConfidence,
+        existingMatch.confidence,
         confidence
       ),
       statementMatches:
         combinedStatementMatches,
       objectives:
         combinedStatementMatches.map(
-          (statement: ValidatedStatementMatch) =>
+          (statement) =>
             statement.statementText
         ),
     });
   }
 
-  parsed.frameworkMatches = Array.from(
+  return Array.from(
     matchesByStrand.values()
   );
-} else {
-  parsed.frameworkMatches = [];
 }
 
-return Response.json(parsed);
+parsed.frameworkMatches =
+  validateFrameworkMatches(
+    parsed.frameworkMatches
+  );
+const rawLearnerAnalyses =
+  Array.isArray(parsed.learnerAnalyses)
+    ? parsed.learnerAnalyses
+    : [];
+
+const validatedLearnerAnalyses:
+  ValidatedLearnerAnalysis[] =
+  learners.map((learner) => {
+    const rawAnalysis =
+      rawLearnerAnalyses.find(
+        (item: any) =>
+          item &&
+          typeof item === "object" &&
+          item.learnerId === learner.id
+      );
+
+    if (!rawAnalysis) {
+      return {
+        learnerId: learner.id,
+        learnerName: learner.name,
+        confidence: 0,
+        frameworkMatches: [],
+        nextSteps: [],
+      };
+    }
+
+    const confidence = Math.min(
+      100,
+      Math.max(
+        0,
+        Number(rawAnalysis.confidence) || 0
+      )
+    );
+
+    const nextSteps =
+      Array.isArray(rawAnalysis.nextSteps)
+        ? rawAnalysis.nextSteps
+            .filter(
+              (step: unknown): step is string =>
+                typeof step === "string"
+            )
+            .map((step: string) =>
+              step.trim()
+            )
+            .filter(Boolean)
+        : [];
+
+    return {
+      learnerId: learner.id,
+      learnerName: learner.name,
+      confidence,
+      frameworkMatches:
+        validateFrameworkMatches(
+          rawAnalysis.frameworkMatches
+        ),
+      nextSteps,
+    };
+  });
+
+parsed.learnerAnalyses =
+  validatedLearnerAnalyses;
+if (validatedLearnerAnalyses.length === 1) {
+  const singleLearnerAnalysis =
+    validatedLearnerAnalyses[0];
+
+  parsed.frameworkMatches =
+    singleLearnerAnalysis.frameworkMatches;
+
+  parsed.confidence =
+    singleLearnerAnalysis.confidence;
+
+  parsed.nextSteps =
+    singleLearnerAnalysis.nextSteps;
+}
+
+
+return Response.json({
+  ...parsed,
+
+  assessmentContext: {
+    framework: {
+  key: framework.key,
+  name: framework.name,
+  version: framework.version ?? null,
+},
+    observationDate: observationDateText,
+    learners: learnerAges,
+  },
+});
     } catch {
       return Response.json(
         {

@@ -5,10 +5,51 @@ export type AssessmentLevelDefinition = {
   order: number;
 };
 
+export type FrameworkStage = {
+  id: string;
+  label: string;
+
+  // Alternative names used by different schools.
+  aliases?: string[];
+
+  // These are optional because some frameworks
+  // use named stages rather than exact age ranges.
+  minAgeMonths?: number;
+  maxAgeMonths?: number;
+
+  order: number;
+  description?: string;
+};
+
+export type FrameworkProgressionLevel = {
+  level: number;
+
+  // Optional display label from the source framework.
+  // Examples: "1 Star", "Emerging", "Phase A".
+  label?: string;
+
+  // Keep all behaviours found within the same
+  // progression cell at the same developmental level.
+  descriptors: string[];
+};
+
 export type FrameworkStatement = {
   id: string;
+
+  // Objective / statement name used by existing frameworks.
   text: string;
+
   guidance?: string;
+  stageIds?: string[];
+
+  // Optional structural information from more complex
+  // frameworks. Existing frameworks do not need these.
+  subarea?: string;
+  sourceReference?: string;
+
+  // Ordered developmental progression belonging
+  // specifically to this objective.
+  progression?: FrameworkProgressionLevel[];
 };
 
 export type FrameworkArea = {
@@ -22,12 +63,15 @@ export type FrameworkDefinition = {
   name: string;
   version?: string;
 
+  // Optional until a framework has been mapped.
+  stages?: FrameworkStage[];
+
   assessmentLevels: AssessmentLevelDefinition[];
 
-  // Kept temporarily so the current analysis route does not break.
+  // Kept temporarily so the current analysis route
+  // and interface continue working.
   areas: string[];
 
-  // New structured framework content.
   areaDefinitions: FrameworkArea[];
 };
 
