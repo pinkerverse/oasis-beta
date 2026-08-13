@@ -1732,6 +1732,64 @@ if (!framework.version?.trim()) {
       }
 
       statementIds.add(statement.id);
+      const progressionLevels =
+  statement.progression?.map(
+    (progressionLevel) => progressionLevel.level
+  ) ?? [];
+
+const uniqueProgressionLevels = new Set(
+  progressionLevels
+);
+
+if (
+  uniqueProgressionLevels.size !==
+  progressionLevels.length
+) {
+  errors.push(
+    `${statement.text || statement.id}: progression levels must not be duplicated.`
+  );
+}
+statement.progression?.forEach(
+  (progressionLevel) => {
+    if (
+      progressionLevel.descriptors.length === 0 ||
+      progressionLevel.descriptors.some(
+        (descriptor) => !descriptor.trim()
+      )
+    ) {
+      errors.push(
+        `${statement.text || statement.id}: Level ${progressionLevel.level} needs a descriptor.`
+      );
+    }
+  }
+);
+if (progressionLevels.length > 0) {
+  const sortedProgressionLevels = [
+    ...uniqueProgressionLevels,
+  ].sort((a, b) => a - b);
+
+  const hasMissingLevel =
+    sortedProgressionLevels.some(
+      (level, index) => level !== index + 1
+    );
+
+  if (hasMissingLevel) {
+    errors.push(
+      `${statement.text || statement.id}: progression levels must run consecutively from Level 1.`
+    );
+  }
+}
+const hasInvalidProgressionLevel =
+  progressionLevels.some(
+    (level) =>
+      !Number.isInteger(level) || level < 1
+  );
+
+if (hasInvalidProgressionLevel) {
+  errors.push(
+    `${statement.text || statement.id}: progression levels must be whole numbers starting at Level 1.`
+  );
+}
     });
   });
 
@@ -1752,6 +1810,41 @@ if (!framework.version?.trim()) {
       );
     }
   });
+
+  framework.expectationBands?.forEach((band) => {
+  if (!band.label.trim()) {
+    errors.push(
+      "Every expectation band needs a name."
+    );
+  }
+
+  if (
+    typeof band.minAgeMonths === "number" &&
+    typeof band.maxAgeMonths === "number" &&
+    band.minAgeMonths > band.maxAgeMonths
+  ) {
+    errors.push(
+      `${band.label}: minimum age cannot be greater than maximum age.`
+    );
+  }
+
+  if (band.checkpoints.length === 0) {
+    errors.push(
+      `${band.label}: add at least one expectation checkpoint.`
+    );
+  }
+
+  band.checkpoints.forEach((checkpoint) => {
+    if (
+      checkpoint.minExpectedLevel >
+      checkpoint.maxExpectedLevel
+    ) {
+      errors.push(
+        `${band.label} — ${checkpoint.label}: minimum expected level cannot be greater than maximum expected level.`
+      );
+    }
+  });
+});
 
   framework.assessmentLevels.forEach((level) => {
     if (!level.label.trim()) {
@@ -5411,7 +5504,8 @@ setFrameworkHasUnsavedChanges(true);
       setFrameworkText(
         savedFramework.source_text || ""
       );
-
+setFrameworkFile(null);
+setFrameworkExtraction(null);
       setFrameworkSaveMessage("");
       setFrameworkMappingError("");
     }}
@@ -5429,12 +5523,14 @@ setFrameworkHasUnsavedChanges(true);
           savedFramework.definition
         );
 setFrameworkHasUnsavedChanges(false);
-        setFrameworkText(
-          savedFramework.source_text || ""
-        );
+setFrameworkText(
+  savedFramework.source_text || ""
+);
+setFrameworkFile(null);
+setFrameworkExtraction(null);
 
-        setFrameworkSaveMessage("");
-        setFrameworkMappingError("");
+setFrameworkSaveMessage("");
+setFrameworkMappingError("");
       }}
       className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
     >
@@ -5627,7 +5723,8 @@ setFrameworkHasUnsavedChanges(false);
             event.target.files?.[0] ?? null;
 
           setFrameworkFile(selectedFile);
-          setFrameworkMappingError("");
+setFrameworkExtraction(null);
+setFrameworkMappingError("");
         }}
       />
     </label>
@@ -6101,9 +6198,61 @@ onClick={() => {
     className="mt-4 w-full rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:bg-slate-50"
   >
     + Add developmental stage
-  </button>
+    </button>
+
 
 </div>
+
+<div className="mt-6 rounded-2xl bg-white p-5">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <h3 className="text-lg font-bold text-slate-900">
+        Expectation Bands
+      </h3>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Age, stage or learner-group expectations explicitly
+        identified in the source framework.
+      </p>
+    </div>
+
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+      {mappedFrameworkPreview.expectationBands?.length ?? 0}
+    </span>
+  </div>
+
+  {(mappedFrameworkPreview.expectationBands?.length ?? 0) === 0 ? (
+    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+      <p className="text-sm text-slate-600">
+        No explicit expectation bands were identified in
+        this framework.
+      </p>
+    </div>
+  ) : (
+    <div className="mt-4 space-y-3">
+      {mappedFrameworkPreview.expectationBands?.map(
+        (band) => (
+          <div
+            key={band.id}
+            className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+          >
+            <p className="font-semibold text-slate-900">
+              {band.label}
+            </p>
+
+            <p className="mt-1 text-sm text-slate-500">
+              {band.checkpoints.length} expectation{" "}
+              {band.checkpoints.length === 1
+                ? "checkpoint"
+                : "checkpoints"}
+            </p>
+          </div>
+        )
+      )}
+    </div>
+  )}
+</div>
+
 <div className="mt-6 rounded-2xl bg-white p-5">
   <div>
     <h3 className="text-lg font-bold text-slate-900">

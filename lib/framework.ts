@@ -32,7 +32,32 @@ export type FrameworkProgressionLevel = {
   // progression cell at the same developmental level.
   descriptors: string[];
 };
+export type FrameworkExpectationCheckpoint = {
+  id: string;
 
+  // Examples: "Beginning of year", "Mid-year", "End of year".
+  label: string;
+
+  // Expected developmental-level range at this point.
+  minExpectedLevel: number;
+  maxExpectedLevel: number;
+};
+
+export type FrameworkExpectationBand = {
+  id: string;
+
+  // Examples: "Pre-K3", "Pre-K4", "Reception".
+  label: string;
+
+  // Optional age range for this learner group.
+  minAgeMonths?: number;
+  maxAgeMonths?: number;
+
+  // Optional link to explicit framework stages.
+  stageIds?: string[];
+
+  checkpoints: FrameworkExpectationCheckpoint[];
+};
 export type FrameworkStatement = {
   id: string;
 
@@ -63,10 +88,15 @@ export type FrameworkDefinition = {
   name: string;
   version?: string;
 
-  // Optional until a framework has been mapped.
-  stages?: FrameworkStage[];
+// Optional until a framework has been mapped.
+stages?: FrameworkStage[];
 
-  assessmentLevels: AssessmentLevelDefinition[];
+// Optional age/group expectations.
+// These interpret developmental levels without
+// changing the underlying evidence level.
+expectationBands?: FrameworkExpectationBand[];
+
+assessmentLevels: AssessmentLevelDefinition[];
 
   // Kept temporarily so the current analysis route
   // and interface continue working.

@@ -130,7 +130,11 @@ TABLE INTERPRETATION RULES
 - Do not assume a PDF page break creates a new objective.
 - A row may continue onto another page.
 - Headings or merged cells may describe the area or subarea for multiple rows beneath them.
-
+- Only text from the objective / strand column may become a framework statement.
+- Text found only in developmental progression columns must NEVER become a separate statement.
+- If a continuation row has an empty objective / strand cell but contains progression descriptors, attach those descriptors to the preceding objective rather than creating a new statement.
+- When a table continues across a page break, preserve the previous objective until a genuinely new objective appears in the objective / strand column.
+- Never promote a progression descriptor into statement text merely because it appears on a new physical row or page.
 If a progression header uses stars:
 
 * = developmental level 1
@@ -142,6 +146,14 @@ Treat these as ordered developmental levels 1–4 internally.
 
 CRITICAL:
 A developmental/star level is NOT automatically the same thing as an assessment judgement such as Below, Approaching, Meeting, or Exceeding.
+
+EXPECTATION BANDS:
+- Populate expectationBands ONLY when the source framework explicitly states age-, year-group-, class-, phase-, or stage-specific developmental expectations.
+- Never infer expectation bands from progression columns such as *, **, ***, **** or Level 1, Level 2, Level 3, Level 4.
+- Never invent age ranges, checkpoints, or expected developmental levels.
+- If the source does not explicitly define expectation ranges, return expectationBands as an empty array.
+- expectationBands interpret developmental progression; they must never change the underlying progression level itself.
+- If the source explicitly gives expectations at different points in time, preserve those as separate checkpoints.
 
 The framework's developmental progression must be preserved independently.
 
@@ -261,6 +273,73 @@ ${frameworkText}
                     ],
                   },
                 },
+expectationBands: {
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      id: {
+        type: "string",
+      },
+      label: {
+        type: "string",
+      },
+      minAgeMonths: {
+        type: ["integer", "null"],
+        minimum: 0,
+      },
+      maxAgeMonths: {
+        type: ["integer", "null"],
+        minimum: 0,
+      },
+      stageIds: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+      checkpoints: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: {
+              type: "string",
+            },
+            label: {
+              type: "string",
+            },
+            minExpectedLevel: {
+              type: "integer",
+              minimum: 1,
+            },
+            maxExpectedLevel: {
+              type: "integer",
+              minimum: 1,
+            },
+          },
+          required: [
+            "id",
+            "label",
+            "minExpectedLevel",
+            "maxExpectedLevel",
+          ],
+        },
+      },
+    },
+    required: [
+      "id",
+      "label",
+      "minAgeMonths",
+      "maxAgeMonths",
+      "stageIds",
+      "checkpoints",
+    ],
+  },
+},
+
                 assessmentLevels: {
                   type: "array",
                   items: {
@@ -394,13 +473,14 @@ ${frameworkText}
                   },
                 },
               },
-              required: [
-                "name",
-                "version",
-                "stages",
-                "assessmentLevels",
-                "areas",
-              ],
+             required: [
+  "name",
+  "version",
+  "stages",
+  "expectationBands",
+  "assessmentLevels",
+  "areas",
+],
             },
           },
         },
@@ -458,6 +538,99 @@ if (Array.isArray(parsed.stages)) {
             .filter(Boolean)
         : []
     );
+
+    const expectationBands =
+  Array.isArray(parsed.expectationBands)
+    ? parsed.expectationBands
+        .map((band: any, bandIndex: number) => {
+          const label =
+            typeof band?.label === "string"
+              ? band.label.trim()
+              : "";
+
+          if (!label) {
+            return null;
+          }
+
+          const checkpoints =
+            Array.isArray(band.checkpoints)
+              ? band.checkpoints
+                  .map(
+                    (
+                      checkpoint: any,
+                      checkpointIndex: number
+                    ) => {
+                      const minExpectedLevel = Number(
+                        checkpoint?.minExpectedLevel
+                      );
+
+                      const maxExpectedLevel = Number(
+                        checkpoint?.maxExpectedLevel
+                      );
+
+                      if (
+                        !Number.isInteger(minExpectedLevel) ||
+                        !Number.isInteger(maxExpectedLevel) ||
+                        minExpectedLevel < 1 ||
+                        maxExpectedLevel < minExpectedLevel
+                      ) {
+                        return null;
+                      }
+
+                      const checkpointLabel =
+                        typeof checkpoint?.label ===
+                          "string"
+                          ? checkpoint.label.trim()
+                          : "";
+
+                      if (!checkpointLabel) {
+                        return null;
+                      }
+
+                      return {
+                        id:
+                          createSlug(checkpoint?.id) ||
+                          `checkpoint-${
+                            checkpointIndex + 1
+                          }`,
+                        label: checkpointLabel,
+                        minExpectedLevel,
+                        maxExpectedLevel,
+                      };
+                    }
+                  )
+                  .filter(Boolean)
+              : [];
+
+          if (checkpoints.length === 0) {
+            return null;
+          }
+
+          return {
+            id:
+              createSlug(band?.id) ||
+              `expectation-band-${bandIndex + 1}`,
+            label,
+            minAgeMonths:
+              typeof band.minAgeMonths === "number"
+                ? band.minAgeMonths
+                : undefined,
+            maxAgeMonths:
+              typeof band.maxAgeMonths === "number"
+                ? band.maxAgeMonths
+                : undefined,
+            stageIds: Array.isArray(band.stageIds)
+              ? band.stageIds.filter(
+                  (stageId: unknown) =>
+                    typeof stageId === "string" &&
+                    validStageIds.has(stageId)
+                )
+              : [],
+            checkpoints,
+          };
+        })
+        .filter(Boolean)
+    : [];
 
     const areas = Array.isArray(parsed.areas)
       ? parsed.areas
@@ -658,9 +831,15 @@ const progression =
                   ? stage.description.trim()
                   : undefined,
             })
-          )
-        : [],
-      assessmentLevels:
+       )
+    : [],
+
+expectationBands:
+  expectationBands.length > 0
+    ? expectationBands
+    : undefined,
+
+assessmentLevels:
         Array.isArray(
           parsed.assessmentLevels
         ) &&

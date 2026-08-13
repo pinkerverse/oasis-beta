@@ -266,28 +266,7 @@ extractedTables.forEach(
     });
   }
 );
-console.log(
-  "LIKELY FRAMEWORK TABLE CONTINUATIONS",
-  likelyTableContinuations
-);
-    console.log("FRAMEWORK PDF EXTRACTION", {
-      fileName: file.name,
-      pagesWithTableData:
-        tableResult.pages.length,
-      tablesDetected:
-  extractedTables.length,
-logicalTablesAfterMerge:
-  mergedTables.length,
-    });
 
-    console.log(
-      "FIRST EXTRACTED TABLE",
-      JSON.stringify(
-        extractedTables[0] ?? null,
-        null,
-        2
-      )
-    );
 
     return NextResponse.json({
       success: true,
