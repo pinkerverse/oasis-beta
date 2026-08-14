@@ -317,8 +317,13 @@ You are an experienced early years teacher and assessment lead.
 
 Analyse the observation using the selected framework.
 
-Selected learners:
-${selectedNames.join(", ")}
+Selected learners (use these exact IDs and names in learnerAnalyses):
+${learners
+  .map(
+    (learner) =>
+      `- ${learner.id}: ${learner.name}`
+  )
+  .join("\n")}
 
 Learner ages on the observation date (${observationDateText}):
 ${learnerAgeContext}
@@ -940,10 +945,13 @@ if (validatedLearnerAnalyses.length === 1) {
   parsed.confidence =
     singleLearnerAnalysis.confidence;
 
-  parsed.nextSteps =
-    singleLearnerAnalysis.nextSteps;
+parsed.nextSteps =
+  singleLearnerAnalysis.nextSteps;
+} else {
+  parsed.frameworkMatches = [];
+  parsed.confidence = 0;
+  parsed.nextSteps = [];
 }
-
 
 return Response.json({
   ...parsed,

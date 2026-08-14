@@ -356,12 +356,65 @@ function getAssessmentLevelColours(levelLabel: string) {
     (level) => level.label === levelLabel
   );
 
-  if (levelIndex < 0) {
+if (levelIndex < 0) {
+  const legacyLabel = levelLabel
+    .trim()
+    .toLowerCase();
+
+if (
+  legacyLabel === "below" ||
+  legacyLabel === "below expectation"
+) {
+  return {
+    badge: "bg-orange-100 text-orange-700",
+    bar: "bg-orange-500",
+  };
+}
+
+  if (
+    legacyLabel === "developing" ||
+    legacyLabel === "emerging" ||
+    legacyLabel === "approaching"
+  ) {
     return {
-      badge: "bg-slate-100 text-slate-600",
-      bar: "bg-slate-400",
+      badge: "bg-yellow-100 text-yellow-700",
+      bar: "bg-yellow-500",
     };
   }
+
+ if (
+  legacyLabel === "meeting" ||
+  legacyLabel === "meeting expectation" ||
+  legacyLabel === "at expectation"
+) {
+  return {
+    badge: "bg-green-100 text-green-700",
+    bar: "bg-green-500",
+  };
+}
+
+if (legacyLabel === "secure") {
+  return {
+    badge: "bg-blue-100 text-blue-700",
+    bar: "bg-blue-500",
+  };
+}
+
+ if (
+  legacyLabel === "exceeding" ||
+  legacyLabel === "above expectation"
+) {
+  return {
+    badge: "bg-purple-100 text-purple-700",
+    bar: "bg-purple-500",
+  };
+}
+
+  return {
+    badge: "bg-slate-100 text-slate-600",
+    bar: "bg-slate-400",
+  };
+}
 
   const progress =
     orderedLevels.length <= 1
@@ -370,9 +423,9 @@ function getAssessmentLevelColours(levelLabel: string) {
 
   if (progress <= 0.15) {
     return {
-      badge: "bg-purple-100 text-purple-700",
-      bar: "bg-purple-500",
-    };
+  badge: "bg-orange-100 text-orange-700",
+  bar: "bg-orange-500",
+};
   }
 
   if (progress <= 0.45) {
@@ -389,10 +442,10 @@ function getAssessmentLevelColours(levelLabel: string) {
     };
   }
 
-  return {
-    badge: "bg-blue-100 text-blue-700",
-    bar: "bg-blue-500",
-  };
+return {
+  badge: "bg-purple-100 text-purple-700",
+  bar: "bg-purple-500",
+};
 }
 const [
   showAddLearningAreaModal,
@@ -737,14 +790,35 @@ const liveLearnerProgress = (() => {
           assessmentLevel.label === level
       );
 
-      const score =
-        levelIndex >= 0 && orderedLevels.length > 0
-          ? Math.round(
-              ((levelIndex + 1) /
-                orderedLevels.length) *
-                100
-            )
+      const legacyLevel =
+  level.trim().toLowerCase();
+
+const legacyScore =
+  legacyLevel === "below" ||
+  legacyLevel === "below expectation"
+    ? 25
+    : legacyLevel === "developing" ||
+        legacyLevel === "emerging" ||
+        legacyLevel === "approaching"
+      ? 50
+      : legacyLevel === "secure" ||
+          legacyLevel === "meeting" ||
+          legacyLevel === "meeting expectation" ||
+          legacyLevel === "at expectation"
+        ? 75
+        : legacyLevel === "exceeding" ||
+            legacyLevel === "above expectation"
+          ? 100
           : 0;
+
+const score =
+  levelIndex >= 0 && orderedLevels.length > 0
+    ? Math.round(
+        ((levelIndex + 1) /
+          orderedLevels.length) *
+          100
+      )
+    : legacyScore;
 
       latestJudgementByArea.set(area, {
         area,
@@ -1967,12 +2041,6 @@ async function handleSaveFrameworkDraft() {
     );
 
    const responseText = await response.text();
-
-console.log(
-  "Framework save response:",
-  response.status,
-  responseText
-);
 
 let result: {
   error?: string;
@@ -3314,7 +3382,7 @@ const hasOverride =
   getAssessmentLevelColours(item.level).badge
 }`}
             >
-              {item.level}
+              {item.level.toUpperCase()}
             </span>
           </div>
 
