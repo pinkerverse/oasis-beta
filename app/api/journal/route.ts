@@ -186,25 +186,41 @@ const normalizedLearnerIds =
                 existingObservation.learner_ids
               );
 
-            const existingText =
-              normalizeObservationText(
-                existingObservation.observation
-              );
+          const existingText =
+  normalizeObservationText(
+    existingObservation.observation
+  );
 
-            const existingObservationDate =
-              normalizeObservationDate(
-                existingObservation.observation_date
-              );
+const existingObservationDate =
+  normalizeObservationDate(
+    existingObservation.observation_date
+  );
 
-            return (
-             existingLearnerIds.some((learnerId) =>
-  normalizedLearnerIds.includes(learnerId)
-) &&
-              existingText ===
-                normalizedObservation &&
-              existingObservationDate ===
-                observationDate
-            );
+const matchingLearnerId =
+  existingLearnerIds.find((learnerId) =>
+    normalizedLearnerIds.includes(learnerId)
+  );
+
+const matchingLearnerEntry =
+  matchingLearnerId
+    ? learnerEntries.find(
+        (entry: any) =>
+          entry?.learner_id === matchingLearnerId
+      )
+    : null;
+
+const expectedObservationText =
+  normalizeObservationText(
+    typeof matchingLearnerEntry?.observation === "string"
+      ? matchingLearnerEntry.observation
+      : normalizedObservation
+  );
+
+return (
+  Boolean(matchingLearnerId) &&
+  existingText === expectedObservationText &&
+  existingObservationDate === observationDate
+);
           }
         );
 
@@ -248,10 +264,15 @@ const rowsToInsert =
           ) ?? {};
 
         return {
-          ...observationToSave,
+  ...observationToSave,
 
-          observation: observationText,
-          observation_date: observationDate,
+  observation:
+    typeof learnerEntry.observation === "string" &&
+    learnerEntry.observation.trim()
+      ? learnerEntry.observation.trim()
+      : observationText,
+
+  observation_date: observationDate,
 
           // Important: one database row per learner
           learner_ids: [learnerId],

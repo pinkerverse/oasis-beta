@@ -484,7 +484,13 @@ function resetManualLearningAreaForm() {
 }
 
 function handleAddManualLearningArea() {
-  if (!analysis || !selectedManualArea) return;
+  if (
+    !analysis ||
+    !selectedManualArea ||
+    !displayedLearnerAnalysis
+  ) {
+    return;
+  }
 
   const selectedStatements =
     selectedManualArea.statements.filter((statement) =>
@@ -499,34 +505,57 @@ function handleAddManualLearningArea() {
   }
 
   const areaAlreadyExists =
-    analysis.frameworkMatches.some(
+    displayedLearnerAnalysis.frameworkMatches.some(
       (match) =>
         match.strand === selectedManualArea.name
     );
 
   if (areaAlreadyExists) return;
 
-  setAnalysis({
-    ...analysis,
-    frameworkMatches: [
-      ...analysis.frameworkMatches,
-      {
-        strand: selectedManualArea.name,
-        source: "teacher",
-        objectives: selectedStatements.map(
-          (statement) => statement.text
-        ),
-        statementMatches: selectedStatements.map(
-          (statement) => ({
-            statementId: statement.id,
-            statementText: statement.text,
-            evidence: manualAreaEvidence.trim(),
-          })
-        ),
-        suggestedLevel: manualAreaLevel,
-        confidence: 100,
-      },
-    ],
+  const newMatch = {
+    strand: selectedManualArea.name,
+    source: "teacher" as const,
+    objectives: selectedStatements.map(
+      (statement) => statement.text
+    ),
+    statementMatches: selectedStatements.map(
+      (statement) => ({
+        statementId: statement.id,
+        statementText: statement.text,
+        evidence: manualAreaEvidence.trim(),
+      })
+    ),
+    suggestedLevel: manualAreaLevel,
+    confidence: 100,
+  };
+
+  setAnalysis((current) => {
+    if (!current) return current;
+
+    const updatedLearnerAnalyses =
+      current.learnerAnalyses.map((learner) =>
+        learner.learnerId ===
+        displayedLearnerAnalysis.learnerId
+          ? {
+              ...learner,
+              frameworkMatches: [
+                ...learner.frameworkMatches,
+                newMatch,
+              ],
+            }
+          : learner
+      );
+
+    return {
+      ...current,
+      learnerAnalyses: updatedLearnerAnalyses,
+
+      // Keep legacy single-learner state in sync.
+      frameworkMatches:
+        updatedLearnerAnalyses.length === 1
+          ? updatedLearnerAnalyses[0].frameworkMatches
+          : current.frameworkMatches,
+    };
   });
 
   resetManualLearningAreaForm();
@@ -534,28 +563,52 @@ function handleAddManualLearningArea() {
 }
 
 function handleRemoveManualLearningArea(strand: string) {
-  if (!analysis) return;
+  if (!analysis || !displayedLearnerAnalysis) return;
 
-  setAnalysis({
-    ...analysis,
-    frameworkMatches: analysis.frameworkMatches.filter(
-      (match) =>
-        !(
-          match.strand === strand &&
-          match.source === "teacher"
-        )
-    ),
+  setAnalysis((current) => {
+    if (!current) return current;
+
+    const updatedLearnerAnalyses =
+      current.learnerAnalyses.map((learner) =>
+        learner.learnerId ===
+        displayedLearnerAnalysis.learnerId
+          ? {
+              ...learner,
+              frameworkMatches:
+                learner.frameworkMatches.filter(
+                  (match) =>
+                    !(
+                      match.strand === strand &&
+                      match.source === "teacher"
+                    )
+                ),
+            }
+          : learner
+      );
+
+    return {
+      ...current,
+      learnerAnalyses: updatedLearnerAnalyses,
+
+      frameworkMatches:
+        updatedLearnerAnalyses.length === 1
+          ? updatedLearnerAnalyses[0].frameworkMatches
+          : current.frameworkMatches,
+    };
   });
+
+  const overrideKey =
+    `${displayedLearnerAnalysis.learnerId}::${strand}`;
 
   setAreaLevelOverrides((current) => {
     const updated = { ...current };
-    delete updated[strand];
+    delete updated[overrideKey];
     return updated;
   });
 
   setAreaOverrideReasons((current) => {
     const updated = { ...current };
-    delete updated[strand];
+    delete updated[overrideKey];
     return updated;
   });
 }
@@ -2373,16 +2426,30 @@ const learnerEntries = analysis.learnerAnalyses.map(
             .suggestedLevel
         : "Per-area judgements";
 
-    const teacherLevel =
-      learnerAnalysis.frameworkMatches.length === 1
-        ? areaLevelOverrides[
-            `${learnerAnalysis.learnerId}::${learnerAnalysis.frameworkMatches[0].strand}`
-          ] ||
-          learnerAnalysis.frameworkMatches[0]
-            .suggestedLevel
-        : "Per-area judgements";
+const teacherLevel =
+  learnerAnalysis.frameworkMatches.length === 1
+    ? areaLevelOverrides[
+        `${learnerAnalysis.learnerId}::${learnerAnalysis.frameworkMatches[0].strand}`
+      ] ||
+      learnerAnalysis.frameworkMatches[0]
+        .suggestedLevel
+    : "Per-area judgements";
 
-    return {
+const learnerObservation = Array.from(
+  new Set(
+    learnerAnalysis.frameworkMatches.flatMap(
+      (match) =>
+        match.statementMatches
+          .map((statementMatch) =>
+            statementMatch.evidence.trim()
+          )
+          .filter(Boolean)
+    )
+  )
+).join("\n\n");
+
+return {
+  observation: learnerObservation,
       learner_id: learnerAnalysis.learnerId,
       framework_matches: savedFrameworkMatches,
       ai_level: aiLevel,
@@ -5062,7 +5129,26 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
 
   ) : (
 
-journalEntries.map((entry: any) => {
+[...journalEntries]
+  .sort((first: any, second: any) => {
+    const firstDate = new Date(
+      first.observation_date || first.created_at
+    ).getTime();
+
+    const secondDate = new Date(
+      second.observation_date || second.created_at
+    ).getTime();
+
+    if (secondDate !== firstDate) {
+      return secondDate - firstDate;
+    }
+
+    return (
+      new Date(second.created_at).getTime() -
+      new Date(first.created_at).getTime()
+    );
+  })
+  .map((entry: any) => {
 
   const expanded = expandedEntry === entry.id;
 
@@ -5103,16 +5189,8 @@ journalEntries.map((entry: any) => {
           match.suggestedLevel ||
           "Not assessed";
 
-        const levelClasses =
-          finalLevel === "Exceeding"
-            ? "bg-blue-100 text-blue-700"
-            : finalLevel === "Secure"
-            ? "bg-green-100 text-green-700"
-            : finalLevel === "Developing"
-            ? "bg-amber-100 text-amber-700"
-            : finalLevel === "Below"
-            ? "bg-purple-100 text-purple-700"
-            : "bg-slate-100 text-slate-600";
+     const levelClasses =
+  getAssessmentLevelColours(finalLevel).badge;
 
         return (
          <span
