@@ -26,11 +26,12 @@ type AnalysisResult = {
   // Kept temporarily so the current display does not break
   objectives: string[];
 
-  statementMatches: {
-    statementId: string;
-    statementText: string;
-    evidence: string;
-  }[];
+statementMatches: {
+  statementId: string;
+  statementText: string;
+  evidence: string;
+  developmentalLevel: number | null;
+}[];
 
   suggestedLevel: string;
   confidence: number;
@@ -45,11 +46,12 @@ learnerAnalyses: {
     source?: "ai" | "teacher";
     objectives: string[];
 
-    statementMatches: {
-      statementId: string;
-      statementText: string;
-      evidence: string;
-    }[];
+statementMatches: {
+  statementId: string;
+  statementText: string;
+  evidence: string;
+  developmentalLevel: number | null;
+}[];
 
     suggestedLevel: string;
     confidence: number;
@@ -523,6 +525,7 @@ function handleAddManualLearningArea() {
         statementId: statement.id,
         statementText: statement.text,
         evidence: manualAreaEvidence.trim(),
+        developmentalLevel: null,
       })
     ),
     suggestedLevel: manualAreaLevel,
@@ -3340,7 +3343,11 @@ const hasOverride =
               <p className="mt-1 font-medium text-slate-900">
                 {statement.statementText}
               </p>
-
+{statement.developmentalLevel !== null && (
+  <p className="mt-2 text-sm font-medium text-slate-600">
+    Developmental level: {statement.developmentalLevel}
+  </p>
+)}
               <div className="mt-3 rounded-xl bg-blue-50 p-3">
                 <p className="text-xs font-semibold text-blue-700">
                   Supporting evidence

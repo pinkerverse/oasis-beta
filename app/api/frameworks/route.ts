@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import type { FrameworkDefinition } from "@/lib/framework";
+import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 function isFrameworkDefinition(
   value: unknown
@@ -30,6 +32,20 @@ function isFrameworkDefinition(
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to manage frameworks.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
 
     const definition = body?.definition;
 
@@ -111,9 +127,10 @@ export async function POST(request: Request) {
 const {
   data: existingFramework,
   error: existingFrameworkError,
-} = await supabase
+} = await authenticatedSupabase
   .from("framework_versions")
   .select("id, status")
+  .eq("school_id", schoolId)
   .eq("framework_key", frameworkKey)
   .eq("version", frameworkVersion)
   .maybeSingle();
@@ -149,7 +166,7 @@ if (existingFramework) {
     );
   }
 
-  const updateResult = await supabase
+  const updateResult = await authenticatedSupabase
     .from("framework_versions")
     .update({
       name: frameworkName,
@@ -176,10 +193,11 @@ if (existingFramework) {
   data = updateResult.data;
   error = updateResult.error;
 } else {
-  const insertResult = await supabase
+  const insertResult = await authenticatedSupabase
     .from("framework_versions")
     .insert([
       {
+        school_id: schoolId,
         framework_key: frameworkKey,
         name: frameworkName,
         version: frameworkVersion,
@@ -260,25 +278,41 @@ if (existingFramework) {
 // --------------------
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from("framework_versions")
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to view frameworks.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
+
+   const { data, error } = await authenticatedSupabase
+  .from("framework_versions")
       .select(
-        `
-          id,
-          framework_key,
-          name,
-          version,
-          definition,
-          source_text,
-          status,
-          activated_at,
-          created_at,
-          updated_at
-        `
-      )
-      .order("updated_at", {
-        ascending: false,
-      });
+  `
+    id,
+    framework_key,
+    name,
+    version,
+    definition,
+    source_text,
+    status,
+    activated_at,
+    created_at,
+    updated_at
+  `
+)
+.eq("school_id", schoolId)
+.order("updated_at", {
+  ascending: false,
+});
 
     if (error) {
       console.error(
@@ -320,6 +354,22 @@ export async function GET() {
 // --------------------
 export async function DELETE(request: Request) {
   try {
+
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to manage frameworks.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
+
     const { searchParams } = new URL(request.url);
 
     const frameworkId =
@@ -335,14 +385,15 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const {
-      data: existingFramework,
-      error: lookupError,
-    } = await supabase
-      .from("framework_versions")
-      .select("id, name, version, status")
-      .eq("id", frameworkId)
-      .maybeSingle();
+  const {
+  data: existingFramework,
+  error: lookupError,
+} = await authenticatedSupabase
+  .from("framework_versions")
+  .select("id, name, version, status")
+  .eq("id", frameworkId)
+  .eq("school_id", schoolId)
+  .maybeSingle();
 
     if (lookupError) {
       console.error(
@@ -382,10 +433,11 @@ export async function DELETE(request: Request) {
     }
 
     const { error: deleteError } =
-      await supabase
-        .from("framework_versions")
-        .delete()
-        .eq("id", frameworkId);
+      await authenticatedSupabase
+  .from("framework_versions")
+  .delete()
+  .eq("id", frameworkId)
+  .eq("school_id", schoolId);
 
     if (deleteError) {
       console.error(
@@ -434,6 +486,23 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json();
 
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to manage frameworks.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
+
+
+  
     const frameworkId =
       typeof body?.id === "string"
         ? body.id.trim()
@@ -467,7 +536,7 @@ export async function PATCH(request: Request) {
     const {
       data: framework,
       error: lookupError,
-    } = await supabase
+    } = await authenticatedSupabase
       .from("framework_versions")
       .select(
         `
@@ -478,8 +547,9 @@ export async function PATCH(request: Request) {
           status
         `
       )
-      .eq("id", frameworkId)
-      .maybeSingle();
+     .eq("id", frameworkId)
+.eq("school_id", schoolId)
+.maybeSingle();
 
     if (lookupError) {
       console.error(
@@ -517,20 +587,16 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Archive any currently active version
-    // of this same framework.
+    // Archive any currently active framework.
     const { error: archiveError } =
-      await supabase
-        .from("framework_versions")
-        .update({
-          status: "archived",
-        })
-        .eq(
-          "framework_key",
-          framework.framework_key
-        )
-        .eq("status", "active")
-        .neq("id", frameworkId);
+      await authenticatedSupabase
+  .from("framework_versions")
+  .update({
+    status: "archived",
+  })
+  .eq("school_id", schoolId)
+  .eq("status", "active")
+  .neq("id", frameworkId);
 
     if (archiveError) {
       console.error(
@@ -551,7 +617,7 @@ export async function PATCH(request: Request) {
     const {
       data: activatedFramework,
       error: activationError,
-    } = await supabase
+    } = await authenticatedSupabase
       .from("framework_versions")
       .update({
         status: "active",
@@ -559,7 +625,8 @@ export async function PATCH(request: Request) {
           new Date().toISOString(),
       })
       .eq("id", frameworkId)
-      .select(
+.eq("school_id", schoolId)
+.select(
         `
           id,
           framework_key,
@@ -590,6 +657,64 @@ export async function PATCH(request: Request) {
         { status: 500 }
       );
     }
+
+const { error: deactivateAssignmentError } =
+  await authenticatedSupabase
+    .from("school_framework_assignments")
+    .update({
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("school_id", schoolId)
+    .eq("is_active", true);
+
+if (deactivateAssignmentError) {
+  console.error(
+    "Previous school framework assignment deactivation failed:",
+    deactivateAssignmentError
+  );
+
+  return NextResponse.json(
+    {
+      error:
+        deactivateAssignmentError.message ||
+        "The previous school framework assignment could not be deactivated.",
+    },
+    { status: 500 }
+  );
+}
+
+const { error: assignmentError } =
+  await authenticatedSupabase
+    .from("school_framework_assignments")
+    .upsert(
+      {
+        school_id: schoolId,
+        framework_version_id: frameworkId,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict:
+          "school_id,framework_version_id",
+      }
+    );
+
+if (assignmentError) {
+  console.error(
+    "School framework assignment failed:",
+    assignmentError
+  );
+
+  return NextResponse.json(
+    {
+      error:
+        assignmentError.message ||
+        "The active framework could not be assigned to the school.",
+    },
+    { status: 500 }
+  );
+}
 
     return NextResponse.json({
       success: true,

@@ -6,6 +6,8 @@ import {
 } from "@/lib/framework";
 
 import { supabase } from "@/lib/supabase";
+import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -138,13 +140,56 @@ export async function POST(request: Request) {
 const selectedLearnerIds = learners.map(
   (learner) => learner.id
 );
-const { data: activeFrameworkRecord, error: frameworkError } =
-  await supabase
-    .from("framework_versions")
-    .select("definition")
-    .eq("framework_key", frameworkKey)
-    .eq("status", "active")
-    .maybeSingle();
+
+const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return Response.json(
+    {
+      error:
+        "You must be signed in and linked to a school to analyse observations.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
+
+const {
+  data: activeFrameworkAssignment,
+  error: assignmentError,
+} = await authenticatedSupabase
+  .from("school_framework_assignments")
+  .select("framework_version_id")
+  .eq("school_id", schoolId)
+  .eq("is_active", true)
+  .maybeSingle();
+
+if (assignmentError) {
+  console.error(
+    "Active framework assignment lookup failed:",
+    assignmentError
+  );
+}
+
+const {
+  data: activeFrameworkRecord,
+  error: frameworkError,
+} = activeFrameworkAssignment
+  ? await authenticatedSupabase
+      .from("framework_versions")
+      .select("definition")
+      .eq(
+        "id",
+        activeFrameworkAssignment.framework_version_id
+      )
+      .eq("school_id", schoolId)
+      .maybeSingle()
+  : {
+      data: null,
+      error: null,
+    };
 
 if (frameworkError) {
   console.error(
@@ -246,8 +291,24 @@ const frameworkStatementsText =
         area.statements.length > 0
           ? area.statements
               .map(
-                (statement) =>
-                  `  - ${statement.id}: ${statement.text}`
+               (statement) => {
+  const progressionText =
+    Array.isArray(statement.progression) &&
+    statement.progression.length > 0
+      ? statement.progression
+          .map(
+            (progressionLevel) =>
+              `    Level ${progressionLevel.level}${
+                progressionLevel.label
+                  ? ` (${progressionLevel.label})`
+                  : ""
+              }: ${progressionLevel.descriptors.join(" | ")}`
+          )
+          .join("\n")
+      : "    No developmental progression supplied.";
+
+  return `  - ${statement.id}: ${statement.text}\n${progressionText}`;
+}
               )
               .join("\n")
           : "  - No framework statements supplied.";
@@ -360,6 +421,12 @@ Assessment rules:
 - Copy the exact statement text supplied in the framework.
 - Include a short evidence excerpt or precise evidence description from the observation.
 - The evidence must explain why that specific statement was matched.
+- For each matched statement, set developmentalLevel to the progression level whose supplied descriptor best matches the observed evidence.
+- developmentalLevel represents developmental evidence only. Do not change it because of the learner's age, stage, class, observation date, or expected attainment.
+- The same evidence against the same framework progression must produce the same developmentalLevel regardless of which learner it belongs to.
+- Only use whole-number progression levels explicitly supplied for that statement.
+- If no developmental progression is supplied for that statement, set developmentalLevel to null.
+- Never invent, interpolate, average, or use fractional developmental levels.
 - Set objectives to the exact text of the matched framework statements for temporary interface compatibility.
 - Return one learnerAnalyses entry for every selected learner, using that learner's exact supplied ID and name.
 - Assess each learner independently.
@@ -435,13 +502,18 @@ statementMatches: {
       evidence: {
         type: "string",
       },
+      developmentalLevel: {
+  type: ["integer", "null"],
+  minimum: 1,
+},
     },
 
     required: [
-      "statementId",
-      "statementText",
-      "evidence",
-    ],
+  "statementId",
+  "statementText",
+  "evidence",
+  "developmentalLevel",
+],
   },
 },
 
@@ -525,13 +597,18 @@ learnerAnalyses: {
                   evidence: {
                     type: "string",
                   },
+                  developmentalLevel: {
+  type: ["integer", "null"],
+  minimum: 1,
+},
                 },
 
                 required: [
-                  "statementId",
-                  "statementText",
-                  "evidence",
-                ],
+  "statementId",
+  "statementText",
+  "evidence",
+  "developmentalLevel",
+],
               },
             },
 
@@ -638,10 +715,17 @@ const validStatementsById = new Map(
       (statement) =>
         [
           statement.id,
-          {
-            areaName: area.name,
-            statementText: statement.text,
-          },
+         {
+  areaName: area.name,
+  statementText: statement.text,
+  progressionLevels: Array.isArray(
+    statement.progression
+  )
+    ? statement.progression.map(
+        (level) => level.level
+      )
+    : [],
+},
         ] as const
     )
   )
@@ -653,6 +737,7 @@ type ValidatedStatementMatch = {
   statementId: string;
   statementText: string;
   evidence: string;
+  developmentalLevel: number | null;
 };
 
 type ValidatedFrameworkMatch = {
@@ -745,20 +830,36 @@ function validateFrameworkMatches(
                     : "";
 
                 if (
-                  !validStatement ||
-                  validStatement.areaName !==
-                    strand ||
-                  !evidence
-                ) {
-                  return null;
-                }
+  !validStatement ||
+  validStatement.areaName !==
+    strand ||
+  !evidence
+) {
+  return null;
+}
 
-                return {
-                  statementId,
-                  statementText:
-                    validStatement.statementText,
-                  evidence,
-                };
+const requestedDevelopmentalLevel =
+  statementMatch?.developmentalLevel;
+
+const developmentalLevel =
+  requestedDevelopmentalLevel === null
+    ? null
+    : Number.isInteger(
+        requestedDevelopmentalLevel
+      ) &&
+      validStatement.progressionLevels.includes(
+        requestedDevelopmentalLevel
+      )
+    ? requestedDevelopmentalLevel
+    : null;
+
+return {
+  statementId,
+  statementText:
+    validStatement.statementText,
+  evidence,
+  developmentalLevel,
+};
               }
             )
             .filter(
