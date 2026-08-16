@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 function normalizeObservationText(value: unknown) {
   if (typeof value !== "string") {
@@ -77,6 +79,20 @@ function learnerIdsMatch(
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to save observations.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
 
     const observationText =
       typeof body.observation === "string"
@@ -142,7 +158,7 @@ const normalizedLearnerIds =
       const {
         data: possibleDuplicates,
         error: duplicateCheckError,
-      } = await supabase
+      } = await authenticatedSupabase
         .from("observations")
         .select(
           `
@@ -153,6 +169,7 @@ const normalizedLearnerIds =
             created_at
           `
         )
+        .eq("school_id", schoolId)
        .overlaps(
   "learner_ids",
   normalizedLearnerIds
@@ -264,6 +281,7 @@ const rowsToInsert =
           ) ?? {};
 
         return {
+          school_id: schoolId,
   ...observationToSave,
 
   observation:
@@ -308,16 +326,17 @@ const rowsToInsert =
               : null,
         };
       })
-    : [
-        {
-          ...observationToSave,
-          observation: observationText,
-          observation_date: observationDate,
-          learner_ids: normalizedLearnerIds,
-        },
-      ];
+   : [
+    {
+      school_id: schoolId,
+      ...observationToSave,
+      observation: observationText,
+      observation_date: observationDate,
+      learner_ids: normalizedLearnerIds,
+    },
+  ];
 
-const { data, error } = await supabase
+const { data, error } = await authenticatedSupabase
   .from("observations")
   .insert(rowsToInsert)
   .select();
@@ -354,6 +373,20 @@ const { data, error } = await supabase
 // --------------------
 export async function GET(request: Request) {
   try {
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to view observations.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
     const { searchParams } = new URL(
       request.url
     );
@@ -367,11 +400,12 @@ export async function GET(request: Request) {
       });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await authenticatedSupabase
       .from("observations")
       .select("*")
-      .contains("learner_ids", [learner])
-      .order("observation_date", {
+     .eq("school_id", schoolId)
+.contains("learner_ids", [learner])
+.order("observation_date", {
         ascending: false,
       })
       .order("created_at", {

@@ -2626,7 +2626,38 @@ async function openJournal(name: string) {
     </p>
 
   </div>
-
+<form
+  action="/auth/signout"
+  method="post"
+  className="fixed right-3 top-3 z-50"
+>
+  <button
+    type="submit"
+    aria-label="Sign out"
+    title="Sign out"
+   className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+  >
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 8.25 18.75 12 15 15.75M18.75 12H9"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 5.25V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v15A1.5 1.5 0 0 0 4.5 21h6a1.5 1.5 0 0 0 1.5-1.5v-.75"
+      />
+    </svg>
+  </button>
+</form>
   {/* RIGHT SIDE */}
 
   <div className="flex items-center gap-3">
@@ -5697,7 +5728,7 @@ setFrameworkMappingError("");
     onClick={() => {
       setFrameworkConfirm({
         title: "Activate framework?",
-        message: `This will make "${savedFramework.name}" version ${savedFramework.version} the active framework. Any currently active version of this same framework will be archived.`,
+        message: `This will make "${savedFramework.name}" version ${savedFramework.version} the active framework. Any currently active framework will be archived.`,
         confirmLabel: "Activate framework",
         onConfirm: async () => {
           try {

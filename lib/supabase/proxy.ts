@@ -51,7 +51,32 @@ export async function updateSession(
     }
   );
 
-  await supabase.auth.getClaims();
+const {
+  data: claimsData,
+} = await supabase.auth.getClaims();
 
-  return supabaseResponse;
+const userId = claimsData?.claims?.sub;
+
+const isLoginPage =
+  request.nextUrl.pathname === "/login";
+
+const isApiRoute =
+  request.nextUrl.pathname.startsWith("/api/");
+
+if (
+  !userId &&
+  !isLoginPage &&
+  !isApiRoute
+) {
+  const redirectUrl =
+    request.nextUrl.clone();
+
+  redirectUrl.pathname = "/login";
+
+  return NextResponse.redirect(
+    redirectUrl
+  );
+}
+
+return supabaseResponse;
 }

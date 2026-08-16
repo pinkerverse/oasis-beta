@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +51,21 @@ function normaliseDateOfBirth(value: unknown) {
 // LOAD ACTIVE LEARNERS
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to view learners.",
+    },
+    { status: 401 }
+  );
+}
+
+const authenticatedSupabase =
+  await createServerSupabaseClient();
+    const { data, error } = await authenticatedSupabase
       .from("learners")
       .select(
         `
@@ -63,8 +79,9 @@ export async function GET() {
           created_at
         `
       )
-      .eq("active", true)
-      .order("last_name", { ascending: true })
+     .eq("school_id", schoolId)
+.eq("active", true)
+.order("last_name", { ascending: true })
       .order("first_name", { ascending: true });
 
     if (error) {
@@ -105,6 +122,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to manage learners.",
+    },
+    { status: 401 }
+  );
+}
 
     if (!Array.isArray(body.learners)) {
       return NextResponse.json(
@@ -142,6 +170,7 @@ const rows = learners.map((learner) => {
       : "";
 
   return {
+    school_id: schoolId,
     external_id:
       suppliedExternalId ||
       `IMPORT-${crypto.randomUUID()}`,
@@ -159,8 +188,8 @@ const rows = learners.map((learner) => {
     const { data, error } = await supabaseAdmin
       .from("learners")
       .upsert(rows, {
-        onConflict: "external_id",
-      })
+  onConflict: "school_id,external_id",
+})
       .select();
 
     if (error) {
@@ -192,6 +221,17 @@ const rows = learners.map((learner) => {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
+    const schoolId = await getCurrentSchoolId();
+
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to manage learners.",
+    },
+    { status: 401 }
+  );
+}
 
     const id =
       typeof body.id === "string"
@@ -248,8 +288,9 @@ export async function PATCH(request: Request) {
           class_name: className || null,
           date_of_birth: dateOfBirth,
         })
-        .eq("id", id)
-        .select(
+       .eq("id", id)
+.eq("school_id", schoolId)
+.select(
           `
             id,
             external_id,
@@ -305,7 +346,17 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const body = await request.json();
+const schoolId = await getCurrentSchoolId();
 
+if (!schoolId) {
+  return NextResponse.json(
+    {
+      error:
+        "You must be signed in and linked to a school to manage learners.",
+    },
+    { status: 401 }
+  );
+}
     const id =
       typeof body.id === "string"
         ? body.id.trim()
@@ -323,7 +374,8 @@ export async function DELETE(request: Request) {
       .update({
         active: false,
       })
-      .eq("id", id);
+      .eq("id", id)
+.eq("school_id", schoolId);
 
     if (error) {
       return NextResponse.json(
