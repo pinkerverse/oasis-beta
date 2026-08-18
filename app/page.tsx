@@ -32,7 +32,7 @@ statementMatches: {
   evidence: string;
   developmentalLevel: number | null;
 }[];
-
+assessmentStatus: string;
   suggestedLevel: string;
   confidence: number;
 }[];
@@ -53,8 +53,9 @@ statementMatches: {
   developmentalLevel: number | null;
 }[];
 
-    suggestedLevel: string;
-    confidence: number;
+assessmentStatus: string;
+suggestedLevel: string;
+confidence: number;
   }[];
 
   nextSteps: string[];
@@ -528,8 +529,9 @@ function handleAddManualLearningArea() {
         developmentalLevel: null,
       })
     ),
-    suggestedLevel: manualAreaLevel,
-    confidence: 100,
+assessmentStatus: manualAreaLevel,
+suggestedLevel: manualAreaLevel,
+confidence: 100,
   };
 
   setAnalysis((current) => {
@@ -903,6 +905,167 @@ return Array.from(
 );
 })();
 
+const liveSnapshotData = (() => {
+  const orderedLevels = [
+    ...activeFramework.assessmentLevels,
+  ].sort((a, b) => a.order - b.order);
+
+  function getSnapshotScore(levelLabel: string) {
+    const exactLevelIndex =
+      orderedLevels.findIndex(
+        (level) =>
+          level.label === levelLabel
+      );
+
+    if (exactLevelIndex >= 0) {
+      return exactLevelIndex + 1;
+    }
+
+    const normalized =
+      levelLabel.trim().toLowerCase();
+
+    if (
+      normalized === "below" ||
+      normalized === "below expectation"
+    ) {
+      return 1;
+    }
+
+    if (
+      normalized === "developing" ||
+      normalized === "emerging" ||
+      normalized === "approaching"
+    ) {
+      return 2;
+    }
+
+    if (
+      normalized === "secure" ||
+      normalized === "meeting" ||
+      normalized === "meeting expectation" ||
+      normalized === "at expectation"
+    ) {
+      return 3;
+    }
+
+    if (
+      normalized === "exceeding" ||
+      normalized === "above expectation"
+    ) {
+      return 4;
+    }
+
+    return 0;
+  }
+
+  const historyByArea = new Map<
+    string,
+    {
+      area: string;
+      baseline: string;
+      baselineScore: number;
+      current: string;
+      currentScore: number;
+    }
+  >();
+
+  const oldestFirst = [...learnerObservations].sort(
+    (first, second) =>
+      new Date(
+        first.observation_date ||
+          first.created_at
+      ).getTime() -
+      new Date(
+        second.observation_date ||
+          second.created_at
+      ).getTime()
+  );
+
+  for (const entry of oldestFirst) {
+    const frameworkMatches = Array.isArray(
+      entry.framework_matches
+    )
+      ? entry.framework_matches
+      : [];
+
+    for (const match of frameworkMatches) {
+      const area =
+        typeof match?.strand === "string"
+          ? match.strand.trim()
+          : "";
+
+      const levelLabel =
+        match?.finalLevel ||
+        match?.teacherOverride ||
+        match?.assessmentStatus ||
+        match?.suggestedLevel ||
+        "";
+
+      if (
+        !area ||
+        typeof levelLabel !== "string" ||
+        !levelLabel.trim()
+      ) {
+        continue;
+      }
+
+      const cleanLevel = levelLabel.trim();
+      const score =
+        getSnapshotScore(cleanLevel);
+
+      if (score === 0) {
+        continue;
+      }
+
+      const existing =
+        historyByArea.get(area);
+
+      if (!existing) {
+        historyByArea.set(area, {
+          area,
+          baseline: cleanLevel,
+          baselineScore: score,
+          current: cleanLevel,
+          currentScore: score,
+        });
+
+        continue;
+      }
+
+      existing.current = cleanLevel;
+      existing.currentScore = score;
+    }
+  }
+
+  const frameworkAreaOrder = new Map(
+    activeFramework.areaDefinitions.map(
+      (area, index) => [
+        area.name,
+        index,
+      ]
+    )
+  );
+
+  return Array.from(
+    historyByArea.values()
+  )
+    .map((item) => ({
+      area: item.area,
+      baseline: item.baseline,
+      current: item.current,
+      change:
+        item.currentScore -
+        item.baselineScore,
+    }))
+    .sort(
+      (first, second) =>
+        (frameworkAreaOrder.get(first.area) ??
+          Number.MAX_SAFE_INTEGER) -
+        (frameworkAreaOrder.get(second.area) ??
+          Number.MAX_SAFE_INTEGER)
+    );
+})();
+
 type LiveJourneyPoint = {
   id: string;
   label: string;
@@ -966,10 +1129,35 @@ const result: Record<string, LiveJourneyPoint[]> = {};
         match?.suggestedLevel ||
         "";
 
-      const level =
-        typeof levelLabel === "string"
-          ? levelNumbers[levelLabel.trim()] || 0
-          : 0;
+     const normalizedLevelLabel =
+  typeof levelLabel === "string"
+    ? levelLabel.trim()
+    : "";
+
+const normalizedLevelKey =
+  normalizedLevelLabel.toLowerCase();
+
+const legacyLevel =
+  normalizedLevelKey === "below" ||
+  normalizedLevelKey === "below expectation"
+    ? 1
+    : normalizedLevelKey === "developing" ||
+      normalizedLevelKey === "emerging" ||
+      normalizedLevelKey === "approaching"
+    ? 2
+    : normalizedLevelKey === "secure" ||
+      normalizedLevelKey === "meeting" ||
+      normalizedLevelKey === "meeting expectation" ||
+      normalizedLevelKey === "at expectation"
+    ? 3
+    : normalizedLevelKey === "exceeding" ||
+      normalizedLevelKey === "above expectation"
+    ? 4
+    : 0;
+
+const level =
+  levelNumbers[normalizedLevelLabel] ||
+  legacyLevel;
 
       if (!area || level === 0) {
         continue;
@@ -2394,14 +2582,15 @@ const learnerEntries = analysis.learnerAnalyses.map(
           objectives: match.objectives,
           statementMatches: match.statementMatches,
 
+          assessmentStatus: match.assessmentStatus,
           suggestedLevel: match.suggestedLevel,
           confidence: match.confidence,
 
           teacherOverride,
 
-          finalLevel:
-            teacherOverride ||
-            match.suggestedLevel,
+         finalLevel:
+  teacherOverride ||
+  match.assessmentStatus,
 
           overrideReason: teacherOverride
             ? areaOverrideReasons[
@@ -3040,7 +3229,7 @@ async function openJournal(name: string) {
 
 
                  <div className="text-right">
-  <p className="text-sm text-slate-500">Assessment Status</p>
+  <p className="text-sm text-slate-500">Analysis Status</p>
 
   <p className="font-semibold text-emerald-600">Complete</p>
 
@@ -3173,9 +3362,9 @@ async function openJournal(name: string) {
     const overrideKey = `${
   displayedLearnerAnalysis?.learnerId ?? "unknown"
 }::${match.strand}`;
-     const currentLevel =
+   const currentLevel =
   areaLevelOverrides[overrideKey] ||
-  match.suggestedLevel;
+  match.assessmentStatus;
 
 const hasOverride =
   Boolean(areaLevelOverrides[overrideKey]);
@@ -3199,9 +3388,15 @@ const hasOverride =
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm">
-                {currentLevel}
-              </span>
+           <div className="text-right">
+  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    Assessment status
+  </p>
+
+  <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm">
+    {currentLevel}
+  </span>
+</div>
 
               <button
                 type="button"
@@ -3793,7 +3988,7 @@ const showDateLabel =
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
 
-        {snapshotData.map((item) => (
+        {liveSnapshotData.map((item) => (
 
           <div
             key={item.area}
@@ -5895,23 +6090,32 @@ setFrameworkMappingError("");
 
 <div className="mt-4">
   <div className="flex flex-wrap items-center gap-3">
-    <label className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-      Choose file
+<button
+  type="button"
+  onClick={() => {
+    document
+      .getElementById("framework-file-upload")
+      ?.click();
+  }}
+  className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+>
+  Choose file
+</button>
 
-      <input
-        type="file"
-        accept=".pdf,.docx,.txt"
-        className="hidden"
-        onChange={(event) => {
-          const selectedFile =
-            event.target.files?.[0] ?? null;
+<input
+  id="framework-file-upload"
+  type="file"
+  accept=".pdf,.docx,.txt"
+  className="hidden"
+  onChange={(event) => {
+    const selectedFile =
+      event.target.files?.[0] ?? null;
 
-          setFrameworkFile(selectedFile);
-setFrameworkExtraction(null);
-setFrameworkMappingError("");
-        }}
-      />
-    </label>
+    setFrameworkFile(selectedFile);
+    setFrameworkExtraction(null);
+    setFrameworkMappingError("");
+  }}
+/>
 
     <span className="text-sm text-slate-500">
       or drag and drop a file here

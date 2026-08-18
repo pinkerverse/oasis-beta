@@ -413,6 +413,10 @@ Assessment rules:
 - Assess every matched learning area independently.
 - Different learning areas may receive different levels.
 - Suggested levels must use one of the allowed assessment-level labels supplied above.
+- assessmentStatus is the contextual assessment judgement for the matched learning area and must use one of the allowed assessment-level labels supplied above.
+- assessmentStatus must consider the learner's developmental evidence in context, including the framework's expectations where they are explicitly available.
+- Do not use assessmentStatus to change developmentalLevel. developmentalLevel describes the evidence itself; assessmentStatus interprets that evidence against expectations.
+- For temporary interface compatibility, set suggestedLevel to exactly the same value as assessmentStatus.
 - Base each suggested level on the relevant level description supplied above.
 - Treat each judgement as specific to this observation, not as the learner's overall attainment.
 - Confidence must be a whole number from 0 to 100 and should reflect the strength and clarity of evidence in this observation.
@@ -517,6 +521,11 @@ statementMatches: {
   },
 },
 
+assessmentStatus: {
+  type: "string",
+  enum: assessmentLevelLabels,
+},
+
      suggestedLevel: {
   type: "string",
   enum: assessmentLevelLabels,
@@ -533,6 +542,7 @@ statementMatches: {
   "strand",
   "objectives",
   "statementMatches",
+  "assessmentStatus",
   "suggestedLevel",
   "confidence",
 ],
@@ -611,7 +621,10 @@ learnerAnalyses: {
 ],
               },
             },
-
+assessmentStatus: {
+  type: "string",
+  enum: assessmentLevelLabels,
+},
             suggestedLevel: {
               type: "string",
               enum: assessmentLevelLabels,
@@ -628,6 +641,7 @@ learnerAnalyses: {
             "strand",
             "objectives",
             "statementMatches",
+            "assessmentStatus",
             "suggestedLevel",
             "confidence",
           ],
@@ -745,6 +759,7 @@ type ValidatedFrameworkMatch = {
   source: "ai";
   objectives: string[];
   statementMatches: ValidatedStatementMatch[];
+  assessmentStatus: string;
   suggestedLevel: string;
   confidence: number;
 };
@@ -792,17 +807,19 @@ function validateFrameworkMatches(
       continue;
     }
 
-    const suggestedLevel =
-      typeof match.suggestedLevel === "string" &&
-      assessmentLevelLabels.includes(
-        match.suggestedLevel
-      )
-        ? match.suggestedLevel
-        : "";
+const assessmentStatus =
+  typeof match.assessmentStatus === "string" &&
+  assessmentLevelLabels.includes(
+    match.assessmentStatus
+  )
+    ? match.assessmentStatus
+    : "";
 
-    if (!suggestedLevel) {
-      continue;
-    }
+if (!assessmentStatus) {
+  continue;
+}
+
+const suggestedLevel = assessmentStatus;
 
     const validatedStatementMatches:
       ValidatedStatementMatch[] =
@@ -910,6 +927,7 @@ return {
         ),
       statementMatches:
         uniqueStatementMatches,
+        assessmentStatus: suggestedLevel,
       suggestedLevel,
       confidence,
     };
@@ -950,6 +968,8 @@ return {
     matchesByStrand.set(strand, {
       ...existingMatch,
       source: "ai",
+      assessmentStatus:
+  strongerMatch.assessmentStatus,
       suggestedLevel:
         strongerMatch.suggestedLevel,
       confidence: Math.max(
