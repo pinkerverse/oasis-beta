@@ -1,10 +1,13 @@
 "use client";
+import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { useEffect, useState, useRef } from "react";
 import {
   frameworks,
   type FrameworkDefinition,
 } from "@/lib/framework";
+
+
 
 type ImportedLearnerPreview = {
   rowId: string;
@@ -278,6 +281,10 @@ const classInsights = {
 };
 
 export default function Home() {
+    const router = useRouter();
+
+  const [checkingOnboarding, setCheckingOnboarding] =
+    useState(true);
   const [savedToJournal, setSavedToJournal] = useState(false);
 
   const [
@@ -754,6 +761,34 @@ const displayedLearnerAnalysis =
   null;
   const [selectedJourney, setSelectedJourney] = useState("Overall");
   const [snapshotFrom, setSnapshotFrom] = useState("Baseline");
+  const [schoolCalendar, setSchoolCalendar] = useState<{
+  academicYear: {
+    id: string;
+    name: string;
+    start_date: string;
+    end_date: string;
+  } | null;
+  terms: {
+    id: string;
+    name: string;
+    start_date: string;
+    end_date: string;
+    sort_order: number;
+  }[];
+}>({
+  academicYear: null,
+  terms: [],
+});
+const [learnerBaseline, setLearnerBaseline] =
+  useState<{
+    id: string;
+    learner_id: string;
+    baseline_date: string;
+    assessment_data: {
+      area: string;
+      level: string;
+    }[];
+  } | null>(null);
 const [snapshotTo, setSnapshotTo] = useState("Current");
 const [assessmentScale, setAssessmentScale] = useState(
   "Below / Developing / Secure / Exceeding"
@@ -905,7 +940,42 @@ return Array.from(
 );
 })();
 
+function getSnapshotCutoffDate(
+  selection: string
+) {
+  if (selection === "Current") {
+    return new Date();
+  }
+
+  if (
+    selection === "End of Year" &&
+    schoolCalendar.academicYear
+  ) {
+    return new Date(
+      `${schoolCalendar.academicYear.end_date}T23:59:59`
+    );
+  }
+
+  const selectedTerm =
+    schoolCalendar.terms.find(
+      (term) => term.id === selection
+    );
+
+  if (selectedTerm) {
+    return new Date(
+      `${selectedTerm.end_date}T23:59:59`
+    );
+  }
+
+  return null;
+}
+
 const liveSnapshotData = (() => {
+  const snapshotFromCutoff =
+  getSnapshotCutoffDate(snapshotFrom);
+
+const snapshotToCutoff =
+  getSnapshotCutoffDate(snapshotTo);
   const orderedLevels = [
     ...activeFramework.assessmentLevels,
   ].sort((a, b) => a.order - b.order);
@@ -969,7 +1039,49 @@ const liveSnapshotData = (() => {
     }
   >();
 
-  const oldestFirst = [...learnerObservations].sort(
+if (
+  snapshotFrom === "Baseline" &&
+  learnerBaseline
+) {
+  for (const item of learnerBaseline.assessment_data) {
+    const area = item.area?.trim();
+    const levelLabel = item.level?.trim();
+
+    if (!area || !levelLabel) {
+      continue;
+    }
+
+    const score =
+      getSnapshotScore(levelLabel);
+
+    if (score === 0) {
+      continue;
+    }
+
+    historyByArea.set(area, {
+      area,
+      baseline: levelLabel,
+      baselineScore: score,
+      current: levelLabel,
+      currentScore: score,
+    });
+  }
+}
+
+const oldestFirst = [...learnerObservations]
+  .filter((entry) => {
+    if (!snapshotToCutoff) {
+      return true;
+    }
+
+    const entryDate = new Date(
+      entry.observation_date ||
+        entry.created_at
+    );
+
+    return entryDate <= snapshotToCutoff;
+  })
+  .sort(
     (first, second) =>
       new Date(
         first.observation_date ||
@@ -981,8 +1093,18 @@ const liveSnapshotData = (() => {
       ).getTime()
   );
 
-  for (const entry of oldestFirst) {
-    const frameworkMatches = Array.isArray(
+for (const entry of oldestFirst) {
+  const entryDate = new Date(
+    entry.observation_date ||
+      entry.created_at
+  );
+
+const isAtOrBeforeFromCutoff =
+  !snapshotFromCutoff ||
+  entryDate <= snapshotFromCutoff;
+
+  const frameworkMatches = Array.isArray(
+    
       entry.framework_matches
     )
       ? entry.framework_matches
@@ -1017,23 +1139,38 @@ const liveSnapshotData = (() => {
         continue;
       }
 
-      const existing =
-        historyByArea.get(area);
+const existing =
+  historyByArea.get(area);
 
-      if (!existing) {
-        historyByArea.set(area, {
-          area,
-          baseline: cleanLevel,
-          baselineScore: score,
-          current: cleanLevel,
-          currentScore: score,
-        });
+if (!existing) {
+  if (
+    snapshotFrom !== "Baseline" &&
+    !isAtOrBeforeFromCutoff
+  ) {
+    continue;
+  }
 
-        continue;
-      }
+  historyByArea.set(area, {
+    area,
+    baseline: cleanLevel,
+    baselineScore: score,
+    current: cleanLevel,
+    currentScore: score,
+  });
 
-      existing.current = cleanLevel;
-      existing.currentScore = score;
+  continue;
+}
+
+if (
+  snapshotFrom !== "Baseline" &&
+  isAtOrBeforeFromCutoff
+) {
+  existing.baseline = cleanLevel;
+  existing.baselineScore = score;
+}
+
+existing.current = cleanLevel;
+existing.currentScore = score;
     }
   }
 
@@ -1249,6 +1386,96 @@ const [customLevels, setCustomLevels] = useState([
   "Level 3",
 ]);
 const [showTodaysFocus, setShowTodaysFocus] = useState(false);
+
+  useEffect(() => {
+    async function checkOnboarding() {
+      try {
+        const response = await fetch(
+          "/api/onboarding/status",
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result = await response
+          .json()
+          .catch(() => ({}));
+
+        if (!response.ok) {
+          console.error(
+            "Onboarding status check failed:",
+            result.error
+          );
+
+          return;
+        }
+
+        if (!result.completed) {
+          router.replace("/onboarding");
+          return;
+        }
+      } catch (error) {
+        console.error(
+          "Onboarding status check failed:",
+          error
+        );
+      } finally {
+        setCheckingOnboarding(false);
+      }
+    }
+
+    checkOnboarding();
+  }, [router]);
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadLearnerBaseline() {
+    if (selectedChildren.length !== 1) {
+      setLearnerBaseline(null);
+      return;
+    }
+
+    try {
+      const learnerId = selectedChildren[0];
+
+      const response = await fetch(
+        `/api/baselines?learnerId=${learnerId}`,
+        {
+          cache: "no-store",
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "Failed to load learner baseline."
+        );
+      }
+
+      if (!cancelled) {
+        setLearnerBaseline(
+          result.baseline ?? null
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load learner baseline:",
+        error
+      );
+
+      if (!cancelled) {
+        setLearnerBaseline(null);
+      }
+    }
+  }
+
+  return () => {
+    cancelled = true;
+  };
+}, [selectedChildren]);
 
     const showLearnerOverview = selectedChildren.length === 1;
 const [selectedAreas, setSelectedAreas] = useState([
@@ -2540,6 +2767,49 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
+  let cancelled = false;
+
+  async function loadSchoolCalendar() {
+    try {
+      const response = await fetch(
+        "/api/school-calendar",
+        {
+          cache: "no-store",
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "Failed to load school calendar."
+        );
+      }
+
+      if (!cancelled) {
+        setSchoolCalendar({
+          academicYear:
+            result.academicYear ?? null,
+          terms: result.terms ?? [],
+        });
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load school calendar:",
+        error
+      );
+    }
+  }
+
+  loadSchoolCalendar();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+useEffect(() => {
   async function loadLearnerObservations() {
     if (selectedChildren.length !== 1) {
       setLearnerObservations([]);
@@ -2786,7 +3056,15 @@ async function openJournal(name: string) {
 
 {/* HEADER */}
 
-
+if (checkingOnboarding) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50">
+      <p className="text-sm text-slate-500">
+        Loading OASIS…
+      </p>
+    </main>
+  );
+}
 
 
   return (
@@ -3961,10 +4239,27 @@ const showDateLabel =
             onChange={(e) => setSnapshotFrom(e.target.value)}
             className="rounded-xl border border-slate-300 px-3 py-2 text-black"
           >
-            <option>Baseline</option>
-            <option>Term 1</option>
-            <option>Term 2</option>
-            <option>Current</option>
+            <option value="Baseline">
+  Baseline
+</option>
+
+{schoolCalendar.terms.map((term) => (
+  <option
+  key={term.id}
+  value={term.id}
+  disabled={
+    new Date(
+      `${term.end_date}T23:59:59`
+    ) > new Date()
+  }
+>
+    {term.name}
+  </option>
+))}
+
+<option value="Current">
+  Current
+</option>
           </select>
 
           <span className="flex items-center text-slate-500">
@@ -3976,10 +4271,27 @@ const showDateLabel =
             onChange={(e) => setSnapshotTo(e.target.value)}
             className="rounded-xl border border-slate-300 px-3 py-2 text-black"
           >
-            <option>Current</option>
-            <option>Term 1</option>
-            <option>Term 2</option>
-            <option>End of Year</option>
+          <option value="Current">
+  Current
+</option>
+
+{schoolCalendar.terms.map((term) => (
+<option
+  key={term.id}
+  value={term.id}
+  disabled={
+    new Date(
+      `${term.end_date}T23:59:59`
+    ) > new Date()
+  }
+>
+    {term.name}
+  </option>
+))}
+
+<option value="End of Year">
+  End of Year
+</option>
           </select>
 
         </div>
