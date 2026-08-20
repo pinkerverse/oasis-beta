@@ -1305,11 +1305,15 @@ historyByArea.set(area, {
       const existing =
         historyByArea.get(area);
 
-    if (!existing) {
-  if (
-    snapshotFrom !== "Baseline" &&
-    !isAtOrBeforeFromCutoff
-  ) {
+if (!existing) {
+  // Never invent a baseline from later observation evidence.
+  if (snapshotFrom === "Baseline") {
+    continue;
+  }
+
+  // For term-based comparisons, the area must already
+  // have evidence by the selected starting checkpoint.
+  if (!isAtOrBeforeFromCutoff) {
     continue;
   }
 
@@ -4932,100 +4936,94 @@ const showDateLabel =
         </div>
       </div>
 
-    {liveSnapshotData.length === 0 ? (
-  <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-center">
-    <p className="font-medium text-slate-700">
-      No developmental evidence available for this comparison.
-    </p>
+<div className="mt-8 grid gap-4 md:grid-cols-2">
+  {liveSnapshotData.length === 0 && (
+    <div className="rounded-2xl bg-slate-50 p-6 text-center md:col-span-2">
+      <p className="font-medium text-slate-700">
+        No developmental evidence available for this comparison.
+      </p>
 
-    <p className="mt-1 text-sm text-slate-500">
-      Add baseline data or observation evidence to build the snapshot.
-    </p>
-  </div>
-) : (
-  <div className="mt-8 grid gap-4 md:grid-cols-2">
-    {liveSnapshotData.map((item) => (
+      <p className="mt-1 text-sm text-slate-500">
+        Add baseline data or observation evidence to build the snapshot.
+      </p>
+    </div>
+  )}
+
+  {liveSnapshotData.map((item) => (
+    <div
+      key={item.area}
+      className="rounded-2xl bg-slate-50 p-4"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">
+            {item.area}
+          </p>
+
+          <p className="mt-1 text-xs text-slate-500">
+            {item.baseline} → {item.current}
+          </p>
+        </div>
+
+        <div>
+          {!item.hasEvidenceAfterFrom ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+              No new evidence
+            </span>
+          ) : item.change > 0 ? (
+            <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+              ▲ +{item.change}
+            </span>
+          ) : item.change < 0 ? (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
+              ▼ {item.change}
+            </span>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+              Same developmental level
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="relative h-2 rounded-full bg-slate-200">
+          {/* Starting developmental level */}
           <div
-            key={item.area}
-            className="rounded-2xl bg-slate-50 p-4"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {item.area}
-                </p>
+            className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow"
+            style={{
+              left: `${Math.min(
+                98,
+                Math.max(
+                  2,
+                  ((item.baselineScore - 1) /
+                    Math.max(item.scaleMax - 1, 1)) *
+                    100
+                )
+              )}%`,
+            }}
+          />
 
-                <p className="mt-1 text-xs text-slate-500">
-                  {item.baseline} → {item.current}
-                </p>
-              </div>
-
-              <div>
-               {!item.hasEvidenceAfterFrom ? (
-  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-    No new evidence
-  </span>
-) : item.change > 0 ? (
-  <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-    ▲ +{item.change}
-  </span>
-) : item.change < 0 ? (
-  <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
-    ▼ {item.change}
-  </span>
-) : (
-  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-    Same developmental level
-  </span>
-)}
-              </div>
-            </div>
-
-           <div className="mt-4">
-  <div className="relative h-2 rounded-full bg-slate-200">
-    {/* Starting developmental level */}
-    <div
-      className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow"
-      style={{
-        left: `${Math.min(
-          98,
-          Math.max(
-            2,
-            ((item.baselineScore - 1) /
-              Math.max(
-                item.scaleMax - 1,
-                1
-              )) *
-              100
-          )
-        )}%`,
-      }}
-    />
-
-    {/* Ending developmental level */}
-    <div
-      className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-500 shadow"
-      style={{
-        left: `${Math.min(
-          98,
-          Math.max(
-            2,
-            ((item.currentScore - 1) /
-              Math.max(
-                item.scaleMax - 1,
-                1
-              )) *
-              100
-          )
-        )}%`,
-      }}
-    />
-  </div>
+          {/* Ending developmental level */}
+          <div
+            className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-500 shadow"
+            style={{
+              left: `${Math.min(
+                98,
+                Math.max(
+                  2,
+                  ((item.currentScore - 1) /
+                    Math.max(item.scaleMax - 1, 1)) *
+                    100
+                )
+              )}%`,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  ))}
 </div>
-          </div>
-           ))}
-  </div>
-)}
     </div>
   </>
 )}
