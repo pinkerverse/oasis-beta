@@ -321,6 +321,14 @@ const [journalEntries, setJournalEntries] = useState<any[]>([]);
 );
   const [evidenceImage, setEvidenceImage] = useState<File | null>(null);
   const [showBaselineModal, setShowBaselineModal] = useState(false);
+  const [baselineImporting, setBaselineImporting] =
+  useState(false);
+
+const [baselineImportError, setBaselineImportError] =
+  useState("");
+
+const [baselineImportMessage, setBaselineImportMessage] =
+  useState("");
   const [showAddLearnerModal, setShowAddLearnerModal] = useState(false);
   const [
   showMissingDobModal,
@@ -726,6 +734,12 @@ const [
   }[]
 >([]);
 
+const activeFrameworkRecord =
+  savedFrameworks.find(
+    (framework) =>
+      framework.status === "active"
+  ) ?? null;
+
 const [
   frameworkConfirm,
   setFrameworkConfirm,
@@ -783,11 +797,15 @@ const [learnerBaseline, setLearnerBaseline] =
   useState<{
     id: string;
     learner_id: string;
+    framework_version_id: string | null;
     baseline_date: string;
-    assessment_data: {
-      area: string;
-      level: string;
-    }[];
+   assessment_data: {
+  area: string;
+  level: string;
+  levelId?: string;
+  levelOrder?: number;
+  levelType?: string;
+}[];
   } | null>(null);
 const [snapshotTo, setSnapshotTo] = useState("Current");
 const [assessmentScale, setAssessmentScale] = useState(
@@ -943,6 +961,45 @@ return Array.from(
 function getSnapshotCutoffDate(
   selection: string
 ) {
+  if (selection === "Baseline") {
+    if (!learnerBaseline?.baseline_date) {
+      return null;
+    }
+
+    return new Date(
+      `${learnerBaseline.baseline_date}T23:59:59`
+    );
+  }
+
+if (selection === "First Evidence") {
+  const evidenceDates =
+    learnerObservations
+      .map((entry) =>
+        new Date(
+          entry.observation_date ||
+            entry.created_at
+        )
+      )
+      .filter(
+        (date) =>
+          !Number.isNaN(
+            date.getTime()
+          )
+      );
+
+  if (evidenceDates.length === 0) {
+    return null;
+  }
+
+  return new Date(
+    Math.min(
+      ...evidenceDates.map(
+        (date) => date.getTime()
+      )
+    )
+  );
+}
+
   if (selection === "Current") {
     return new Date();
   }
@@ -970,179 +1027,285 @@ function getSnapshotCutoffDate(
   return null;
 }
 
+function isSnapshotToOptionValid(
+  selection: string
+) {
+  const fromDate =
+    getSnapshotCutoffDate(snapshotFrom);
+
+  const toDate =
+    getSnapshotCutoffDate(selection);
+
+  if (!toDate) {
+    return false;
+  }
+
+  if (!fromDate) {
+    return true;
+  }
+
+  return (
+    toDate.getTime() >=
+    fromDate.getTime()
+  );
+}
 const liveSnapshotData = (() => {
   const snapshotFromCutoff =
-  getSnapshotCutoffDate(snapshotFrom);
-
-const snapshotToCutoff =
-  getSnapshotCutoffDate(snapshotTo);
-  const orderedLevels = [
-    ...activeFramework.assessmentLevels,
-  ].sort((a, b) => a.order - b.order);
-
-  function getSnapshotScore(levelLabel: string) {
-    const exactLevelIndex =
-      orderedLevels.findIndex(
-        (level) =>
-          level.label === levelLabel
-      );
-
-    if (exactLevelIndex >= 0) {
-      return exactLevelIndex + 1;
-    }
-
-    const normalized =
-      levelLabel.trim().toLowerCase();
-
-    if (
-      normalized === "below" ||
-      normalized === "below expectation"
-    ) {
-      return 1;
-    }
-
-    if (
-      normalized === "developing" ||
-      normalized === "emerging" ||
-      normalized === "approaching"
-    ) {
-      return 2;
-    }
-
-    if (
-      normalized === "secure" ||
-      normalized === "meeting" ||
-      normalized === "meeting expectation" ||
-      normalized === "at expectation"
-    ) {
-      return 3;
-    }
-
-    if (
-      normalized === "exceeding" ||
-      normalized === "above expectation"
-    ) {
-      return 4;
-    }
-
-    return 0;
-  }
-
-  const historyByArea = new Map<
-    string,
-    {
-      area: string;
-      baseline: string;
-      baselineScore: number;
-      current: string;
-      currentScore: number;
-    }
-  >();
-
-if (
-  snapshotFrom === "Baseline" &&
-  learnerBaseline
+    getSnapshotCutoffDate(snapshotFrom);
+function getFrameworkDevelopmentalLabel(
+  areaName: string,
+  level: number,
+  fallbackLabel?: string,
+  frameworkVersionId?: string | null
 ) {
-  for (const item of learnerBaseline.assessment_data) {
-    const area = item.area?.trim();
-    const levelLabel = item.level?.trim();
+  const historicalFramework =
+    frameworkVersionId
+      ? savedFrameworks.find(
+          (framework) =>
+            framework.id === frameworkVersionId
+        )?.definition
+      : null;
 
-    if (!area || !levelLabel) {
-      continue;
-    }
+  const frameworkDefinition =
+    historicalFramework ??
+    (frameworkVersionId
+      ? null
+      : activeFramework);
 
-    const score =
-      getSnapshotScore(levelLabel);
-
-    if (score === 0) {
-      continue;
-    }
-
-    historyByArea.set(area, {
-      area,
-      baseline: levelLabel,
-      baselineScore: score,
-      current: levelLabel,
-      currentScore: score,
-    });
-  }
-}
-
-const oldestFirst = [...learnerObservations]
-  .filter((entry) => {
-    if (!snapshotToCutoff) {
-      return true;
-    }
-
-    const entryDate = new Date(
-      entry.observation_date ||
-        entry.created_at
+  const areaDefinition =
+    frameworkDefinition?.areaDefinitions.find(
+      (area) =>
+        area.name.trim().toLowerCase() ===
+        areaName.trim().toLowerCase()
     );
 
-    return entryDate <= snapshotToCutoff;
-  })
-  .sort(
-    (first, second) =>
-      new Date(
-        first.observation_date ||
-          first.created_at
-      ).getTime() -
-      new Date(
-        second.observation_date ||
-          second.created_at
-      ).getTime()
-  );
+  if (areaDefinition) {
+    for (const statement of areaDefinition.statements) {
+      const progressionLevel =
+        statement.progression?.find(
+          (item) => item.level === level
+        );
 
-for (const entry of oldestFirst) {
-  const entryDate = new Date(
-    entry.observation_date ||
-      entry.created_at
-  );
+      const frameworkLabel =
+        progressionLevel?.label?.trim();
 
-const isAtOrBeforeFromCutoff =
-  !snapshotFromCutoff ||
-  entryDate <= snapshotFromCutoff;
+      if (frameworkLabel) {
+        return frameworkLabel;
+      }
+    }
+  }
 
-  const frameworkMatches = Array.isArray(
-    
-      entry.framework_matches
+  const cleanFallback =
+    fallbackLabel?.trim();
+
+  if (
+    cleanFallback &&
+    !/^\d+$/.test(cleanFallback)
+  ) {
+    return cleanFallback;
+  }
+
+  return `Level ${level}`;
+}
+  const snapshotToCutoff =
+    getSnapshotCutoffDate(snapshotTo);
+
+  function getBaselineLevelNumber(
+    item: {
+      level: string;
+      levelOrder?: number;
+    }
+  ) {
+    if (
+      typeof item.levelOrder === "number" &&
+      item.levelOrder > 0
+    ) {
+      return item.levelOrder;
+    }
+
+    const numericMatch =
+      item.level.match(/\d+/);
+
+    if (numericMatch) {
+      return Number(numericMatch[0]);
+    }
+
+    const starCount =
+      (item.level.match(/★/g) ?? []).length;
+
+    if (starCount > 0) {
+      return starCount;
+    }
+
+    return null;
+  }
+
+  function getDevelopmentalLevel(
+    match: any
+  ) {
+    const levels = Array.isArray(
+      match?.statementMatches
     )
-      ? entry.framework_matches
+      ? match.statementMatches
+          .map(
+            (statement: any) =>
+              statement?.developmentalLevel
+          )
+          .filter(
+            (
+              level: unknown
+            ): level is number =>
+              typeof level === "number" &&
+              Number.isFinite(level) &&
+              level > 0
+          )
       : [];
 
-    for (const match of frameworkMatches) {
-      const area =
-        typeof match?.strand === "string"
-          ? match.strand.trim()
-          : "";
+    if (levels.length === 0) {
+      return null;
+    }
 
-      const levelLabel =
-        match?.finalLevel ||
-        match?.teacherOverride ||
-        match?.assessmentStatus ||
-        match?.suggestedLevel ||
-        "";
+    return Math.max(...levels);
+  }
+
+const historyByArea = new Map<
+  string,
+  {
+    area: string;
+    baselineLevel: number;
+    baselineLabel: string;
+    currentLevel: number;
+    currentLabel: string;
+    hasEvidenceAfterFrom: boolean;
+  }
+>();
+
+if (learnerBaseline) {
+    for (
+      const item of
+      learnerBaseline.assessment_data
+    ) {
+      const area =
+        item.area?.trim();
+
+      const levelNumber =
+        getBaselineLevelNumber(item);
 
       if (
         !area ||
-        typeof levelLabel !== "string" ||
-        !levelLabel.trim()
+        levelNumber === null
       ) {
         continue;
       }
 
-      const cleanLevel = levelLabel.trim();
-      const score =
-        getSnapshotScore(cleanLevel);
+const displayLabel =
+  getFrameworkDevelopmentalLabel(
+    area,
+    levelNumber,
+    item.level,
+    learnerBaseline.framework_version_id
+  );
 
-      if (score === 0) {
+historyByArea.set(area, {
+  area,
+  baselineLevel: levelNumber,
+  baselineLabel: displayLabel,
+  currentLevel: levelNumber,
+  currentLabel: displayLabel,
+  hasEvidenceAfterFrom: false,
+});
+    }
+  }
+
+  const oldestFirst = [
+    ...learnerObservations,
+  ]
+    .filter((entry) => {
+      if (!snapshotToCutoff) {
+        return true;
+      }
+
+      const entryDate =
+        new Date(
+          entry.observation_date ||
+            entry.created_at
+        );
+
+      return (
+        entryDate <=
+        snapshotToCutoff
+      );
+    })
+    .sort(
+      (first, second) =>
+        new Date(
+          first.observation_date ||
+            first.created_at
+        ).getTime() -
+        new Date(
+          second.observation_date ||
+            second.created_at
+        ).getTime()
+    );
+
+  for (const entry of oldestFirst) {
+    const entryDate =
+      new Date(
+        entry.observation_date ||
+          entry.created_at
+      );
+
+    const isAtOrBeforeFromCutoff =
+      !snapshotFromCutoff ||
+      entryDate <=
+        snapshotFromCutoff;
+
+    const frameworkMatches =
+      Array.isArray(
+        entry.framework_matches
+      )
+        ? entry.framework_matches
+        : [];
+
+    for (
+      const match of
+      frameworkMatches
+    ) {
+      const area =
+        typeof match?.strand ===
+        "string"
+          ? match.strand.trim()
+          : "";
+
+      if (!area) {
         continue;
       }
 
-const existing =
-  historyByArea.get(area);
+      const developmentalLevel =
+        getDevelopmentalLevel(
+          match
+        );
 
-if (!existing) {
+      if (
+        developmentalLevel === null
+      ) {
+        continue;
+      }
+
+  const label =
+  getFrameworkDevelopmentalLabel(
+    area,
+    developmentalLevel,
+    undefined,
+    typeof entry.framework_version_id === "string"
+      ? entry.framework_version_id
+      : null
+  );
+
+      const existing =
+        historyByArea.get(area);
+
+    if (!existing) {
   if (
     snapshotFrom !== "Baseline" &&
     !isAtOrBeforeFromCutoff
@@ -1150,55 +1313,111 @@ if (!existing) {
     continue;
   }
 
-  historyByArea.set(area, {
+historyByArea.set(
+  area,
+  {
     area,
-    baseline: cleanLevel,
-    baselineScore: score,
-    current: cleanLevel,
-    currentScore: score,
-  });
+    baselineLevel:
+      developmentalLevel,
+    baselineLabel: label,
+    currentLevel:
+      developmentalLevel,
+    currentLabel: label,
+    hasEvidenceAfterFrom:
+      Boolean(
+        snapshotFromCutoff &&
+          entryDate >
+            snapshotFromCutoff
+      ),
+  }
+);
 
-  continue;
-}
+        continue;
+      }
 
+      if (
+        snapshotFrom !==
+          "Baseline" &&
+        isAtOrBeforeFromCutoff
+      ) {
+        existing.baselineLevel =
+          developmentalLevel;
+
+        existing.baselineLabel =
+          label;
+      }
 if (
-  snapshotFrom !== "Baseline" &&
-  isAtOrBeforeFromCutoff
+  snapshotFromCutoff &&
+  entryDate > snapshotFromCutoff
 ) {
-  existing.baseline = cleanLevel;
-  existing.baselineScore = score;
+  existing.hasEvidenceAfterFrom =
+    true;
 }
+      existing.currentLevel =
+        developmentalLevel;
 
-existing.current = cleanLevel;
-existing.currentScore = score;
+      existing.currentLabel =
+        label;
     }
   }
 
-  const frameworkAreaOrder = new Map(
-    activeFramework.areaDefinitions.map(
-      (area, index) => [
-        area.name,
-        index,
-      ]
-    )
-  );
+  const frameworkAreaOrder =
+    new Map(
+      activeFramework.areaDefinitions.map(
+        (area, index) => [
+          area.name,
+          index,
+        ]
+      )
+    );
+
+  const maximumDevelopmentalLevel =
+    Math.max(
+      4,
+      ...Array.from(
+        historyByArea.values()
+      ).flatMap((item) => [
+        item.baselineLevel,
+        item.currentLevel,
+      ])
+    );
 
   return Array.from(
     historyByArea.values()
   )
     .map((item) => ({
       area: item.area,
-      baseline: item.baseline,
-      current: item.current,
+
+      baseline:
+        item.baselineLabel,
+
+      baselineScore:
+        item.baselineLevel,
+
+      current:
+        item.currentLabel,
+
+      currentScore:
+        item.currentLevel,
+
       change:
-        item.currentScore -
-        item.baselineScore,
+        item.currentLevel -
+        item.baselineLevel,
+
+      scaleMax:
+        maximumDevelopmentalLevel,
+        hasEvidenceAfterFrom:
+  item.hasEvidenceAfterFrom,
     }))
     .sort(
       (first, second) =>
-        (frameworkAreaOrder.get(first.area) ??
+        (frameworkAreaOrder.get(
+          first.area
+        ) ??
           Number.MAX_SAFE_INTEGER) -
-        (frameworkAreaOrder.get(second.area) ??
+        (frameworkAreaOrder.get(
+          second.area
+        ) ??
           Number.MAX_SAFE_INTEGER)
     );
 })();
@@ -1455,11 +1674,23 @@ useEffect(() => {
         );
       }
 
-      if (!cancelled) {
-        setLearnerBaseline(
-          result.baseline ?? null
-        );
-      }
+  if (!cancelled) {
+  const baseline =
+    result.baseline ?? null;
+
+  setLearnerBaseline(
+    baseline
+  );
+
+  if (!baseline) {
+    setSnapshotFrom(
+      (current) =>
+        current === "Baseline"
+          ? "First Evidence"
+          : current
+    );
+  }
+}
     } catch (error) {
       console.error(
         "Failed to load learner baseline:",
@@ -1471,7 +1702,7 @@ useEffect(() => {
       }
     }
   }
-
+loadLearnerBaseline();
   return () => {
     cancelled = true;
   };
@@ -1486,7 +1717,334 @@ const [pupils, setPupils] = useState<any[]>([]);
 const [learnersLoading, setLearnersLoading] = useState(true);
 const [learnersError, setLearnersError] = useState("");
 
+async function importBaselineCsvFile(
+  file: File
+) {
+  if (
+    !file.name
+      .toLowerCase()
+      .endsWith(".csv")
+  ) {
+    setBaselineImportError(
+      "Please upload a CSV file."
+    );
+    return;
+  }
 
+  setBaselineImporting(true);
+  setBaselineImportError("");
+  setBaselineImportMessage("");
+
+  Papa.parse<
+    Record<string, string | undefined>
+  >(file, {
+    header: true,
+    skipEmptyLines: true,
+
+    transformHeader: (header) =>
+      header
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, ""),
+
+    complete: (results) => {
+      void saveImportedBaselineRows(
+        results.data
+      );
+    },
+
+    error: (error) => {
+      setBaselineImporting(false);
+
+      setBaselineImportError(
+        error.message ||
+          "Could not read CSV file."
+      );
+    },
+  });
+}
+
+async function saveImportedBaselineRows(
+  rows: Record<
+    string,
+    string | undefined
+  >[]
+) {
+  try {
+    if (rows.length === 0) {
+      throw new Error(
+        "No baseline rows were found."
+      );
+    }
+
+    const groupedByLearner =
+      new Map<
+        string,
+        {
+          learner: any;
+          assessmentData: {
+            area: string;
+            level: string;
+            levelOrder?: number;
+            notes?: string;
+          }[];
+        }
+      >();
+
+    const unresolvedLearners =
+      new Set<string>();
+
+    for (const row of rows) {
+      const externalId =
+        (
+          row.pupilid ||
+          row.studentid ||
+          row.learnerid ||
+          row.id ||
+          ""
+        ).trim();
+
+      const firstName =
+        (
+          row.firstname ||
+          row.forename ||
+          row.first ||
+          ""
+        ).trim();
+
+      const lastName =
+        (
+          row.lastname ||
+          row.surname ||
+          row.familyname ||
+          row.last ||
+          ""
+        ).trim();
+
+      const area =
+        (
+          row.learningarea ||
+          row.area ||
+          row.strand ||
+          ""
+        ).trim();
+
+      const level =
+        (
+          row.level ||
+          row.developmentallevel ||
+          ""
+        ).trim();
+
+      const notes =
+        (row.notes || "").trim();
+
+      if (!area || !level) {
+        continue;
+      }
+
+      let learner: any = null;
+
+      if (externalId) {
+        learner =
+          pupils.find(
+            (candidate) =>
+              candidate.externalId
+                ?.trim()
+                .toLowerCase() ===
+              externalId.toLowerCase()
+          ) ?? null;
+      }
+
+      if (
+        !learner &&
+        firstName &&
+        lastName
+      ) {
+        const nameMatches =
+          pupils.filter(
+            (candidate) =>
+              candidate.firstName
+                ?.trim()
+                .toLowerCase() ===
+                firstName.toLowerCase() &&
+              candidate.lastName
+                ?.trim()
+                .toLowerCase() ===
+                lastName.toLowerCase()
+          );
+
+        if (
+          nameMatches.length === 1
+        ) {
+          learner =
+            nameMatches[0];
+        }
+      }
+
+      if (!learner) {
+        unresolvedLearners.add(
+          externalId ||
+            `${firstName} ${lastName}`.trim() ||
+            "Unknown learner"
+        );
+
+        continue;
+      }
+
+      const numericMatch =
+        level.match(/\d+/);
+
+      const levelOrder =
+        numericMatch
+          ? Number(
+              numericMatch[0]
+            )
+          : undefined;
+
+      const existing =
+        groupedByLearner.get(
+          learner.id
+        );
+
+      const assessmentItem = {
+        area,
+        level,
+        levelOrder:
+          typeof levelOrder ===
+            "number" &&
+          Number.isFinite(
+            levelOrder
+          )
+            ? levelOrder
+            : undefined,
+        notes,
+      };
+
+      if (existing) {
+        existing.assessmentData.push(
+          assessmentItem
+        );
+      } else {
+        groupedByLearner.set(
+          learner.id,
+          {
+            learner,
+            assessmentData: [
+              assessmentItem,
+            ],
+          }
+        );
+      }
+    }
+
+    if (
+      unresolvedLearners.size > 0
+    ) {
+      throw new Error(
+        `Could not match: ${Array.from(
+          unresolvedLearners
+        ).join(", ")}`
+      );
+    }
+
+    if (
+      groupedByLearner.size === 0
+    ) {
+      throw new Error(
+        "No valid baseline data was found."
+      );
+    }
+
+    const baselineDate =
+      schoolCalendar
+        .academicYear
+        ?.start_date ||
+      new Date()
+        .toISOString()
+        .slice(0, 10);
+
+    for (const {
+      learner,
+      assessmentData,
+    } of groupedByLearner.values()) {
+      const response = await fetch(
+        "/api/baselines",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            learnerId:
+              learner.id,
+            baselineDate,
+            assessmentData,
+            source: "csv",
+          }),
+        }
+      );
+
+      const result =
+        await response
+          .json()
+          .catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            `Could not save baseline for ${learner.firstName} ${learner.lastName}.`
+        );
+      }
+    }
+
+    // Refresh currently selected learner's baseline
+    if (
+      selectedChildren.length === 1
+    ) {
+      const learnerId =
+        selectedChildren[0];
+
+      const response =
+        await fetch(
+          `/api/baselines?learnerId=${learnerId}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+      const result =
+        await response
+          .json()
+          .catch(() => ({}));
+
+      if (response.ok) {
+        setLearnerBaseline(
+          result.baseline ?? null
+        );
+      }
+    }
+
+    setBaselineImportMessage(
+      `Baseline saved for ${
+        groupedByLearner.size
+      } learner${
+        groupedByLearner.size === 1
+          ? ""
+          : "s"
+      }.`
+    );
+  } catch (error) {
+    setBaselineImportError(
+      error instanceof Error
+        ? error.message
+        : "Baseline import failed."
+    );
+  } finally {
+    setBaselineImporting(false);
+  }
+}
 
 function handleReviewLearners() {
   setImportError("");
@@ -2936,8 +3494,24 @@ const journalPayload = {
 
   observation,
   observation_date: observationDate,
-  assessment_context: analysis.assessmentContext,
-  image_url: evidenceImage?.name || null,
+
+  framework_version_id:
+    activeFrameworkRecord?.id ?? null,
+
+  framework_key:
+    activeFrameworkRecord?.framework_key ??
+    activeFramework.key,
+
+  framework_version:
+    activeFrameworkRecord?.version ??
+    activeFramework.version ??
+    null,
+
+  assessment_context:
+    analysis.assessmentContext,
+
+  image_url:
+    evidenceImage?.name || null,
 };
 
 async function sendJournalRequest(
@@ -4215,9 +4789,7 @@ const showDateLabel =
     {/* ASSESSMENT SNAPSHOT */}
 
     <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
-
-      <div className="flex items-center justify-between">
-
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">
             Assessment Snapshot
@@ -4232,83 +4804,152 @@ const showDateLabel =
           </p>
         </div>
 
-        <div className="flex gap-3">
-
+        <div className="flex flex-wrap items-center gap-3">
+          {/* FROM */}
           <select
             value={snapshotFrom}
-            onChange={(e) => setSnapshotFrom(e.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+
+              setSnapshotFrom(value);
+
+              const fromDate =
+                getSnapshotCutoffDate(value);
+
+              const toDate =
+                getSnapshotCutoffDate(snapshotTo);
+
+              if (
+                fromDate &&
+                toDate &&
+                toDate.getTime() <
+                  fromDate.getTime()
+              ) {
+                setSnapshotTo("Current");
+              }
+            }}
             className="rounded-xl border border-slate-300 px-3 py-2 text-black"
           >
-            <option value="Baseline">
-  Baseline
-</option>
+            <option
+              value="Baseline"
+              disabled={!learnerBaseline}
+            >
+              Baseline
+            </option>
 
-{schoolCalendar.terms.map((term) => (
-  <option
-  key={term.id}
-  value={term.id}
-  disabled={
-    new Date(
-      `${term.end_date}T23:59:59`
-    ) > new Date()
-  }
+            <option
+  value="First Evidence"
+  disabled={learnerObservations.length === 0}
 >
-    {term.name}
-  </option>
-))}
-
-<option value="Current">
-  Current
+  First Evidence
 </option>
+
+            {schoolCalendar.terms.map((term) => {
+              const termDate = new Date(
+                `${term.end_date}T23:59:59`
+              );
+
+              const isFuture =
+                termDate > new Date();
+
+              return (
+                <option
+                  key={term.id}
+                  value={term.id}
+                  disabled={isFuture}
+                >
+                  {term.name}
+                </option>
+              );
+            })}
           </select>
 
-          <span className="flex items-center text-slate-500">
+          <span className="text-slate-500">
             →
           </span>
 
+          {/* TO */}
           <select
             value={snapshotTo}
-            onChange={(e) => setSnapshotTo(e.target.value)}
+            onChange={(event) =>
+              setSnapshotTo(event.target.value)
+            }
             className="rounded-xl border border-slate-300 px-3 py-2 text-black"
           >
-          <option value="Current">
-  Current
-</option>
+            {schoolCalendar.terms.map((term) => {
+              const termDate = new Date(
+                `${term.end_date}T23:59:59`
+              );
 
-{schoolCalendar.terms.map((term) => (
-<option
-  key={term.id}
-  value={term.id}
-  disabled={
-    new Date(
-      `${term.end_date}T23:59:59`
-    ) > new Date()
-  }
->
-    {term.name}
-  </option>
-))}
+              const isFuture =
+                termDate > new Date();
 
-<option value="End of Year">
-  End of Year
-</option>
+              const invalidOrder =
+                !isSnapshotToOptionValid(
+                  term.id
+                );
+
+              return (
+                <option
+                  key={term.id}
+                  value={term.id}
+                  disabled={
+                    isFuture ||
+                    invalidOrder
+                  }
+                >
+                  {term.name}
+                </option>
+              );
+            })}
+
+            <option
+              value="End of Year"
+              disabled={
+                !schoolCalendar.academicYear ||
+                new Date(
+                  `${schoolCalendar.academicYear.end_date}T23:59:59`
+                ) > new Date() ||
+                !isSnapshotToOptionValid(
+                  "End of Year"
+                )
+              }
+            >
+              End of Year
+            </option>
+
+            <option
+              value="Current"
+              disabled={
+                !isSnapshotToOptionValid(
+                  "Current"
+                )
+              }
+            >
+              Current
+            </option>
           </select>
-
         </div>
-
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
+    {liveSnapshotData.length === 0 ? (
+  <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-center">
+    <p className="font-medium text-slate-700">
+      No developmental evidence available for this comparison.
+    </p>
 
-        {liveSnapshotData.map((item) => (
-
+    <p className="mt-1 text-sm text-slate-500">
+      Add baseline data or observation evidence to build the snapshot.
+    </p>
+  </div>
+) : (
+  <div className="mt-8 grid gap-4 md:grid-cols-2">
+    {liveSnapshotData.map((item) => (
           <div
             key={item.area}
             className="rounded-2xl bg-slate-50 p-4"
           >
-
             <div className="flex items-center justify-between">
-
               <div>
                 <p className="text-sm font-semibold text-slate-900">
                   {item.area}
@@ -4320,47 +4961,73 @@ const showDateLabel =
               </div>
 
               <div>
-
-                {item.change > 0 ? (
-                  <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                    ▲ +{item.change}
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-                    ▬ No Change
-                  </span>
-                )}
-
+               {!item.hasEvidenceAfterFrom ? (
+  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+    No new evidence
+  </span>
+) : item.change > 0 ? (
+  <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+    ▲ +{item.change}
+  </span>
+) : item.change < 0 ? (
+  <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
+    ▼ {item.change}
+  </span>
+) : (
+  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+    Same developmental level
+  </span>
+)}
               </div>
-
             </div>
 
-            <div className="mt-4">
+           <div className="mt-4">
+  <div className="relative h-2 rounded-full bg-slate-200">
+    {/* Starting developmental level */}
+    <div
+      className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow"
+      style={{
+        left: `${Math.min(
+          98,
+          Math.max(
+            2,
+            ((item.baselineScore - 1) /
+              Math.max(
+                item.scaleMax - 1,
+                1
+              )) *
+              100
+          )
+        )}%`,
+      }}
+    />
 
-              <div className="relative h-2 rounded-full bg-slate-200">
-
-                <div
-                  className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 shadow"
-                  style={{ left: "15%" }}
-                />
-
-                <div
-                  className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-white bg-blue-500 shadow"
-                  style={{ left: `${15 + item.change * 25}%` }}
-                />
-
-              </div>
-
-            </div>
-
+    {/* Ending developmental level */}
+    <div
+      className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-500 shadow"
+      style={{
+        left: `${Math.min(
+          98,
+          Math.max(
+            2,
+            ((item.currentScore - 1) /
+              Math.max(
+                item.scaleMax - 1,
+                1
+              )) *
+              100
+          )
+        )}%`,
+      }}
+    />
+  </div>
+</div>
           </div>
-
-        ))}
-
-      </div>
-
+           ))}
+  </div>
+)}
     </div>
-</>
+  </>
 )}
 
 <div className="my-10 flex items-center gap-4">
@@ -7795,99 +8462,141 @@ onClick={() => {
 </div>
 
 )}
-      {showBaselineModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-
+{showBaselineModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-2xl">
-
       <div className="flex items-start justify-between">
-
         <div>
           <h2 className="text-3xl font-bold text-slate-900">
             Add Baseline Data
           </h2>
 
           <p className="mt-2 text-slate-500">
-            Import existing learner attainment and assessment information.
+            Import existing learner attainment and developmental levels.
           </p>
         </div>
 
         <button
-          onClick={() => setShowBaselineModal(false)}
+          type="button"
+          onClick={() => {
+            setShowBaselineModal(false);
+            setBaselineImportError("");
+            setBaselineImportMessage("");
+          }}
           className="text-slate-500 hover:text-slate-900"
         >
           ✕
         </button>
-
       </div>
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
-
+        {/* WORKING CSV IMPORT */}
         <div className="rounded-2xl border border-slate-200 p-6">
-
           <h3 className="text-lg font-bold text-slate-900">
             Whole Class Baseline
           </h3>
 
           <p className="mt-2 text-sm text-slate-500">
-            Import assessment data for an entire class.
+            Import baseline data for one or more learners.
           </p>
 
-          <div className="mt-6 rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center">
+          <label
+            className="mt-6 block cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center transition hover:border-slate-500 hover:bg-slate-50"
+            onDragOver={(event) => {
+              event.preventDefault();
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+
+              const file =
+                event.dataTransfer.files?.[0];
+
+              if (file) {
+                void importBaselineCsvFile(
+                  file
+                );
+              }
+            }}
+          >
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              disabled={
+                baselineImporting
+              }
+              onChange={(event) => {
+                const file =
+                  event.target.files?.[0];
+
+                if (file) {
+                  void importBaselineCsvFile(
+                    file
+                  );
+                }
+
+                event.target.value = "";
+              }}
+            />
 
             <p className="font-medium text-slate-700">
-              Drop CSV, Excel, PDF or report here
+              {baselineImporting
+                ? "Importing baseline…"
+                : "Drop CSV here"}
             </p>
 
-            <p className="mt-2 text-sm text-slate-500">
-              or click to browse
-            </p>
+            {!baselineImporting && (
+              <p className="mt-2 text-sm text-slate-500">
+                or click to browse
+              </p>
+            )}
+          </label>
 
-          </div>
-
+          <p className="mt-4 text-xs text-slate-500">
+            CSV columns: pupil_id, first_name,
+            last_name, learning_area, level,
+            notes
+          </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 p-6">
-
+        {/* FUTURE DOCUMENT IMPORT */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
           <h3 className="text-lg font-bold text-slate-900">
-            Individual Learner
+            Individual Learner Report
           </h3>
 
           <p className="mt-2 text-sm text-slate-500">
-            Import assessment information for one learner.
+            PDF and DOCX baseline extraction will be added after beta.
           </p>
 
-          <div className="mt-6 rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center">
-
-            <p className="font-medium text-slate-700">
-              Drop report here
+          <div className="mt-6 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center opacity-60">
+            <p className="font-medium text-slate-600">
+              PDF / DOCX
             </p>
 
             <p className="mt-2 text-sm text-slate-500">
-              PDF, DOCX or assessment summary
+              Coming later
             </p>
-
           </div>
-
         </div>
-
       </div>
 
-      <div className="mt-8 rounded-2xl bg-slate-100 p-5">
+      {baselineImportError && (
+        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-medium text-red-700">
+            {baselineImportError}
+          </p>
+        </div>
+      )}
 
-        <h3 className="font-bold text-slate-900">
-          Future AI Import
-        </h3>
-
-        <p className="mt-2 text-slate-700">
-          OASIS will automatically identify learners, learning areas,
-          attainment levels and baseline judgements from uploaded reports.
-        </p>
-
-      </div>
-
+      {baselineImportMessage && (
+        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-medium text-emerald-700">
+            {baselineImportMessage}
+          </p>
+        </div>
+      )}
     </div>
-
   </div>
 )}
 {selectedEvidence && (

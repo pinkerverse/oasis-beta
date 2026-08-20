@@ -268,8 +268,34 @@ const {
   observation_date: _observationDateSnake,
   learner_entries: _learnerEntries,
   learner_ids: _learnerIds,
+
+  framework_version_id:
+    _frameworkVersionId,
+  framework_key:
+    _frameworkKey,
+  framework_version:
+    _frameworkVersion,
+
   ...observationToSave
 } = body;
+
+const frameworkVersionId =
+  typeof body.framework_version_id === "string" &&
+  body.framework_version_id.trim()
+    ? body.framework_version_id.trim()
+    : null;
+
+const frameworkKey =
+  typeof body.framework_key === "string" &&
+  body.framework_key.trim()
+    ? body.framework_key.trim()
+    : null;
+
+const frameworkVersion =
+  typeof body.framework_version === "string" &&
+  body.framework_version.trim()
+    ? body.framework_version.trim()
+    : null;
 
 const rowsToInsert =
   learnerEntries.length > 0
@@ -280,9 +306,18 @@ const rowsToInsert =
               entry?.learner_id === learnerId
           ) ?? {};
 
-        return {
-          school_id: schoolId,
+       return {
+  school_id: schoolId,
   ...observationToSave,
+
+  framework_version_id:
+    frameworkVersionId,
+
+  framework_key:
+    frameworkKey,
+
+  framework_version:
+    frameworkVersion,
 
   observation:
     typeof learnerEntry.observation === "string" &&
