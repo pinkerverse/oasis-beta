@@ -250,36 +250,6 @@ const learningJourneyData = {
   ],
 };
 
-const classInsights = {
-  Mathematics: {
-    Below: { count: 2, learners: ["Lucas Chen", "Noah Patel"] },
-    Developing: { count: 5, learners: ["Emma Brown", "Olivia Garcia", "Ava Khan", "Leo Wang", "Maya Singh"] },
-    Secure: { count: 10, learners: ["Matthew Smith", "Sofia Lee", "Ethan Clark", "Amelia Jones", "Daniel Kim", "Mia Roberts", "Arjun Mehta", "Lily Chen", "Oscar Brown", "Grace Wilson"] },
-    Exceeding: { count: 5, learners: ["Henry Taylor", "Isla Scott", "Jack Evans", "Chloe Martin", "Zara Ahmed"] },
-  },
-
-  Communication: {
-    Below: { count: 4, learners: ["Lucas Chen", "Noah Patel", "Leo Wang", "Ava Khan"] },
-    Developing: { count: 6, learners: ["Emma Brown", "Olivia Garcia", "Maya Singh", "Daniel Kim", "Oscar Brown", "Grace Wilson"] },
-    Secure: { count: 9, learners: ["Matthew Smith", "Sofia Lee", "Ethan Clark", "Amelia Jones", "Mia Roberts", "Arjun Mehta", "Lily Chen", "Henry Taylor", "Isla Scott"] },
-    Exceeding: { count: 3, learners: ["Jack Evans", "Chloe Martin", "Zara Ahmed"] },
-  },
-
-  ResearchSkills: {
-    Below: { count: 1, learners: ["Noah Patel"] },
-    Developing: { count: 7, learners: ["Emma Brown", "Lucas Chen", "Olivia Garcia", "Ava Khan", "Leo Wang", "Maya Singh", "Oscar Brown"] },
-    Secure: { count: 11, learners: ["Matthew Smith", "Sofia Lee", "Ethan Clark", "Amelia Jones", "Daniel Kim", "Mia Roberts", "Arjun Mehta", "Lily Chen", "Grace Wilson", "Henry Taylor", "Isla Scott"] },
-    Exceeding: { count: 3, learners: ["Jack Evans", "Chloe Martin", "Zara Ahmed"] },
-  },
-
-  Creativity: {
-    Below: { count: 3, learners: ["Lucas Chen", "Noah Patel", "Leo Wang"] },
-    Developing: { count: 8, learners: ["Emma Brown", "Olivia Garcia", "Ava Khan", "Maya Singh", "Daniel Kim", "Oscar Brown", "Grace Wilson", "Lily Chen"] },
-    Secure: { count: 8, learners: ["Matthew Smith", "Sofia Lee", "Ethan Clark", "Amelia Jones", "Mia Roberts", "Arjun Mehta", "Henry Taylor", "Isla Scott"] },
-    Exceeding: { count: 3, learners: ["Jack Evans", "Chloe Martin", "Zara Ahmed"] },
-  },
-};
-
 export default function Home() {
     const router = useRouter();
 
@@ -312,6 +282,7 @@ const [journalLearner, setJournalLearner] = useState("");
 const [isImportingLearners, setIsImportingLearners] =
   useState(false);
 const [learnerObservations, setLearnerObservations] = useState<any[]>([]);
+const [classObservations, setClassObservations] = useState<any[]>([]);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [loadingJournal, setLoadingJournal] = useState(false);
@@ -365,105 +336,83 @@ const [assessmentPhilosophy, setAssessmentPhilosophy] =
   useState("Hybrid");
 const activeFramework =
   activeSavedFramework ?? frameworks.eyfs;
-function getAssessmentLevelColours(levelLabel: string) {
-  const orderedLevels = [
-    ...activeFramework.assessmentLevels,
-  ].sort((a, b) => a.order - b.order);
-
-  const levelIndex = orderedLevels.findIndex(
-    (level) => level.label === levelLabel
-  );
-
-if (levelIndex < 0) {
-  const legacyLabel = levelLabel
-    .trim()
-    .toLowerCase();
-
-if (
-  legacyLabel === "below" ||
-  legacyLabel === "below expectation"
+  function getAssessmentDisplayLabel(
+  value: string
 ) {
-  return {
-    badge: "bg-orange-100 text-orange-700",
-    bar: "bg-orange-500",
-  };
-}
+  const normalized =
+    value.trim().toLowerCase();
 
   if (
-    legacyLabel === "developing" ||
-    legacyLabel === "emerging" ||
-    legacyLabel === "approaching"
+    normalized === "below" ||
+    normalized === "below expectation"
   ) {
+    return "BELOW";
+  }
+
+  if (
+    normalized === "developing" ||
+    normalized === "emerging" ||
+    normalized === "approaching"
+  ) {
+    return "APPROACHING";
+  }
+
+  if (
+    normalized === "secure" ||
+    normalized === "meeting" ||
+    normalized === "meeting expectation" ||
+    normalized === "at expectation"
+  ) {
+    return "MEETING";
+  }
+
+  if (
+    normalized === "exceeding" ||
+    normalized === "above expectation"
+  ) {
+    return "EXCEEDING";
+  }
+
+  return value.trim().toUpperCase();
+}
+function getAssessmentLevelColours(
+  levelLabel: string
+) {
+  const displayLabel =
+    getAssessmentDisplayLabel(levelLabel);
+
+  if (displayLabel === "BELOW") {
+    return {
+      badge: "bg-orange-100 text-orange-700",
+      bar: "bg-orange-500",
+    };
+  }
+
+  if (displayLabel === "APPROACHING") {
     return {
       badge: "bg-yellow-100 text-yellow-700",
       bar: "bg-yellow-500",
     };
   }
 
- if (
-  legacyLabel === "meeting" ||
-  legacyLabel === "meeting expectation" ||
-  legacyLabel === "at expectation"
-) {
-  return {
-    badge: "bg-green-100 text-green-700",
-    bar: "bg-green-500",
-  };
-}
-
-if (legacyLabel === "secure") {
-  return {
-    badge: "bg-blue-100 text-blue-700",
-    bar: "bg-blue-500",
-  };
-}
-
- if (
-  legacyLabel === "exceeding" ||
-  legacyLabel === "above expectation"
-) {
-  return {
-    badge: "bg-purple-100 text-purple-700",
-    bar: "bg-purple-500",
-  };
-}
-
-  return {
-    badge: "bg-slate-100 text-slate-600",
-    bar: "bg-slate-400",
-  };
-}
-
-  const progress =
-    orderedLevels.length <= 1
-      ? 1
-      : levelIndex / (orderedLevels.length - 1);
-
-  if (progress <= 0.15) {
-    return {
-  badge: "bg-orange-100 text-orange-700",
-  bar: "bg-orange-500",
-};
-  }
-
-  if (progress <= 0.45) {
-    return {
-      badge: "bg-yellow-100 text-yellow-700",
-      bar: "bg-yellow-500",
-    };
-  }
-
-  if (progress <= 0.75) {
+  if (displayLabel === "MEETING") {
     return {
       badge: "bg-green-100 text-green-700",
       bar: "bg-green-500",
     };
   }
 
-return {
-  badge: "bg-purple-100 text-purple-700",
-  bar: "bg-purple-500",
-};
+  if (displayLabel === "EXCEEDING") {
+    return {
+      badge: "bg-purple-100 text-purple-700",
+      bar: "bg-purple-500",
+    };
+  }
+
+  return {
+    badge: "bg-slate-100 text-slate-600",
+    bar: "bg-slate-400",
+  };
 }
 const [
   showAddLearningAreaModal,
@@ -808,6 +757,13 @@ const [learnerBaseline, setLearnerBaseline] =
 }[];
   } | null>(null);
 const [snapshotTo, setSnapshotTo] = useState("Current");
+const [
+  schoolAssessmentSettings,
+  setSchoolAssessmentSettings,
+] = useState<{
+  status_labels: string[];
+  expectation_mode: string;
+} | null>(null);
 const [assessmentScale, setAssessmentScale] = useState(
   "Below / Developing / Secure / Exceeding"
 );
@@ -1651,6 +1607,41 @@ const [showTodaysFocus, setShowTodaysFocus] = useState(false);
   }, [router]);
 
 useEffect(() => {
+  async function loadAssessmentSettings() {
+    try {
+      const response = await fetch(
+  "/api/onboarding/assessment-setup",
+        {
+          cache: "no-store",
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "Failed to load assessment settings."
+        );
+      }
+
+      setSchoolAssessmentSettings(
+        result.settings ?? null
+      );
+    } catch (error) {
+      console.error(
+        "Failed to load assessment settings:",
+        error
+      );
+
+      setSchoolAssessmentSettings(null);
+    }
+  }
+
+  loadAssessmentSettings();
+}, []);
+
+useEffect(() => {
   let cancelled = false;
 
   async function loadLearnerBaseline() {
@@ -1713,13 +1704,315 @@ loadLearnerBaseline();
 }, [selectedChildren]);
 
     const showLearnerOverview = selectedChildren.length === 1;
-const [selectedAreas, setSelectedAreas] = useState([
-  "Mathematics",
-  "Communication",
-]);
+const [selectedAreas, setSelectedAreas] =
+  useState<string[]>([]);
 const [pupils, setPupils] = useState<any[]>([]);
 const [learnersLoading, setLearnersLoading] = useState(true);
 const [learnersError, setLearnersError] = useState("");
+
+const realClassInsights = (() => {
+const assessmentLabels =
+  schoolAssessmentSettings
+    ?.status_labels?.length
+    ? schoolAssessmentSettings.status_labels.map(
+        (label) => label.toUpperCase()
+      )
+    : [
+        ...(activeFramework.assessmentLevels ?? []),
+      ]
+        .sort((a, b) => a.order - b.order)
+        .map((level) =>
+          level.label.toUpperCase()
+        );
+
+function normalizeAssessmentStatus(
+  value: string
+) {
+  const cleanValue = value.trim();
+
+  if (!cleanValue) {
+    return "";
+  }
+
+  const exactMatch =
+    assessmentLabels.find(
+      (label) =>
+        label.trim().toLowerCase() ===
+        cleanValue.toLowerCase()
+    );
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const normalized =
+    cleanValue.toLowerCase();
+
+  const equivalentGroups = [
+    [
+      "below",
+      "below expectation",
+    ],
+    [
+      "approaching",
+      "developing",
+      "emerging",
+    ],
+    [
+      "meeting",
+      "secure",
+      "at expectation",
+      "meeting expectation",
+    ],
+    [
+      "exceeding",
+      "above expectation",
+    ],
+  ];
+
+  const matchingGroup =
+    equivalentGroups.find((group) =>
+      group.includes(normalized)
+    );
+
+  if (!matchingGroup) {
+    return cleanValue.toUpperCase();
+  }
+
+  return (
+    assessmentLabels.find((label) =>
+      matchingGroup.includes(
+        label.trim().toLowerCase()
+      )
+    ) ?? cleanValue
+  );
+}
+
+const activeAreaNames =
+  activeFramework.areaDefinitions
+    .map((area) => area.name)
+    .filter(
+      (area) =>
+        area.trim().toLowerCase() !==
+        "the characteristics of effective teaching and learning"
+    );
+
+const areaNames =
+  new Set(activeAreaNames);
+
+const canonicalAreaNames =
+  new Map(
+    activeAreaNames.map((area) => [
+      area.trim().toLowerCase(),
+      area,
+    ])
+  );
+
+  const latestByLearnerArea = new Map<
+    string,
+    {
+      learnerId: string;
+      area: string;
+      status: string;
+      timestamp: number;
+    }
+  >();
+
+  for (const entry of classObservations) {
+    const learnerIds = Array.isArray(
+      entry.learner_ids
+    )
+      ? entry.learner_ids.filter(
+          (id: unknown): id is string =>
+            typeof id === "string"
+        )
+      : [];
+
+    const matches = Array.isArray(
+      entry.framework_matches
+    )
+      ? entry.framework_matches
+      : [];
+
+    const timestamp = new Date(
+      entry.observation_date ||
+        entry.created_at
+    ).getTime();
+
+    for (const learnerId of learnerIds) {
+      for (const match of matches) {
+       const rawArea =
+  typeof match?.strand === "string"
+    ? match.strand.trim()
+    : "";
+
+const area =
+  canonicalAreaNames.get(
+    rawArea.toLowerCase()
+  ) ?? "";
+
+       const rawStatus =
+  typeof match?.teacherOverride ===
+    "string" &&
+  match.teacherOverride.trim()
+    ? match.teacherOverride.trim()
+    : typeof match?.finalLevel ===
+          "string" &&
+        match.finalLevel.trim()
+      ? match.finalLevel.trim()
+      : typeof match?.assessmentStatus ===
+            "string" &&
+          match.assessmentStatus.trim()
+        ? match.assessmentStatus.trim()
+        : "";
+
+const status =
+  normalizeAssessmentStatus(
+    rawStatus
+  );
+
+        if (!area || !status) {
+          continue;
+        }
+
+        areaNames.add(area);
+
+        const key = `${learnerId}::${area}`;
+
+        const existing =
+          latestByLearnerArea.get(key);
+
+        if (
+          !existing ||
+          timestamp > existing.timestamp
+        ) {
+          latestByLearnerArea.set(key, {
+            learnerId,
+            area,
+            status,
+            timestamp,
+          });
+        }
+      }
+    }
+  }
+
+  const result: Record<
+    string,
+    {
+      levels: Record<
+        string,
+        {
+          count: number;
+          learners: string[];
+        }
+      >;
+      noEvidence: {
+        count: number;
+        learners: string[];
+      };
+      total: number;
+    }
+  > = {};
+
+  for (const area of areaNames) {
+    const levels: Record<
+      string,
+      {
+        count: number;
+        learners: string[];
+      }
+    > = {};
+
+    for (const label of assessmentLabels) {
+      levels[label] = {
+        count: 0,
+        learners: [],
+      };
+    }
+
+    const learnersWithEvidence =
+      new Set<string>();
+
+    for (const item of latestByLearnerArea.values()) {
+      if (item.area !== area) {
+        continue;
+      }
+
+      const learner = pupils.find(
+        (pupil) => pupil.id === item.learnerId
+      );
+
+      if (!learner) {
+        continue;
+      }
+
+      const learnerName =
+        `${learner.firstName} ${learner.lastName}`.trim();
+
+      if (!levels[item.status]) {
+        levels[item.status] = {
+          count: 0,
+          learners: [],
+        };
+      }
+
+      levels[item.status].count += 1;
+      levels[item.status].learners.push(
+        learnerName
+      );
+
+      learnersWithEvidence.add(
+        item.learnerId
+      );
+    }
+
+    const learnersWithoutEvidence =
+      pupils.filter(
+        (learner) =>
+          !learnersWithEvidence.has(learner.id)
+      );
+
+    result[area] = {
+      levels,
+
+      noEvidence: {
+        count: learnersWithoutEvidence.length,
+        learners:
+          learnersWithoutEvidence.map(
+            (learner) =>
+              `${learner.firstName} ${learner.lastName}`.trim()
+          ),
+      },
+
+      total: pupils.length,
+    };
+  }
+
+  return result;
+})();
+
+useEffect(() => {
+  const availableAreas =
+    Object.keys(realClassInsights);
+
+  setSelectedAreas((current) => {
+    const validCurrent =
+      current.filter((area) =>
+        availableAreas.includes(area)
+      );
+
+    if (validCurrent.length > 0) {
+      return validCurrent;
+    }
+
+    return availableAreas.slice(0, 2);
+  });
+}, [
+  classObservations,
+  pupils,
+  activeSavedFramework,
+]);
 
 async function importBaselineCsvFile(
   file: File
@@ -3396,6 +3689,43 @@ useEffect(() => {
   loadLearnerObservations();
 }, [selectedChildren]);
 
+async function refreshClassObservations() {
+  try {
+    const response = await fetch(
+      "/api/journal?scope=class",
+      {
+        cache: "no-store",
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.error ||
+          "Failed to load class observations."
+      );
+    }
+
+    setClassObservations(
+      Array.isArray(result.entries)
+        ? result.entries
+        : []
+    );
+  } catch (error) {
+    console.error(
+      "Failed to load class observations:",
+      error
+    );
+
+    setClassObservations([]);
+  }
+}
+
+useEffect(() => {
+  refreshClassObservations();
+}, []);
+
 async function handleSaveToJournal() {
   if (!analysis) return;
 
@@ -3558,6 +3888,8 @@ if (!response.ok) {
 
     setSavedToJournal(true);
 
+    await refreshClassObservations();
+
 const savedObservation = (result as any).observation;
 
 if (savedObservation && selectedChildren.length === 1) {
@@ -3606,8 +3938,10 @@ async function handleConfirmDuplicateSave() {
     }
 
     setShowDuplicateObservationModal(false);
-    setDuplicateSavePayload(null);
-    setSavedToJournal(true);
+setDuplicateSavePayload(null);
+setSavedToJournal(true);
+
+await refreshClassObservations();
   } catch (error) {
     console.error(
       "Failed to save duplicate observation:",
@@ -4538,7 +4872,7 @@ const hasOverride =
   getAssessmentLevelColours(item.level).badge
 }`}
             >
-              {item.level.toUpperCase()}
+              {getAssessmentDisplayLabel(item.level)}
             </span>
           </div>
 
@@ -5042,251 +5376,186 @@ const showDateLabel =
 
 <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
 
-{/* CLASS INSIGHTS */}
+{/* CLASS ATTAINMENT OVERVIEW */}
 
-<div className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
+<div>
+  <h2 className="text-2xl font-bold text-slate-900">
+    Class Attainment Overview
+  </h2>
 
-  <div>
-    <h2 className="text-2xl font-bold text-slate-900">
-      Class Insights
-    </h2>
+  <p className="mt-1 text-slate-500">
+    Latest assessment status for each learner across the active framework.
+  </p>
+</div>
 
-    <p className="mt-1 text-slate-500">
-      Distribution of learners across attainment levels.
-    </p>
-  </div>
+<div className="mt-6 flex flex-wrap gap-2">
+  {Object.keys(realClassInsights).map((area) => (
+    <button
+      key={area}
+      type="button"
+      onClick={() => toggleArea(area)}
+      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+        selectedAreas.includes(area)
+          ? "bg-slate-900 text-white"
+          : "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {area}
+    </button>
+  ))}
+</div>
 
-  <div className="mt-6 flex flex-wrap gap-2">
-
-    {Object.keys(classInsights).map((area) => (
-
-      <button
-        key={area}
-        onClick={() => toggleArea(area)}
-        className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-          selectedAreas.includes(area)
-            ? "bg-slate-900 text-white"
-            : "bg-slate-100 text-slate-600"
-        }`}
-      >
-        {area}
-      </button>
-
-    ))}
-
-  </div>
-
-  <div className="mt-8 space-y-8">
-
-    {selectedAreas.map((area) => {
-
+<div className="mt-8 space-y-8">
+  {selectedAreas
+    .filter((area) => Boolean(realClassInsights[area]))
+    .map((area) => {
       const data =
-        classInsights[
-          area as keyof typeof classInsights
-        ];
+        realClassInsights[area];
 
       const total =
-  data.Below.count +
-  data.Developing.count +
-  data.Secure.count +
-  data.Exceeding.count;
+        Math.max(data.total, 1);
 
       return (
+        <div
+          key={area}
+          className="rounded-2xl border border-slate-200 p-5"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-semibold text-slate-900">
+                {area}
+              </h3>
 
-        <div key={area}>
+              <p className="mt-1 text-sm text-slate-500">
+                {data.total} learners
+              </p>
+            </div>
 
-          <div className="mb-2 flex items-center justify-between">
-
-            <h3 className="font-semibold text-slate-900">
-              {area}
-            </h3>
-
-            <span className="text-sm text-slate-500">
-              {total} Learners
-            </span>
-
+            {data.noEvidence.count > 0 && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                {data.noEvidence.count} without evidence
+              </span>
+            )}
           </div>
 
-          <div className="flex h-5 overflow-hidden rounded-full">
+          <div className="mt-5 flex h-5 overflow-hidden rounded-full bg-slate-100">
+            {Object.entries(data.levels).map(
+              ([label, levelData]) => (
+                <div
+                  key={label}
+                  className={
+                    getAssessmentLevelColours(
+                      label
+                    ).bar
+                  }
+                  style={{
+                    width: `${
+                      (levelData.count /
+                        total) *
+                      100
+                    }%`,
+                  }}
+                  title={`${label}: ${levelData.count}`}
+                />
+              )
+            )}
 
-            <div
-              className="bg-purple-400"
-              style={{
-                width: `${(data.Below.count / total) * 100}%`,
-              }}
-            />
-
-            <div
-              className="bg-yellow-400"
-              style={{
-                width: `${(data.Developing.count / total) * 100}%`,
-              }}
-            />
-
-            <div
-              className="bg-green-500"
-              style={{
-                width: `${(data.Secure.count / total) * 100}%`,
-              }}
-            />
-
-            <div
-              className="bg-blue-500"
-              style={{
-                width: `${(data.Exceeding.count / total) * 100}%`,
-              }}
-            />
-
+            {data.noEvidence.count > 0 && (
+              <div
+                className="bg-slate-300"
+                style={{
+                  width: `${
+                    (data.noEvidence.count /
+                      total) *
+                    100
+                  }%`,
+                }}
+                title={`No evidence: ${data.noEvidence.count}`}
+              />
+            )}
           </div>
 
-          <div className="mt-3 grid grid-cols-4 text-sm">
+          <div className="mt-4 flex flex-wrap gap-3">
+            {Object.entries(data.levels).map(
+              ([label, levelData]) => (
+                <div
+                  key={label}
+                  className="group relative"
+                >
+                  <button
+                    type="button"
+                    className={`rounded-xl px-3 py-2 text-left text-sm ${
+                      getAssessmentLevelColours(
+                        label
+                      ).badge
+                    }`}
+                  >
+                    <span className="font-semibold">
+                      {getAssessmentDisplayLabel(label)}
+                    </span>
+
+                    <span className="ml-2">
+                      {levelData.count}
+                    </span>
+                  </button>
+
+                  {levelData.count > 0 && (
+                    <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-56 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl group-hover:block">
+                      <p className="font-semibold text-slate-900">
+                        {getAssessmentDisplayLabel(label)}
+                      </p>
+
+                      <div className="mt-2 space-y-1 text-sm text-slate-700">
+                        {levelData.learners.map(
+                          (learner) => (
+                            <p key={learner}>
+                              {learner}
+                            </p>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            )}
 
             <div className="group relative">
+              <button
+                type="button"
+                className="rounded-xl bg-slate-100 px-3 py-2 text-left text-sm text-slate-600"
+              >
+                <span className="font-semibold">
+                  No evidence
+                </span>
 
-  <span className="font-medium text-purple-500">
-    Below
-  </span>
+                <span className="ml-2">
+                  {data.noEvidence.count}
+                </span>
+              </button>
 
-  <p className="font-medium text-slate-900">
-    {data.Below.count}
-  </p>
+              {data.noEvidence.count > 0 && (
+                <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-56 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl group-hover:block">
+                  <p className="font-semibold text-slate-900">
+                    No evidence
+                  </p>
 
-  <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-3 hidden w-56 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block">
-
-    <p className="font-semibold text-slate-900">
-      Below
-    </p>
-
-    <p className="mt-1 text-xs text-slate-500">
-      {data.Below.count} learners
-    </p>
-
-    <div className="mt-3 space-y-1 text-sm text-slate-700">
-
-      {data.Below.learners.map((learner) => (
-        <p key={learner}>
-          {learner}
-        </p>
-      ))}
-
-    </div>
-
-  </div>
-
-</div>
-
-            <div className="group relative">
-
-  <span className="font-medium text-yellow-500">
-    Developing
-  </span>
-
-  <p className="font-medium text-slate-900">
-    {data.Developing.count}
-  </p>
-
-  <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-3 hidden w-56 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block">
-
-    <p className="font-semibold text-slate-900">
-    Developing
-    </p>
-
-    <p className="mt-1 text-xs text-slate-500">
-      {data.Developing.count} learners
-    </p>
-
-    <div className="mt-3 space-y-1 text-sm text-slate-700">
-
-      {data.Developing.learners.map((learner) => (
-        <p key={learner}>
-          {learner}
-        </p>
-      ))}
-
-    </div>
-
-  </div>
-
-</div>
-
-
-           <div className="group relative">
-
-  <span className="font-medium text-green-500">
-    Secure
-  </span>
-
-  <p className="font-medium text-slate-900">
-    {data.Secure.count}
-  </p>
-
-  <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-3 hidden w-56 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block">
-
-    <p className="font-semibold text-slate-900">
-      Secure
-    </p>
-
-    <p className="mt-1 text-xs text-slate-500">
-      {data.Secure.count} learners
-    </p>
-
-    <div className="mt-3 space-y-1 text-sm text-slate-700">
-
-      {data.Secure.learners.map((learner) => (
-        <p key={learner}>
-          {learner}
-        </p>
-      ))}
-
-    </div>
-
-  </div>
-
-</div>
-
-          <div className="group relative">
-
-  <span className="font-medium text-blue-500">
-    Exceeding
-  </span>
-
-  <p className="font-medium text-slate-900">
-    {data.Exceeding.count}
-  </p>
-
-  <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-3 hidden w-56 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block">
-
-    <p className="font-semibold text-slate-900">
-      Exceeding
-    </p>
-
-    <p className="mt-1 text-xs text-slate-500">
-      {data.Exceeding.count} learners
-    </p>
-
-    <div className="mt-3 space-y-1 text-sm text-slate-700">
-
-      {data.Exceeding.learners.map((learner) => (
-        <p key={learner}>
-          {learner}
-        </p>
-      ))}
-
-    </div>
-
-  </div>
-
-</div>
-
+                  <div className="mt-2 space-y-1 text-sm text-slate-700">
+                    {data.noEvidence.learners.map(
+                      (learner) => (
+                        <p key={learner}>
+                          {learner}
+                        </p>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-
         </div>
-
       );
     })}
-
-  </div>
-
 </div>
 
 </div>

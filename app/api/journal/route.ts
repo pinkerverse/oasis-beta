@@ -410,18 +410,19 @@ export async function GET(request: Request) {
   try {
     const schoolId = await getCurrentSchoolId();
 
-if (!schoolId) {
-  return NextResponse.json(
-    {
-      error:
-        "You must be signed in and linked to a school to view observations.",
-    },
-    { status: 401 }
-  );
-}
+    if (!schoolId) {
+      return NextResponse.json(
+        {
+          error:
+            "You must be signed in and linked to a school to view observations.",
+        },
+        { status: 401 }
+      );
+    }
 
-const authenticatedSupabase =
-  await createServerSupabaseClient();
+    const authenticatedSupabase =
+      await createServerSupabaseClient();
+
     const { searchParams } = new URL(
       request.url
     );
@@ -429,23 +430,53 @@ const authenticatedSupabase =
     const learner =
       searchParams.get("learner");
 
+    const scope =
+      searchParams.get("scope");
+
+    // Whole-class evidence for class attainment
+    if (scope === "class") {
+      const { data, error } =
+        await authenticatedSupabase
+          .from("observations")
+          .select("*")
+          .eq("school_id", schoolId)
+          .order("observation_date", {
+            ascending: false,
+          })
+          .order("created_at", {
+            ascending: false,
+          });
+
+      if (error) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        entries: data || [],
+      });
+    }
+
     if (!learner) {
       return NextResponse.json({
         entries: [],
       });
     }
 
-    const { data, error } = await authenticatedSupabase
-      .from("observations")
-      .select("*")
-     .eq("school_id", schoolId)
-.contains("learner_ids", [learner])
-.order("observation_date", {
-        ascending: false,
-      })
-      .order("created_at", {
-        ascending: false,
-      });
+    const { data, error } =
+      await authenticatedSupabase
+        .from("observations")
+        .select("*")
+        .eq("school_id", schoolId)
+        .contains("learner_ids", [learner])
+        .order("observation_date", {
+          ascending: false,
+        })
+        .order("created_at", {
+          ascending: false,
+        });
 
     if (error) {
       return NextResponse.json(
