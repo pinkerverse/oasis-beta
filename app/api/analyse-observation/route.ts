@@ -206,7 +206,54 @@ const framework: FrameworkDefinition =
     frameworkKey as keyof typeof frameworks
   ] ||
   frameworks.eyfs;
+const {
+  data: assessmentSettings,
+  error: assessmentSettingsError,
+} = await authenticatedSupabase
+  .from("school_assessment_settings")
+  .select(
+    "status_labels, expectation_mode"
+  )
+  .eq("school_id", schoolId)
+  .maybeSingle();
 
+if (assessmentSettingsError) {
+  console.error(
+    "Assessment settings lookup failed:",
+    assessmentSettingsError
+  );
+}
+
+const configuredAssessmentLabels =
+  Array.isArray(
+    assessmentSettings?.status_labels
+  )
+    ? assessmentSettings.status_labels
+        .filter(
+          (
+            label: unknown
+          ): label is string =>
+            typeof label === "string"
+        )
+        .map((label: string) =>
+          label.trim()
+        )
+        .filter(Boolean)
+    : [];
+
+const assessmentLevelLabels =
+  configuredAssessmentLabels.length >= 2
+    ? configuredAssessmentLabels
+    : [
+        ...framework.assessmentLevels,
+      ]
+        .sort(
+          (a, b) =>
+            a.order - b.order
+        )
+        .map(
+          (level) => level.label
+        );
 const requestedObservationDate =
   typeof body.observationDate === "string"
     ? body.observationDate.trim()
@@ -267,20 +314,11 @@ const learnerAgeContext = learnerAges
 
 
 
-      const orderedAssessmentLevels = [
-  ...framework.assessmentLevels,
-].sort((a, b) => a.order - b.order);
-
-const assessmentLevelLabels =
-  orderedAssessmentLevels.map(
-    (level) => level.label
-  );
-
 const assessmentLevelsText =
-  orderedAssessmentLevels
+  assessmentLevelLabels
     .map(
-      (level) =>
-        `- ${level.label}: ${level.description}`
+      (label, index) =>
+        `- ${index + 1}. ${label}`
     )
     .join("\n");
 

@@ -113,13 +113,6 @@ assessmentContext: {
 
 };
 
-const defaultAssessmentLevels = [
-  "Below",
-  "Developing",
-  "Secure",
-  "Exceeding",
-];
-
 const pupilProgress = [
   { area: "Mathematics", level: "Exceeding", score: 100 },
   { area: "Communication", level: "Secure", score: 75 },
@@ -336,44 +329,71 @@ const [assessmentPhilosophy, setAssessmentPhilosophy] =
   useState("Hybrid");
 const activeFramework =
   activeSavedFramework ?? frameworks.eyfs;
-  function getAssessmentDisplayLabel(
+ function getAssessmentDisplayLabel(
   value: string
 ) {
+  const cleanValue = value.trim();
+
+  if (!cleanValue) {
+    return "";
+  }
+
+  const exactMatch =
+    assessmentStatusLabels.find(
+      (label) =>
+        label.trim().toLowerCase() ===
+        cleanValue.toLowerCase()
+    );
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
   const normalized =
-    value.trim().toLowerCase();
+    cleanValue.toLowerCase();
 
-  if (
-    normalized === "below" ||
-    normalized === "below expectation"
-  ) {
-    return "BELOW";
+  const equivalentGroups = [
+    [
+      "below",
+      "below expectation",
+    ],
+    [
+      "approaching",
+      "developing",
+      "emerging",
+    ],
+    [
+      "meeting",
+      "secure",
+      "at expectation",
+      "meeting expectation",
+    ],
+    [
+      "exceeding",
+      "above expectation",
+    ],
+  ];
+
+  const matchingGroup =
+    equivalentGroups.find((group) =>
+      group.includes(normalized)
+    );
+
+  if (matchingGroup) {
+    const configuredEquivalent =
+      assessmentStatusLabels.find(
+        (label) =>
+          matchingGroup.includes(
+            label.trim().toLowerCase()
+          )
+      );
+
+    if (configuredEquivalent) {
+      return configuredEquivalent;
+    }
   }
 
-  if (
-    normalized === "developing" ||
-    normalized === "emerging" ||
-    normalized === "approaching"
-  ) {
-    return "APPROACHING";
-  }
-
-  if (
-    normalized === "secure" ||
-    normalized === "meeting" ||
-    normalized === "meeting expectation" ||
-    normalized === "at expectation"
-  ) {
-    return "MEETING";
-  }
-
-  if (
-    normalized === "exceeding" ||
-    normalized === "above expectation"
-  ) {
-    return "EXCEEDING";
-  }
-
-  return value.trim().toUpperCase();
+  return cleanValue;
 }
 function getAssessmentLevelColours(
   levelLabel: string
@@ -381,37 +401,50 @@ function getAssessmentLevelColours(
   const displayLabel =
     getAssessmentDisplayLabel(levelLabel);
 
-  if (displayLabel === "BELOW") {
+  const levelIndex =
+    assessmentStatusLabels.findIndex(
+      (label) =>
+        label.trim().toLowerCase() ===
+        displayLabel.trim().toLowerCase()
+    );
+
+  if (levelIndex < 0) {
+    return {
+      badge: "bg-slate-100 text-slate-600",
+      bar: "bg-slate-400",
+    };
+  }
+
+  const progress =
+    assessmentStatusLabels.length <= 1
+      ? 1
+      : levelIndex /
+        (assessmentStatusLabels.length - 1);
+
+  if (progress <= 0.15) {
     return {
       badge: "bg-orange-100 text-orange-700",
       bar: "bg-orange-500",
     };
   }
 
-  if (displayLabel === "APPROACHING") {
+  if (progress <= 0.45) {
     return {
       badge: "bg-yellow-100 text-yellow-700",
-      bar: "bg-yellow-500",
+      bar: "bg-yellow-200",
     };
   }
 
-  if (displayLabel === "MEETING") {
+  if (progress <= 0.75) {
     return {
       badge: "bg-green-100 text-green-700",
-      bar: "bg-green-500",
-    };
-  }
-
-  if (displayLabel === "EXCEEDING") {
-    return {
-      badge: "bg-purple-100 text-purple-700",
-      bar: "bg-purple-500",
+      bar: "bg-green-400",
     };
   }
 
   return {
-    badge: "bg-slate-100 text-slate-600",
-    bar: "bg-slate-400",
+    badge: "bg-purple-100 text-purple-700",
+    bar: "bg-purple-500",
   };
 }
 const [
@@ -425,7 +458,7 @@ const [manualStatementIds, setManualStatementIds] =
   useState<string[]>([]);
 
 const [manualAreaLevel, setManualAreaLevel] =
-  useState(defaultAssessmentLevels[0]);
+  useState("");
 
 const [manualAreaEvidence, setManualAreaEvidence] =
   useState("");
@@ -446,7 +479,9 @@ function toggleManualStatement(statementId: string) {
 function resetManualLearningAreaForm() {
   setManualAreaId("");
   setManualStatementIds([]);
-  setManualAreaLevel(defaultAssessmentLevels[0]);
+ setManualAreaLevel(
+  assessmentStatusLabels[0] ?? ""
+);
   setManualAreaEvidence("");
 }
 
@@ -764,9 +799,24 @@ const [
   status_labels: string[];
   expectation_mode: string;
 } | null>(null);
-const [assessmentScale, setAssessmentScale] = useState(
-  "Below / Developing / Secure / Exceeding"
-);
+const assessmentStatusLabels =
+  schoolAssessmentSettings?.status_labels?.length
+    ? schoolAssessmentSettings.status_labels
+    : [
+        ...(activeFramework.assessmentLevels ?? []),
+      ]
+        .sort((a, b) => a.order - b.order)
+        .map((level) => level.label);
+useEffect(() => {
+  setManualAreaLevel((current) =>
+    assessmentStatusLabels.includes(current)
+      ? current
+      : assessmentStatusLabels[0] ?? ""
+  );
+}, [
+  schoolAssessmentSettings,
+  activeSavedFramework,
+]);
 const evidenceCoverage = learnerObservations.reduce(
   (acc: any[], entry: any) => {
     entry.framework_matches?.forEach((match: any) => {
@@ -805,9 +855,8 @@ const maxEvidenceCount =
     ? Math.max(...evidenceCoverage.map((item: any) => item.count))
     : 1;
 const liveLearnerProgress = (() => {
-  const orderedLevels = [
-    ...activeFramework.assessmentLevels,
-  ].sort((a, b) => a.order - b.order);
+  const orderedLevels =
+  assessmentStatusLabels;
 
   const latestJudgementByArea = new Map<
     string,
@@ -852,46 +901,42 @@ const liveLearnerProgress = (() => {
         continue;
       }
 
-      const levelIndex = orderedLevels.findIndex(
-        (assessmentLevel) =>
-          assessmentLevel.label === level
-      );
+const displayLevel =
+  getAssessmentDisplayLabel(level);
 
-      const legacyLevel =
-  level.trim().toLowerCase();
-
-const legacyScore =
-  legacyLevel === "below" ||
-  legacyLevel === "below expectation"
-    ? 25
-    : legacyLevel === "developing" ||
-        legacyLevel === "emerging" ||
-        legacyLevel === "approaching"
-      ? 50
-      : legacyLevel === "secure" ||
-          legacyLevel === "meeting" ||
-          legacyLevel === "meeting expectation" ||
-          legacyLevel === "at expectation"
-        ? 75
-        : legacyLevel === "exceeding" ||
-            legacyLevel === "above expectation"
-          ? 100
-          : 0;
+const levelIndex =
+  orderedLevels.findIndex(
+    (assessmentLevel) =>
+      assessmentLevel
+        .trim()
+        .toLowerCase() ===
+      displayLevel
+        .trim()
+        .toLowerCase()
+  );
 
 const score =
+  levelIndex >= 0 &&
+  orderedLevels.length > 0
+    ? Math.round(
+        ((levelIndex + 1) /
+          orderedLevels.length) *
+          100
+      )
+    : 0;
   levelIndex >= 0 && orderedLevels.length > 0
     ? Math.round(
         ((levelIndex + 1) /
           orderedLevels.length) *
           100
       )
-    : legacyScore;
+    : 0;
 
-      latestJudgementByArea.set(area, {
-        area,
-        level,
-        score,
-      });
+latestJudgementByArea.set(area, {
+  area,
+  level: displayLevel,
+  score,
+});
     }
   }
 
@@ -1711,82 +1756,6 @@ const [learnersLoading, setLearnersLoading] = useState(true);
 const [learnersError, setLearnersError] = useState("");
 
 const realClassInsights = (() => {
-const assessmentLabels =
-  schoolAssessmentSettings
-    ?.status_labels?.length
-    ? schoolAssessmentSettings.status_labels.map(
-        (label) => label.toUpperCase()
-      )
-    : [
-        ...(activeFramework.assessmentLevels ?? []),
-      ]
-        .sort((a, b) => a.order - b.order)
-        .map((level) =>
-          level.label.toUpperCase()
-        );
-
-function normalizeAssessmentStatus(
-  value: string
-) {
-  const cleanValue = value.trim();
-
-  if (!cleanValue) {
-    return "";
-  }
-
-  const exactMatch =
-    assessmentLabels.find(
-      (label) =>
-        label.trim().toLowerCase() ===
-        cleanValue.toLowerCase()
-    );
-
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  const normalized =
-    cleanValue.toLowerCase();
-
-  const equivalentGroups = [
-    [
-      "below",
-      "below expectation",
-    ],
-    [
-      "approaching",
-      "developing",
-      "emerging",
-    ],
-    [
-      "meeting",
-      "secure",
-      "at expectation",
-      "meeting expectation",
-    ],
-    [
-      "exceeding",
-      "above expectation",
-    ],
-  ];
-
-  const matchingGroup =
-    equivalentGroups.find((group) =>
-      group.includes(normalized)
-    );
-
-  if (!matchingGroup) {
-    return cleanValue.toUpperCase();
-  }
-
-  return (
-    assessmentLabels.find((label) =>
-      matchingGroup.includes(
-        label.trim().toLowerCase()
-      )
-    ) ?? cleanValue
-  );
-}
 
 const activeAreaNames =
   activeFramework.areaDefinitions
@@ -1867,7 +1836,7 @@ const area =
         : "";
 
 const status =
-  normalizeAssessmentStatus(
+  getAssessmentDisplayLabel(
     rawStatus
   );
 
@@ -1924,7 +1893,7 @@ const status =
       }
     > = {};
 
-    for (const label of assessmentLabels) {
+    for (const label of assessmentStatusLabels) {
       levels[label] = {
         count: 0,
         learners: [],
@@ -4632,7 +4601,7 @@ const hasOverride =
         }
         className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-900"
       >
-        {defaultAssessmentLevels.map((level) => (
+        {assessmentStatusLabels.map((level) => (
           <option key={level} value={level}>
             {level}
           </option>
