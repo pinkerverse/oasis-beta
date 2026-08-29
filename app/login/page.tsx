@@ -8,6 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 
 type AuthMode = "signin" | "signup" | "forgot" | "reset";
 
+const INVITATION_ONLY_BETA =
+  process.env.NEXT_PUBLIC_BETA_INVITE_ONLY !== "false";
+
 const AUTH_COPY: Record<
   AuthMode,
   { title: string; description: string; submit: string; loading: string }
@@ -80,6 +83,12 @@ function LoginForm() {
       }
 
       if (mode === "signup") {
+        if (INVITATION_ONLY_BETA) {
+          throw new Error(
+            "OASIS is currently in private beta. Access is by invitation."
+          );
+        }
+
         if (!name.trim()) throw new Error("Enter your name.");
         if (password.length < 8) {
           throw new Error("Use at least eight characters for your password.");
@@ -178,37 +187,46 @@ function LoginForm() {
         </div>
 
         <div className="px-7 pb-8 pt-6">
-          {(mode === "signin" || mode === "signup") && (
-            <div className="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
-              <button
-                type="button"
-                onClick={() => changeMode("signin")}
-                className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-                  mode === "signin"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={() => changeMode("signup")}
-                className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-                  mode === "signup"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                Create account
-              </button>
-            </div>
-          )}
+          {!INVITATION_ONLY_BETA &&
+            (mode === "signin" || mode === "signup") && (
+              <div className="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => changeMode("signin")}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                    mode === "signin"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeMode("signup")}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                    mode === "signup"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  Create account
+                </button>
+              </div>
+            )}
 
           <h1 className="text-2xl font-bold text-slate-900">{copy.title}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {copy.description}
           </p>
+
+          {INVITATION_ONLY_BETA && mode === "signin" && (
+            <div className="mt-5 rounded-2xl border border-cyan-100 bg-gradient-to-r from-cyan-50 to-indigo-50 px-4 py-3 text-sm leading-6 text-slate-700">
+              <span className="font-semibold text-slate-900">Private beta.</span>{" "}
+              Access is currently by invitation. If you have been invited, sign
+              in with the email address used for your invitation.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             {mode === "signup" && (
