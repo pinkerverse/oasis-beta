@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import Papa from "papaparse";
+import {
+  inferLearnerDateOrder,
+  normaliseLearnerDate,
+  type LearnerDateOrder,
+} from "@/lib/learner-import";
 
 type Learner = {
   id: string;
@@ -19,6 +24,7 @@ type ImportRow = {
   lastName: string;
   className: string;
   dateOfBirth: string;
+  rawDateOfBirth: string;
   isValid: boolean;
 };
 
@@ -47,6 +53,8 @@ export default function LearnersStep({
   const [importRows, setImportRows] = useState<
     ImportRow[]
   >([]);
+  const [importDateOrder, setImportDateOrder] =
+    useState<LearnerDateOrder>("DMY");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -89,14 +97,8 @@ export default function LearnersStep({
   }
 
   async function addLearner() {
-    if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !dateOfBirth
-    ) {
-      setError(
-        "First name, last name and date of birth are required."
-      );
+    if (!firstName.trim()) {
+      setError("A first name is required.");
       return;
     }
 
@@ -214,7 +216,7 @@ function downloadTemplate() {
           .replace(/[^a-z0-9]/g, ""),
 
       complete: (results) => {
-        const rows = results.data.map((row) => {
+        const rawRows = results.data.map((row) => {
           const externalId =
             row.pupilid ||
             row.externalid ||
@@ -249,16 +251,30 @@ function downloadTemplate() {
             "";
 
           return {
-            rowId: crypto.randomUUID(),
             externalId: externalId.trim(),
             firstName: first.trim(),
             lastName: last.trim(),
             className: learnerClass.trim(),
-            dateOfBirth: dob.trim(),
+            rawDateOfBirth: dob.trim(),
+          };
+        });
+
+        const dateOrder =
+          inferLearnerDateOrder(
+            rawRows.map((row) => row.rawDateOfBirth)
+          ) || "DMY";
+        const rows = rawRows.map((row) => {
+          const parsedDate = normaliseLearnerDate(
+            row.rawDateOfBirth,
+            dateOrder
+          );
+
+          return {
+            ...row,
+            rowId: crypto.randomUUID(),
+            dateOfBirth: parsedDate.date,
             isValid: Boolean(
-              first.trim() &&
-                last.trim() &&
-                dob.trim()
+              row.firstName && parsedDate.isValid
             ),
           };
         });
@@ -270,11 +286,12 @@ function downloadTemplate() {
           return;
         }
 
+        setImportDateOrder(dateOrder);
         setImportRows(rows);
 
         if (rows.some((row) => !row.isValid)) {
           setError(
-            "Some rows are missing first name, last name or date of birth."
+            "Some rows need a first name or contain a date that could not be read."
           );
         }
       },
@@ -294,6 +311,27 @@ function downloadTemplate() {
       )
     );
 
+    setError("");
+  }
+
+  function changeImportDateOrder(dateOrder: LearnerDateOrder) {
+    setImportDateOrder(dateOrder);
+    setImportRows((current) =>
+      current.map((row) => {
+        const parsedDate = normaliseLearnerDate(
+          row.rawDateOfBirth,
+          dateOrder
+        );
+
+        return {
+          ...row,
+          dateOfBirth: parsedDate.date,
+          isValid: Boolean(
+            row.firstName.trim() && parsedDate.isValid
+          ),
+        };
+      })
+    );
     setError("");
   }
 
@@ -327,6 +365,7 @@ function downloadTemplate() {
             className: row.className,
             dateOfBirth: row.dateOfBirth,
           })),
+          dateOrder: importDateOrder,
         }),
       });
 
@@ -419,7 +458,7 @@ function downloadTemplate() {
                 onChange={(event) =>
                   setLastName(event.target.value)
                 }
-                placeholder="Last name"
+                placeholder="Last name (optional)"
                 className="rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
               />
 
@@ -441,6 +480,10 @@ function downloadTemplate() {
                 className="rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
               />
             </div>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Surname and date of birth can be added or changed later.
+            </p>
 
             <button
               type="button"
@@ -487,6 +530,30 @@ function downloadTemplate() {
 
             {importRows.length > 0 && (
               <div className="mt-5">
+                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 px-4 py-3">
+                  <label
+                    htmlFor="onboarding-import-date-order"
+                    className="text-sm font-medium text-slate-700"
+                  >
+                    Numeric date order
+                  </label>
+                  <select
+                    id="onboarding-import-date-order"
+                    value={importDateOrder}
+                    onChange={(event) =>
+                      changeImportDateOrder(
+                        event.target.value as LearnerDateOrder
+                      )
+                    }
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                  >
+                    <option value="DMY">Day / Month / Year</option>
+                    <option value="MDY">Month / Day / Year</option>
+                  </select>
+                  <span className="text-xs text-slate-500">
+                    OASIS inferred this from the whole file. Change it if needed.
+                  </span>
+                </div>
                 <div className="space-y-2">
                   {importRows.map((row) => (
                     <div
@@ -496,13 +563,15 @@ function downloadTemplate() {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
                           {row.firstName || "Missing"}{" "}
-                          {row.lastName}
+                          {row.lastName || "(surname not shared)"}
                         </p>
 
                         <p className="text-xs text-slate-500">
                           {row.className || "No class"} ·{" "}
                           {row.dateOfBirth ||
-                            "Missing DOB"}
+                            (row.rawDateOfBirth
+                              ? `${row.rawDateOfBirth} — check date`
+                              : "DOB not shared")}
                         </p>
                       </div>
 

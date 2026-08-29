@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 import type { FrameworkDefinition } from "@/lib/framework";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
@@ -31,7 +30,6 @@ function isFrameworkDefinition(
 // --------------------
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
     const schoolId = await getCurrentSchoolId();
 
 if (!schoolId) {
@@ -46,7 +44,35 @@ if (!schoolId) {
 
 const authenticatedSupabase =
   await createServerSupabaseClient();
+const body = await request.json();
+const rightsConfirmed =
+  body?.rightsConfirmed === true;
 
+if (!rightsConfirmed) {
+  return NextResponse.json(
+    {
+      error:
+        "You must confirm that you have the right or appropriate licence to use this framework within OASIS.",
+      code: "FRAMEWORK_RIGHTS_NOT_CONFIRMED",
+    },
+    { status: 400 }
+  );
+}
+
+const {
+  data: { user },
+  error: userError,
+} = await authenticatedSupabase.auth.getUser();
+
+if (userError || !user) {
+  return NextResponse.json(
+    {
+      error:
+        "Your account could not be verified.",
+    },
+    { status: 401 }
+  );
+}
     const definition = body?.definition;
 
     const sourceText =
@@ -168,24 +194,48 @@ if (existingFramework) {
 
   const updateResult = await authenticatedSupabase
     .from("framework_versions")
-    .update({
-      name: frameworkName,
-      definition: definitionToSave,
-      source_text: sourceText,
-    })
+.update({
+  name: frameworkName,
+  definition: definitionToSave,
+  source_text: sourceText,
+
+  license_type: "unknown",
+  distribution_scope: "organisation",
+  rights_confirmed: true,
+  rights_confirmed_at:
+    new Date().toISOString(),
+  uploaded_by: user.id,
+
+  framework_import_status: "needs_review",
+parser_confidence: null,
+import_warnings: [],
+import_error: null,
+})
     .eq("id", existingFramework.id)
     .select(
       `
-        id,
-        framework_key,
-        name,
-        version,
-        definition,
-        source_text,
-        status,
-        activated_at,
-        created_at,
-        updated_at
+       id,
+framework_key,
+name,
+version,
+definition,
+source_text,
+status,
+
+license_type,
+distribution_scope,
+rights_confirmed,
+rights_confirmed_at,
+uploaded_by,
+
+framework_import_status,
+parser_confidence,
+import_warnings,
+import_error,
+
+activated_at,
+created_at,
+updated_at
       `
     )
     .single();
@@ -196,28 +246,52 @@ if (existingFramework) {
   const insertResult = await authenticatedSupabase
     .from("framework_versions")
     .insert([
-      {
-        school_id: schoolId,
-        framework_key: frameworkKey,
-        name: frameworkName,
-        version: frameworkVersion,
-        definition: definitionToSave,
-        source_text: sourceText,
-        status: "draft",
-      },
+     {
+  school_id: schoolId,
+  framework_key: frameworkKey,
+  name: frameworkName,
+  version: frameworkVersion,
+  definition: definitionToSave,
+  source_text: sourceText,
+  status: "draft",
+
+  license_type: "unknown",
+  distribution_scope: "organisation",
+  rights_confirmed: true,
+  rights_confirmed_at:
+    new Date().toISOString(),
+  uploaded_by: user.id,
+
+  framework_import_status: "needs_review",
+parser_confidence: null,
+import_warnings: [],
+import_error: null,
+},
     ])
     .select(
       `
         id,
-        framework_key,
-        name,
-        version,
-        definition,
-        source_text,
-        status,
-        activated_at,
-        created_at,
-        updated_at
+framework_key,
+name,
+version,
+definition,
+source_text,
+status,
+
+license_type,
+distribution_scope,
+rights_confirmed,
+rights_confirmed_at,
+uploaded_by,
+
+framework_import_status,
+parser_confidence,
+import_warnings,
+import_error,
+
+activated_at,
+created_at,
+updated_at
       `
     )
     .single();
@@ -298,15 +372,27 @@ const authenticatedSupabase =
       .select(
   `
     id,
-    framework_key,
-    name,
-    version,
-    definition,
-    source_text,
-    status,
-    activated_at,
-    created_at,
-    updated_at
+framework_key,
+name,
+version,
+definition,
+source_text,
+status,
+
+license_type,
+distribution_scope,
+rights_confirmed,
+rights_confirmed_at,
+uploaded_by,
+
+framework_import_status,
+parser_confidence,
+import_warnings,
+import_error,
+
+activated_at,
+created_at,
+updated_at
   `
 )
 .eq("school_id", schoolId)
@@ -484,9 +570,9 @@ const authenticatedSupabase =
 // --------------------
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json();
-
     const schoolId = await getCurrentSchoolId();
+
+
 
 if (!schoolId) {
   return NextResponse.json(
@@ -500,6 +586,8 @@ if (!schoolId) {
 
 const authenticatedSupabase =
   await createServerSupabaseClient();
+
+    const body = await request.json();
 
 
   
@@ -538,15 +626,16 @@ const authenticatedSupabase =
       error: lookupError,
     } = await authenticatedSupabase
       .from("framework_versions")
-      .select(
-        `
-          id,
-          framework_key,
-          name,
-          version,
-          status
-        `
-      )
+.select(
+  `
+    id,
+    framework_key,
+    name,
+    version,
+    status,
+    rights_confirmed
+  `
+)
      .eq("id", frameworkId)
 .eq("school_id", schoolId)
 .maybeSingle();
@@ -576,7 +665,16 @@ const authenticatedSupabase =
         { status: 404 }
       );
     }
-
+if (!framework.rights_confirmed) {
+  return NextResponse.json(
+    {
+      error:
+        "You must confirm that you have the right or appropriate licence to use this framework before it can be activated.",
+      code: "FRAMEWORK_RIGHTS_NOT_CONFIRMED",
+    },
+    { status: 409 }
+  );
+}
     if (framework.status !== "draft") {
       return NextResponse.json(
         {
@@ -619,25 +717,39 @@ const authenticatedSupabase =
       error: activationError,
     } = await authenticatedSupabase
       .from("framework_versions")
-      .update({
-        status: "active",
-        activated_at:
-          new Date().toISOString(),
-      })
+.update({
+  status: "active",
+  framework_import_status: "ready",
+  import_error: null,
+  activated_at:
+    new Date().toISOString(),
+})
       .eq("id", frameworkId)
 .eq("school_id", schoolId)
 .select(
         `
-          id,
-          framework_key,
-          name,
-          version,
-          definition,
-          source_text,
-          status,
-          activated_at,
-          created_at,
-          updated_at
+         id,
+framework_key,
+name,
+version,
+definition,
+source_text,
+status,
+
+license_type,
+distribution_scope,
+rights_confirmed,
+rights_confirmed_at,
+uploaded_by,
+
+framework_import_status,
+parser_confidence,
+import_warnings,
+import_error,
+
+activated_at,
+created_at,
+updated_at
         `
       )
       .single();

@@ -30,6 +30,9 @@ export default function AssessmentSetupStep({
       "developmental_trajectory"
     );
 
+  const [weeklyObservationTarget, setWeeklyObservationTarget] =
+    useState(2);
+
   const [isLoading, setIsLoading] =
     useState(true);
 
@@ -37,10 +40,6 @@ export default function AssessmentSetupStep({
     useState(false);
 
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
 
   async function loadSettings() {
     try {
@@ -89,6 +88,22 @@ export default function AssessmentSetupStep({
           result.settings.expectation_mode
         );
       }
+
+      if (
+        Number.isInteger(
+          result.settings
+            ?.expected_observations_per_learner_per_week
+        ) &&
+        result.settings
+          .expected_observations_per_learner_per_week >= 1 &&
+        result.settings
+          .expected_observations_per_learner_per_week <= 20
+      ) {
+        setWeeklyObservationTarget(
+          result.settings
+            .expected_observations_per_learner_per_week
+        );
+      }
     } catch (error) {
       setError(
         error instanceof Error
@@ -99,6 +114,10 @@ export default function AssessmentSetupStep({
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    void Promise.resolve().then(loadSettings);
+  }, []);
 
   function updateLabel(
     index: number,
@@ -162,6 +181,17 @@ export default function AssessmentSetupStep({
       return;
     }
 
+    if (
+      !Number.isInteger(weeklyObservationTarget) ||
+      weeklyObservationTarget < 1 ||
+      weeklyObservationTarget > 20
+    ) {
+      setError(
+        "Expected observations per learner per week must be a whole number between 1 and 20."
+      );
+      return;
+    }
+
     try {
       setIsSaving(true);
       setError("");
@@ -178,6 +208,8 @@ export default function AssessmentSetupStep({
             statusLabels:
               cleanedLabels,
             expectationMode,
+            expectedObservationsPerLearnerPerWeek:
+              weeklyObservationTarget,
           }),
         }
       );
@@ -366,6 +398,37 @@ export default function AssessmentSetupStep({
                 </div>
               </button>
             </div>
+          </div>
+
+          <div className="mt-8 border-t border-slate-200 pt-8">
+            <label
+              htmlFor="weekly-observation-target"
+              className="font-semibold text-slate-900"
+            >
+              Expected observations per learner per week
+            </label>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Used to help OASIS show which learners may need
+              more observation this week. You can change this
+              later in Settings.
+            </p>
+
+            <input
+              id="weekly-observation-target"
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={weeklyObservationTarget}
+              onChange={(event) => {
+                setWeeklyObservationTarget(
+                  Number(event.target.value)
+                );
+                setError("");
+              }}
+              className="mt-4 w-28 rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
+            />
           </div>
         </>
       )}

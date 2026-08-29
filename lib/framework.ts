@@ -32,6 +32,16 @@ export type FrameworkProgressionLevel = {
   // progression cell at the same developmental level.
   descriptors: string[];
 };
+
+export type FrameworkExpectedProgressionRange = {
+  // References a genuine learner stage / age band in FrameworkDefinition.stages.
+  stageId: string;
+
+  // GOLD-style expectations vary by objective, so these ranges belong to
+  // the statement rather than to one global framework checkpoint.
+  minExpectedLevel: number;
+  maxExpectedLevel: number;
+};
 export type FrameworkExpectationCheckpoint = {
   id: string;
 
@@ -75,6 +85,10 @@ export type FrameworkStatement = {
   // Ordered developmental progression belonging
   // specifically to this objective.
   progression?: FrameworkProgressionLevel[];
+
+  // Optional objective-specific expectation ranges. This preserves frameworks
+  // whose coloured age bands span different levels for each objective.
+  expectedProgression?: FrameworkExpectedProgressionRange[];
 };
 
 export type FrameworkArea = {

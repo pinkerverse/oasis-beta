@@ -1,8 +1,13 @@
 import OpenAI from "openai";
 import {
+  logFrameworkApiUsage,
+  readFrameworkApiUsage,
+} from "@/lib/framework-api-usage";
+import {
   defaultAssessmentLevels,
   type FrameworkDefinition,
 } from "@/lib/framework";
+import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -18,6 +23,18 @@ function createSlug(value: string) {
 
 export async function POST(request: Request) {
   try {
+    const schoolId = await getCurrentSchoolId();
+
+    if (!schoolId) {
+      return Response.json(
+        {
+          error:
+            "You must be signed in and linked to a school to map frameworks.",
+        },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 const frameworkExtraction =
   body.frameworkExtraction &&
@@ -99,9 +116,11 @@ const frameworkTableText =
       );
     }
 
+    const startedAt = Date.now();
+    const model = process.env.FRAMEWORK_MAPPING_MODEL || "gpt-4.1-mini";
     const response =
       await openai.responses.create({
-        model: "gpt-4.1-mini",
+        model,
 
         input: `
 You are mapping an educational framework into structured data for OASIS.
@@ -135,6 +154,14 @@ TABLE INTERPRETATION RULES
 - If a continuation row has an empty objective / strand cell but contains progression descriptors, attach those descriptors to the preceding objective rather than creating a new statement.
 - When a table continues across a page break, preserve the previous objective until a genuinely new objective appears in the objective / strand column.
 - Never promote a progression descriptor into statement text merely because it appears on a new physical row or page.
+
+GOLD-STYLE OBJECTIVES AND DIMENSIONS:
+- When the source uses numbered objectives with coded dimensions (for example 1a, 1b, 2a), treat each dimension as the framework statement and preserve its code in sourceReference.
+- Keep the parent objective as the learning area or subarea context; do not combine all dimensions into one statement.
+- Ordered GOLD progression levels belong in progression and must not become stages or assessment judgement labels.
+- Indicators and examples inside a progression level remain attached to that same level. Examples must never become separate framework statements.
+- Preserve empty progression cells. Do not shift a descriptor into an earlier level because preceding cells are blank.
+- Colour bands, age ranges, or class/year expectations may become expectationBands only when the document explicitly defines their meaning.
 If a progression header uses stars:
 
 * = developmental level 1
@@ -154,6 +181,7 @@ EXPECTATION BANDS:
 - If the source does not explicitly define expectation ranges, return expectationBands as an empty array.
 - expectationBands interpret developmental progression; they must never change the underlying progression level itself.
 - If the source explicitly gives expectations at different points in time, preserve those as separate checkpoints.
+- When an expectation range differs by objective or statement (for example a coloured GOLD range), put it in that statement's expectedProgression array and link it to a genuine stageId. Never flatten objective-specific ranges into a single global checkpoint.
 
 The framework's developmental progression must be preserved independently.
 
@@ -451,6 +479,23 @@ expectationBands: {
           ],
         },
       },
+      expectedProgression: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            stageId: { type: "string" },
+            minExpectedLevel: { type: "integer", minimum: 1 },
+            maxExpectedLevel: { type: "integer", minimum: 1 },
+          },
+          required: [
+            "stageId",
+            "minExpectedLevel",
+            "maxExpectedLevel",
+          ],
+        },
+      },
     },
 
     required: [
@@ -461,6 +506,7 @@ expectationBands: {
       "subarea",
       "sourceReference",
       "progression",
+      "expectedProgression",
     ],
   },
 },
@@ -740,6 +786,39 @@ const progression =
             first.level - second.level
         )
     : [];
+const expectedProgression =
+  Array.isArray(statement.expectedProgression)
+    ? statement.expectedProgression
+        .map((expectation: any) => {
+          const stageId =
+            typeof expectation?.stageId === "string"
+              ? expectation.stageId.trim()
+              : "";
+          const minExpectedLevel = Number(
+            expectation?.minExpectedLevel
+          );
+          const maxExpectedLevel = Number(
+            expectation?.maxExpectedLevel
+          );
+
+          if (
+            !validStageIds.has(stageId) ||
+            !Number.isInteger(minExpectedLevel) ||
+            !Number.isInteger(maxExpectedLevel) ||
+            minExpectedLevel < 1 ||
+            maxExpectedLevel < minExpectedLevel
+          ) {
+            return null;
+          }
+
+          return {
+            stageId,
+            minExpectedLevel,
+            maxExpectedLevel,
+          };
+        })
+        .filter(Boolean)
+    : [];
                       return {
   id: statementId,
   text,
@@ -766,6 +845,10 @@ const progression =
       : undefined,
 
   progression,
+  expectedProgression:
+    expectedProgression.length > 0
+      ? expectedProgression
+      : undefined,
 };
                     }
                   )
@@ -851,6 +934,14 @@ assessmentLevels:
       ),
       areaDefinitions: areas as FrameworkDefinition["areaDefinitions"],
     };
+
+    logFrameworkApiUsage({
+      operation: "text-mapping",
+      schoolId,
+      callCount: 1,
+      durationMs: Date.now() - startedAt,
+      usage: readFrameworkApiUsage(model, response.usage),
+    });
 
     return Response.json({
       success: true,

@@ -10,6 +10,10 @@ const DEFAULT_STATUS_LABELS = [
   "Exceeding",
 ];
 
+const DEFAULT_WEEKLY_OBSERVATION_TARGET = 2;
+const MIN_WEEKLY_OBSERVATION_TARGET = 1;
+const MAX_WEEKLY_OBSERVATION_TARGET = 20;
+
 const ALLOWED_EXPECTATION_MODES = [
   "developmental_trajectory",
   "end_of_year_threshold",
@@ -33,7 +37,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("school_assessment_settings")
     .select(
-      "school_id, status_labels, expectation_mode, onboarding_completed_at"
+      "school_id, status_labels, expectation_mode, expected_observations_per_learner_per_week, onboarding_completed_at"
     )
     .eq("school_id", schoolId)
     .maybeSingle();
@@ -51,6 +55,8 @@ export async function GET() {
       status_labels: DEFAULT_STATUS_LABELS,
       expectation_mode:
         "developmental_trajectory",
+      expected_observations_per_learner_per_week:
+        DEFAULT_WEEKLY_OBSERVATION_TARGET,
       onboarding_completed_at: null,
     },
   });
@@ -84,6 +90,9 @@ export async function POST(request: Request) {
     typeof body.expectationMode === "string"
       ? body.expectationMode
       : "";
+
+  const weeklyObservationTarget =
+    body.expectedObservationsPerLearnerPerWeek;
 
   if (statusLabels.length < 2) {
     return NextResponse.json(
@@ -124,6 +133,22 @@ export async function POST(request: Request) {
     );
   }
 
+  if (
+    !Number.isInteger(weeklyObservationTarget) ||
+    weeklyObservationTarget <
+      MIN_WEEKLY_OBSERVATION_TARGET ||
+    weeklyObservationTarget >
+      MAX_WEEKLY_OBSERVATION_TARGET
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Expected observations per learner per week must be a whole number between 1 and 20.",
+      },
+      { status: 400 }
+    );
+  }
+
   const supabase = await createClient();
 
   const now = new Date().toISOString();
@@ -135,6 +160,8 @@ export async function POST(request: Request) {
         school_id: schoolId,
         status_labels: statusLabels,
         expectation_mode: expectationMode,
+        expected_observations_per_learner_per_week:
+          weeklyObservationTarget,
         onboarding_completed_at: now,
         updated_at: now,
       },
@@ -143,7 +170,7 @@ export async function POST(request: Request) {
       }
     )
     .select(
-      "school_id, status_labels, expectation_mode, onboarding_completed_at"
+      "school_id, status_labels, expectation_mode, expected_observations_per_learner_per_week, onboarding_completed_at"
     )
     .single();
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function normalizeObservationText(value: unknown) {
   if (typeof value !== "string") {
@@ -78,7 +79,6 @@ function learnerIdsMatch(
 // --------------------
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
     const schoolId = await getCurrentSchoolId();
 
 if (!schoolId) {
@@ -93,6 +93,8 @@ if (!schoolId) {
 
 const authenticatedSupabase =
   await createServerSupabaseClient();
+
+    const body = await request.json();
 
     const observationText =
       typeof body.observation === "string"
@@ -151,6 +153,44 @@ const normalizedLearnerIds =
             "A valid observation date is required.",
         },
         { status: 400 }
+      );
+    }
+
+    const {
+      data: schoolLearners,
+      error: schoolLearnersError,
+    } = await authenticatedSupabase
+      .from("learners")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("active", true)
+      .in("id", normalizedLearnerIds);
+
+    if (schoolLearnersError) {
+      console.error(
+        "Selected learner verification failed:",
+        schoolLearnersError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "The selected learners could not be verified.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (
+      (schoolLearners?.length ?? 0) !==
+      normalizedLearnerIds.length
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "One or more selected learners do not belong to this school.",
+        },
+        { status: 403 }
       );
     }
 
@@ -499,6 +539,99 @@ export async function GET(request: Request) {
         error:
           "Failed to load journal.",
       },
+      { status: 500 }
+    );
+  }
+}
+
+// --------------------
+// DELETE OBSERVATION
+// --------------------
+export async function DELETE(request: Request) {
+  try {
+    const schoolId = await getCurrentSchoolId();
+
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "You must be signed in to delete observations." },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const observationId =
+      typeof body.id === "string" ? body.id.trim() : "";
+
+    if (!observationId) {
+      return NextResponse.json(
+        { error: "Observation ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const authenticatedSupabase = await createServerSupabaseClient();
+    const { data: observation, error: lookupError } =
+      await authenticatedSupabase
+        .from("observations")
+        .select("id, image_url")
+        .eq("id", observationId)
+        .eq("school_id", schoolId)
+        .maybeSingle();
+
+    if (lookupError) {
+      return NextResponse.json(
+        { error: lookupError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!observation) {
+      return NextResponse.json(
+        { error: "Observation not found." },
+        { status: 404 }
+      );
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from("observations")
+      .delete()
+      .eq("id", observationId)
+      .eq("school_id", schoolId);
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 500 }
+      );
+    }
+
+    const evidencePath =
+      typeof observation.image_url === "string"
+        ? observation.image_url.trim()
+        : "";
+
+    if (
+      evidencePath.startsWith(`${schoolId}/`) &&
+      !evidencePath.includes("..")
+    ) {
+      const { error: evidenceDeleteError } =
+        await supabaseAdmin.storage
+          .from("observation-evidence")
+          .remove([evidencePath]);
+
+      if (evidenceDeleteError) {
+        console.error(
+          "Observation deleted but photo cleanup failed:",
+          evidenceDeleteError
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete observation:", error);
+    return NextResponse.json(
+      { error: "Failed to delete observation." },
       { status: 500 }
     );
   }

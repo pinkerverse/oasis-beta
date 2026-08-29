@@ -6,6 +6,18 @@ import {
   frameworks,
   type FrameworkDefinition,
 } from "@/lib/framework";
+import {
+  uploadAndExtractFrameworkFile,
+  type FrameworkExtractionMetadata,
+  type FrameworkUploadProgress,
+} from "@/lib/framework-upload";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
+import OasisHeader from "@/app/components/OasisHeader";
+import {
+  inferLearnerDateOrder,
+  normaliseLearnerDate,
+  type LearnerDateOrder,
+} from "@/lib/learner-import";
 
 
 
@@ -16,10 +28,30 @@ type ImportedLearnerPreview = {
   lastName: string;
   className: string;
   dateOfBirth: string;
+  rawDateOfBirth: string;
   isValid: boolean;
 };
 
 type CsvLearnerRow = Record<string, string | undefined>;
+
+type FrameworkProcessingStage =
+  | FrameworkUploadProgress
+  | "organising";
+
+const frameworkProcessingLabels: Record<FrameworkProcessingStage, string> = {
+  preparing: "Preparing secure upload",
+  uploading: "Uploading securely",
+  reading: "Reading pages and tables",
+  organising: "Organising learning areas",
+};
+
+function formatFrameworkFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type AnalysisResult = {
   frameworkMatches: {
@@ -113,138 +145,9 @@ assessmentContext: {
 
 };
 
-const pupilProgress = [
-  { area: "Mathematics", level: "Exceeding", score: 100 },
-  { area: "Communication", level: "Secure", score: 75 },
-  { area: "Research Skills", level: "Secure", score: 75 },
-  { area: "Critical Thinking", level: "Developing", score: 50 },
-  { area: "Creativity", level: "Developing", score: 50 },
-  { area: "Physical", level: "Exceeding", score: 100 },
-  { area: "Social Skills", level: "Secure", score: 75 },
-  { area: "Self-Management", level: "Below", score: 25 },
-];
-
-const snapshotData = [
-  {
-    area: "Mathematics",
-    baseline: "Developing",
-    current: "Exceeding",
-    change: 2,
-  },
-  {
-    area: "Communication",
-    baseline: "Secure",
-    current: "Secure",
-    change: 0,
-  },
-  {
-    area: "Research Skills",
-    baseline: "Developing",
-    current: "Secure",
-    change: 1,
-  },
-  {
-    area: "Critical Thinking",
-    baseline: "Below",
-    current: "Developing",
-    change: 1,
-  },
-  {
-    area: "Creativity",
-    baseline: "Developing",
-    current: "Exceeding",
-    change: 2,
-  },
-  {
-    area: "Physical",
-    baseline: "Secure",
-    current: "Exceeding",
-    change: 1,
-  },
-  {
-    area: "Social Skills",
-    baseline: "Developing",
-    current: "Secure",
-    change: 1,
-  },
-  {
-    area: "Self-Management",
-    baseline: "Below",
-    current: "Developing",
-    change: 1,
-  },
-];
-
-
-
-const learningJourneyData = {
-  Overall: [
-    { label: "Sep", level: 1 },
-    { label: "Oct", level: 2 },
-    { label: "Nov", level: 2 },
-    { label: "Dec", level: 3 },
-    { label: "Jan", level: 4 },
-  ],
-  Mathematics: [
-    { label: "Sep", level: 1 },
-    { label: "Oct", level: 2 },
-    { label: "Nov", level: 3 },
-    { label: "Dec", level: 3 },
-    { label: "Jan", level: 4 },
-  ],
-  Communication: [
-    { label: "Sep", level: 2 },
-    { label: "Oct", level: 2 },
-    { label: "Nov", level: 3 },
-    { label: "Dec", level: 3 },
-    { label: "Jan", level: 3 },
-  ],
-  "Research Skills": [
-    { label: "Sep", level: 1 },
-    { label: "Oct", level: 2 },
-    { label: "Nov", level: 2 },
-    { label: "Dec", level: 3 },
-    { label: "Jan", level: 3 },
-  ],
-  "Critical Thinking": [
-    { label: "Sep", level: 1 },
-    { label: "Oct", level: 1 },
-    { label: "Nov", level: 2 },
-    { label: "Dec", level: 2 },
-    { label: "Jan", level: 3 },
-  ],
-  Creativity: [
-    { label: "Sep", level: 2 },
-    { label: "Oct", level: 2 },
-    { label: "Nov", level: 2 },
-    { label: "Dec", level: 3 },
-    { label: "Jan", level: 3 },
-  ],
-  Physical: [
-    { label: "Sep", level: 2 },
-    { label: "Oct", level: 3 },
-    { label: "Nov", level: 3 },
-    { label: "Dec", level: 4 },
-    { label: "Jan", level: 4 },
-  ],
-  "Social Skills": [
-    { label: "Sep", level: 2 },
-    { label: "Oct", level: 2 },
-    { label: "Nov", level: 3 },
-    { label: "Dec", level: 3 },
-    { label: "Jan", level: 3 },
-  ],
-  "Self-Management": [
-    { label: "Sep", level: 1 },
-    { label: "Oct", level: 1 },
-    { label: "Nov", level: 2 },
-    { label: "Dec", level: 2 },
-    { label: "Jan", level: 2 },
-  ],
-};
-
 export default function Home() {
     const router = useRouter();
+    const headerIntentHandled = useRef(false);
 
   const [checkingOnboarding, setCheckingOnboarding] =
     useState(true);
@@ -274,6 +177,12 @@ const [
 const [journalLearner, setJournalLearner] = useState("");
 const [isImportingLearners, setIsImportingLearners] =
   useState(false);
+const [observationToDelete, setObservationToDelete] =
+  useState<any | null>(null);
+const [deletingObservation, setDeletingObservation] =
+  useState(false);
+const [observationDeleteError, setObservationDeleteError] =
+  useState("");
 const [learnerObservations, setLearnerObservations] = useState<any[]>([]);
 const [classObservations, setClassObservations] = useState<any[]>([]);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
@@ -306,7 +215,7 @@ const [
 const [showManageLearners, setShowManageLearners] =
   useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
-const [teacherLevel, setTeacherLevel] = useState("Secure");
+const [teacherLevel, setTeacherLevel] = useState("");
 const [overrideReason, setOverrideReason] = useState("");
 const [areaLevelOverrides, setAreaLevelOverrides] =
   useState<Record<string, string>>({});
@@ -319,6 +228,7 @@ const [areaBeingOverridden, setAreaBeingOverridden] =
   const [areaOverrideReasons, setAreaOverrideReasons] =
   useState<Record<string, string>>({});
   const [showObservationPanel, setShowObservationPanel] = useState(false);
+  const [showObservationModal, setShowObservationModal] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
 const [learnerToArchive, setLearnerToArchive] = useState<any>(null);
   const [editingLearner, setEditingLearner] = useState<any>(null);
@@ -647,10 +557,34 @@ function getAreaShortLabel(area: string) {
 const [importText, setImportText] = useState("");
 const [importPreview, setImportPreview] =
   useState<ImportedLearnerPreview[]>([]);
+const [importDateOrder, setImportDateOrder] =
+  useState<LearnerDateOrder>("DMY");
 const [
   frameworkSaveMessage,
   setFrameworkSaveMessage,
 ] = useState("");
+const [
+  frameworkRightsConfirmed,
+  setFrameworkRightsConfirmed,
+] = useState(false);
+const [
+  showFrameworkRightsModal,
+  setShowFrameworkRightsModal,
+] = useState(false);
+
+const [
+  frameworkRightsPendingAction,
+  setFrameworkRightsPendingAction,
+] = useState<
+  "extract" | "map" | null
+>(null);
+const frameworkImportStatusLabels = {
+  processing: "Processing",
+  ready: "Ready",
+  needs_review: "Needs review",
+  unsupported: "Unsupported",
+  failed: "Failed",
+} as const;
 const [importError, setImportError] = useState("");
 const [isSEND, setIsSEND] = useState(false);
 const [isEAL, setIsEAL] = useState(false);
@@ -667,14 +601,7 @@ const [
 const [
   frameworkExtraction,
   setFrameworkExtraction,
-] = useState<{
-  type: string;
-  tables: {
-    pageNumber: number;
-    tableNumber: number;
-    rows: string[][];
-  }[];
-} | null>(null);
+] = useState<FrameworkExtractionMetadata | null>(null);
 const [
   isExtractingFramework,
   setIsExtractingFramework,
@@ -683,10 +610,49 @@ const [
   isMappingFramework,
   setIsMappingFramework,
 ] = useState(false);
+const [
+  frameworkProcessingStage,
+  setFrameworkProcessingStage,
+] = useState<FrameworkProcessingStage | null>(null);
 
 const [
   frameworkMappingError,
   setFrameworkMappingError,
+] = useState("");
+
+const [
+  showFrameworkReadHelpModal,
+  setShowFrameworkReadHelpModal,
+] = useState(false);
+
+const [
+  showFrameworkSupportModal,
+  setShowFrameworkSupportModal,
+] = useState(false);
+
+const [
+  frameworkSupportMessage,
+  setFrameworkSupportMessage,
+] = useState("");
+
+const [
+  frameworkSupportFile,
+  setFrameworkSupportFile,
+] = useState<File | null>(null);
+
+const [
+  frameworkSupportSending,
+  setFrameworkSupportSending,
+] = useState(false);
+
+const [
+  frameworkSupportError,
+  setFrameworkSupportError,
+] = useState("");
+
+const [
+  frameworkSupportSuccess,
+  setFrameworkSupportSuccess,
 ] = useState("");
 
 const [
@@ -715,8 +681,28 @@ const [
     activated_at: string | null;
     created_at: string;
     updated_at: string;
+    license_type: string;
+distribution_scope: string;
+rights_confirmed: boolean;
+rights_confirmed_at: string | null;
+uploaded_by: string | null;
+framework_import_status:
+  | "processing"
+  | "ready"
+  | "needs_review"
+  | "unsupported"
+  | "failed";
+
+parser_confidence: number | null;
+import_warnings: string[];
+import_error: string | null;
   }[]
 >([]);
+
+const [
+  showArchivedFrameworks,
+  setShowArchivedFrameworks,
+] = useState(false);
 
 const activeFrameworkRecord =
   savedFrameworks.find(
@@ -798,6 +784,7 @@ const [
 ] = useState<{
   status_labels: string[];
   expectation_mode: string;
+  expected_observations_per_learner_per_week?: number;
 } | null>(null);
 const assessmentStatusLabels =
   schoolAssessmentSettings?.status_labels?.length
@@ -1439,14 +1426,13 @@ type LiveJourneyPoint = {
 };
 
 const liveJourneyData = (() => {
-const orderedJourneyLevels = [
-  ...activeFramework.assessmentLevels,
-].sort((a, b) => a.order - b.order);
+const orderedJourneyLevels =
+  assessmentStatusLabels;
 
 const levelNumbers: Record<string, number> =
   Object.fromEntries(
-    orderedJourneyLevels.map((level, index) => [
-      level.label,
+    orderedJourneyLevels.map((label, index) => [
+      label.trim().toLowerCase(),
       index + 1,
     ])
   );
@@ -1495,44 +1481,29 @@ const result: Record<string, LiveJourneyPoint[]> = {};
     ? levelLabel.trim()
     : "";
 
-const normalizedLevelKey =
-  normalizedLevelLabel.toLowerCase();
-
-const legacyLevel =
-  normalizedLevelKey === "below" ||
-  normalizedLevelKey === "below expectation"
-    ? 1
-    : normalizedLevelKey === "developing" ||
-      normalizedLevelKey === "emerging" ||
-      normalizedLevelKey === "approaching"
-    ? 2
-    : normalizedLevelKey === "secure" ||
-      normalizedLevelKey === "meeting" ||
-      normalizedLevelKey === "meeting expectation" ||
-      normalizedLevelKey === "at expectation"
-    ? 3
-    : normalizedLevelKey === "exceeding" ||
-      normalizedLevelKey === "above expectation"
-    ? 4
-    : 0;
+const displayLevel =
+  getAssessmentDisplayLabel(
+    normalizedLevelLabel
+  );
 
 const level =
-  levelNumbers[normalizedLevelLabel] ||
-  legacyLevel;
+  levelNumbers[
+    displayLevel.trim().toLowerCase()
+  ] ?? 0;
 
       if (!area || level === 0) {
         continue;
       }
 
-      validMatches.push({
-        area,
-        level,
-        levelLabel: levelLabel.trim(),
-        confidence:
-          typeof match.confidence === "number"
-            ? match.confidence
-            : null,
-      });
+validMatches.push({
+  area,
+  level,
+  levelLabel: displayLevel,
+  confidence:
+    typeof match.confidence === "number"
+      ? match.confidence
+      : null,
+});
     }
 
     // Older test entries without per-area levels are ignored.
@@ -1610,6 +1581,336 @@ const [customLevels, setCustomLevels] = useState([
   "Level 3",
 ]);
 const [showTodaysFocus, setShowTodaysFocus] = useState(false);
+const [focusDay, setFocusDay] = useState<"today" | "tomorrow">("today");
+const [focusScheduleNow, setFocusScheduleNow] = useState(() => new Date());
+const [showSettings, setShowSettings] = useState(false);
+const [settingsStatusLabels, setSettingsStatusLabels] =
+  useState<string[]>([]);
+const [settingsExpectationMode, setSettingsExpectationMode] =
+  useState<
+    "developmental_trajectory" | "end_of_year_threshold"
+  >("developmental_trajectory");
+const [settingsWeeklyTarget, setSettingsWeeklyTarget] =
+  useState(2);
+const [settingsSaving, setSettingsSaving] = useState(false);
+const [settingsError, setSettingsError] = useState("");
+const [settingsMessage, setSettingsMessage] = useState("");
+const [accountEmail, setAccountEmail] = useState("");
+const [accountEmailDraft, setAccountEmailDraft] = useState("");
+const [accountName, setAccountName] = useState("");
+const [accountNameDraft, setAccountNameDraft] = useState("");
+const [accountSchoolName, setAccountSchoolName] = useState("");
+const [accountRole, setAccountRole] = useState("");
+const [accountContextLoading, setAccountContextLoading] =
+  useState(false);
+const [accountSaving, setAccountSaving] = useState(false);
+const [newPassword, setNewPassword] = useState("");
+const [confirmPassword, setConfirmPassword] = useState("");
+const [passwordSaving, setPasswordSaving] = useState(false);
+
+async function loadAccount() {
+  const supabase = createBrowserSupabaseClient();
+  setAccountContextLoading(true);
+
+  const [{ data, error }, contextResponse] = await Promise.all([
+    supabase.auth.getUser(),
+    fetch("/api/account", { cache: "no-store" }),
+  ]);
+
+  if (error || !data.user) {
+    setAccountContextLoading(false);
+    return;
+  }
+
+  const email = data.user.email ?? "";
+  const name =
+    typeof data.user.user_metadata?.full_name === "string"
+      ? data.user.user_metadata.full_name
+      : typeof data.user.user_metadata?.name === "string"
+        ? data.user.user_metadata.name
+        : "";
+
+  setAccountEmail(email);
+  setAccountEmailDraft(email);
+  setAccountName(name);
+  setAccountNameDraft(name);
+
+  if (contextResponse.ok) {
+    const context = await contextResponse.json();
+    setAccountSchoolName(context.school?.name ?? "");
+    setAccountRole(
+      typeof context.role === "string" ? context.role : ""
+    );
+  }
+
+  setAccountContextLoading(false);
+}
+
+async function openSettings() {
+  setSettingsStatusLabels([
+    ...assessmentStatusLabels,
+  ]);
+  setSettingsExpectationMode(
+    schoolAssessmentSettings?.expectation_mode ===
+      "end_of_year_threshold"
+      ? "end_of_year_threshold"
+      : "developmental_trajectory"
+  );
+  setSettingsWeeklyTarget(weeklyObservationTarget);
+  setSettingsError("");
+  setSettingsMessage("");
+  setNewPassword("");
+  setConfirmPassword("");
+  setShowSettings(true);
+  await loadAccount();
+}
+
+function scrollToDashboardSection(sectionId: string) {
+  requestAnimationFrame(() => {
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
+}
+
+function invalidateObservationAnalysis() {
+  setAnalysis(null);
+  setSavedToJournal(false);
+  setLearnerMismatchConfirmed(false);
+  setSelectedAnalysisLearnerId("");
+  setAreaLevelOverrides({});
+  setAreaOverrideReasons({});
+  setAreaBeingOverridden(null);
+}
+
+function openObservationComposer() {
+  invalidateObservationAnalysis();
+  setObservation("");
+  setEvidenceImage(null);
+
+  if (fileInputRef.current) {
+    fileInputRef.current.value = "";
+  }
+
+  setShowObservationPanel(true);
+  setShowObservationModal(true);
+}
+
+function closeEmbeddedHeaderOverlay() {
+  const params = new URLSearchParams(window.location.search);
+
+  if (
+    params.get("embedded") !== "1" ||
+    window.parent === window
+  ) {
+    return false;
+  }
+
+  window.parent.postMessage(
+    { type: "oasis:close-header-overlay" },
+    window.location.origin
+  );
+  return true;
+}
+
+function closeObservationComposer() {
+  if (!closeEmbeddedHeaderOverlay()) {
+    setShowObservationModal(false);
+  }
+}
+
+function closeTodaysFocus() {
+  if (!closeEmbeddedHeaderOverlay()) {
+    setShowTodaysFocus(false);
+  }
+}
+
+function openTodaysFocus() {
+  setFocusScheduleNow(new Date());
+  setFocusDay("today");
+  setShowTodaysFocus(true);
+}
+
+useEffect(() => {
+  if (!showTodaysFocus) return;
+
+  const interval = window.setInterval(
+    () => setFocusScheduleNow(new Date()),
+    60000
+  );
+
+  return () => window.clearInterval(interval);
+}, [showTodaysFocus]);
+
+async function saveAssessmentSettings() {
+  const cleanedLabels = settingsStatusLabels
+    .map((label) => label.trim())
+    .filter(Boolean);
+
+  if (cleanedLabels.length < 2) {
+    setSettingsError(
+      "Add at least two assessment status labels."
+    );
+    return;
+  }
+
+  if (
+    new Set(
+      cleanedLabels.map((label) => label.toLowerCase())
+    ).size !== cleanedLabels.length
+  ) {
+    setSettingsError(
+      "Assessment status labels must be unique."
+    );
+    return;
+  }
+
+  if (
+    !Number.isInteger(settingsWeeklyTarget) ||
+    settingsWeeklyTarget < 1 ||
+    settingsWeeklyTarget > 20
+  ) {
+    setSettingsError(
+      "The weekly target must be a whole number between 1 and 20."
+    );
+    return;
+  }
+
+  try {
+    setSettingsSaving(true);
+    setSettingsError("");
+    setSettingsMessage("");
+
+    const response = await fetch(
+      "/api/onboarding/assessment-setup",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          statusLabels: cleanedLabels,
+          expectationMode: settingsExpectationMode,
+          expectedObservationsPerLearnerPerWeek:
+            settingsWeeklyTarget,
+        }),
+      }
+    );
+    const result = await response
+      .json()
+      .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "Could not save assessment settings."
+      );
+    }
+
+    setSchoolAssessmentSettings(result.settings);
+    setSettingsStatusLabels(cleanedLabels);
+    setSettingsMessage("Assessment settings saved.");
+  } catch (error) {
+    setSettingsError(
+      error instanceof Error
+        ? error.message
+        : "Could not save assessment settings."
+    );
+  } finally {
+    setSettingsSaving(false);
+  }
+}
+
+async function saveAccount() {
+  const cleanEmail = accountEmailDraft.trim();
+  const cleanName = accountNameDraft.trim();
+
+  if (!cleanEmail || !cleanEmail.includes("@")) {
+    setSettingsError("Enter a valid email address.");
+    return;
+  }
+
+  try {
+    setAccountSaving(true);
+    setSettingsError("");
+    setSettingsMessage("");
+
+    const supabase = createBrowserSupabaseClient();
+    const emailChanged = cleanEmail !== accountEmail;
+    const { data, error } = await supabase.auth.updateUser({
+      ...(emailChanged ? { email: cleanEmail } : {}),
+      data: {
+        full_name: cleanName,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    setAccountName(cleanName);
+    setAccountNameDraft(cleanName);
+    setAccountEmail(data.user.email ?? accountEmail);
+    setSettingsMessage(
+      emailChanged
+        ? "Profile saved. Check your email to confirm the address change."
+        : "Profile saved."
+    );
+  } catch (error) {
+    setSettingsError(
+      error instanceof Error
+        ? error.message
+        : "Could not save your profile."
+    );
+  } finally {
+    setAccountSaving(false);
+  }
+}
+
+async function changePassword() {
+  if (newPassword.length < 8) {
+    setSettingsError(
+      "Your new password must contain at least 8 characters."
+    );
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    setSettingsError("The new passwords do not match.");
+    return;
+  }
+
+  try {
+    setPasswordSaving(true);
+    setSettingsError("");
+    setSettingsMessage("");
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    setNewPassword("");
+    setConfirmPassword("");
+    setSettingsMessage("Password changed successfully.");
+  } catch (error) {
+    setSettingsError(
+      error instanceof Error
+        ? error.message
+        : "Could not change your password."
+    );
+  } finally {
+    setPasswordSaving(false);
+  }
+}
+
+useEffect(() => {
+  void Promise.resolve().then(loadAccount);
+}, []);
 
   useEffect(() => {
     async function checkOnboarding() {
@@ -1663,6 +1964,10 @@ useEffect(() => {
 
       const result = await response.json();
 
+      if (response.status === 401) {
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(
           result.error ||
@@ -1706,6 +2011,10 @@ useEffect(() => {
       );
 
       const result = await response.json();
+
+      if (response.status === 401) {
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -1754,6 +2063,552 @@ const [selectedAreas, setSelectedAreas] =
 const [pupils, setPupils] = useState<any[]>([]);
 const [learnersLoading, setLearnersLoading] = useState(true);
 const [learnersError, setLearnersError] = useState("");
+const learnersMissingDateOfBirth = pupils.filter(
+  (learner) => !learner.dateOfBirth
+);
+
+const weeklyObservationTarget =
+  typeof schoolAssessmentSettings
+    ?.expected_observations_per_learner_per_week === "number" &&
+  schoolAssessmentSettings
+    .expected_observations_per_learner_per_week > 0
+    ? schoolAssessmentSettings
+        .expected_observations_per_learner_per_week
+    : 2;
+
+const learnerEvidenceStatus = (() => {
+  const now = new Date();
+  const startOfWeek = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  const dayFromMonday = (startOfWeek.getDay() + 6) % 7;
+  startOfWeek.setDate(
+    startOfWeek.getDate() - dayFromMonday
+  );
+
+  const startOfNextWeek = new Date(startOfWeek);
+  startOfNextWeek.setDate(
+    startOfNextWeek.getDate() + 7
+  );
+
+  const statusByLearner = new Map<
+    string,
+    {
+      count: number;
+      percentage: number;
+      colour: "red" | "yellow" | "green";
+      statusText: string;
+      lastObservationDate: Date | null;
+    }
+  >();
+
+  for (const learner of pupils) {
+    const observations = classObservations.filter(
+      (entry) =>
+        Array.isArray(entry.learner_ids) &&
+        entry.learner_ids.includes(learner.id)
+    );
+
+    const datedObservations = observations
+      .map((entry) => {
+        const rawDate =
+          entry.observation_date || entry.created_at;
+        const date = rawDate
+          ? new Date(
+              /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+                ? `${rawDate}T00:00:00`
+                : rawDate
+            )
+          : null;
+
+        return date && !Number.isNaN(date.getTime())
+          ? date
+          : null;
+      })
+      .filter((date): date is Date => date !== null);
+
+    const count = datedObservations.filter(
+      (date) =>
+        date >= startOfWeek && date < startOfNextWeek
+    ).length;
+    const percentage = Math.round(
+      (count / weeklyObservationTarget) * 100
+    );
+
+    const colour =
+      percentage >= 100
+        ? "green"
+        : percentage >= 50
+          ? "yellow"
+          : "red";
+
+    statusByLearner.set(learner.id, {
+      count,
+      percentage,
+      colour,
+      statusText:
+        colour === "green"
+          ? "Weekly target met"
+          : colour === "yellow"
+            ? "Partially observed"
+            : "Needs more observation",
+      lastObservationDate:
+        datedObservations.length > 0
+          ? new Date(
+              Math.max(
+                ...datedObservations.map((date) =>
+                  date.getTime()
+                )
+              )
+            )
+          : null,
+    });
+  }
+
+  return statusByLearner;
+})();
+
+type TodaysFocusItem = {
+  learnerId: string;
+  learnerName: string;
+  kind: "Observe" | "Support" | "Stretch";
+  area: string;
+  reason: string;
+  lookFor: string;
+  prompt: string | null;
+};
+
+const buildFocusItems = (
+  focusDate: Date,
+  evidenceCutoff: Date
+) => {
+  const activeAreas = activeFramework.areaDefinitions.filter(
+    (area) =>
+      area.name.trim().toLowerCase() !==
+      "the characteristics of effective teaching and learning"
+  );
+  const canonicalAreaNames = new Map(
+    activeAreas.map((area) => [
+      area.name.trim().toLowerCase(),
+      area.name,
+    ])
+  );
+  const statusOrder = new Map(
+    assessmentStatusLabels.map((label, index) => [
+      label.trim().toLowerCase(),
+      index,
+    ])
+  );
+  const focusDayNumber = Math.floor(
+    new Date(focusDate).setHours(0, 0, 0, 0) / 86400000
+  );
+  const focusWeekStart = new Date(focusDate);
+  const focusDayOfWeek = focusWeekStart.getDay();
+  focusWeekStart.setDate(
+    focusWeekStart.getDate() -
+      (focusDayOfWeek === 0 ? 6 : focusDayOfWeek - 1)
+  );
+  focusWeekStart.setHours(0, 0, 0, 0);
+
+  const getLearnerAgeMonths = (dateOfBirth: unknown) => {
+    if (
+      typeof dateOfBirth !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)
+    ) {
+      return null;
+    }
+
+    const birthDate = new Date(`${dateOfBirth}T00:00:00`);
+    const today = new Date(focusDate);
+
+    if (Number.isNaN(birthDate.getTime()) || birthDate > today) {
+      return null;
+    }
+
+    let months =
+      (today.getFullYear() - birthDate.getFullYear()) * 12 +
+      today.getMonth() -
+      birthDate.getMonth();
+
+    if (today.getDate() < birthDate.getDate()) {
+      months -= 1;
+    }
+
+    return months;
+  };
+
+  const getAgeAppropriateStatement = (
+    area: (typeof activeAreas)[number],
+    dateOfBirth: unknown
+  ) => {
+    const ageMonths = getLearnerAgeMonths(dateOfBirth);
+
+    if (!activeFramework.stages?.length) {
+      return area.statements[0];
+    }
+
+    const unscopedStatement = area.statements.find(
+      (statement) => !statement.stageIds?.length
+    );
+
+    if (ageMonths === null) {
+      return unscopedStatement;
+    }
+
+    const matchingStageIds = new Set(
+      activeFramework.stages
+        .filter(
+          (stage) =>
+            (stage.minAgeMonths === undefined ||
+              ageMonths >= stage.minAgeMonths) &&
+            (stage.maxAgeMonths === undefined ||
+              ageMonths <= stage.maxAgeMonths)
+        )
+        .map((stage) => stage.id)
+    );
+
+    return (
+      area.statements.find(
+        (statement) =>
+          statement.stageIds?.some((stageId) =>
+            matchingStageIds.has(stageId)
+          )
+      ) ??
+      unscopedStatement
+    );
+  };
+
+  const learnerCandidates = pupils.map(
+    (learner, learnerIndex) => {
+      const observations = classObservations
+        .filter(
+          (entry) =>
+            Array.isArray(entry.learner_ids) &&
+            entry.learner_ids.includes(learner.id)
+        )
+        .map((entry) => ({
+          entry,
+          timestamp: new Date(
+            /^\d{4}-\d{2}-\d{2}$/.test(
+              entry.observation_date
+            )
+              ? `${entry.observation_date}T00:00:00`
+              : entry.observation_date || entry.created_at
+          ).getTime(),
+        }))
+        .filter(({ timestamp }) =>
+          Number.isFinite(timestamp) &&
+          timestamp <= evidenceCutoff.getTime()
+        )
+        .sort(
+          (first, second) =>
+            second.timestamp - first.timestamp
+        );
+
+      const latestAreaEvidence = new Map<
+        string,
+        number
+      >();
+
+      for (const observation of observations) {
+        const matches = Array.isArray(
+          observation.entry.framework_matches
+        )
+          ? observation.entry.framework_matches
+          : [];
+
+        for (const match of matches) {
+          if (typeof match?.strand !== "string") {
+            continue;
+          }
+
+          const areaName =
+            canonicalAreaNames.get(
+              match.strand.trim().toLowerCase()
+            );
+
+          if (!areaName) {
+            continue;
+          }
+          const existing =
+            latestAreaEvidence.get(areaName);
+
+          if (
+            existing === undefined ||
+            observation.timestamp > existing
+          ) {
+            latestAreaEvidence.set(
+              areaName,
+              observation.timestamp
+            );
+          }
+        }
+      }
+
+      const focusArea = [...activeAreas].sort(
+        (first, second) =>
+          (latestAreaEvidence.get(first.name) ?? 0) -
+          (latestAreaEvidence.get(second.name) ?? 0)
+      )[0];
+      const focusAreaLastSeen = focusArea
+        ? latestAreaEvidence.get(focusArea.name) ?? null
+        : null;
+      const frameworkLookFor =
+        (focusArea
+          ? getAgeAppropriateStatement(
+              focusArea,
+              learner.dateOfBirth
+            )?.text
+          : null) ??
+        `Notice naturally occurring evidence in ${focusArea?.name ?? "the active framework"}.`;
+      const weeklyObservationCount = observations.filter(
+        ({ timestamp }) =>
+          timestamp >= focusWeekStart.getTime()
+      ).length;
+      const focusCoveragePercentage = Math.round(
+        (weeklyObservationCount /
+          Math.max(weeklyObservationTarget, 1)) *
+          100
+      );
+      const learnerName =
+        `${learner.firstName} ${learner.lastName}`.trim();
+      const latestAssessment = observations
+        .flatMap((observation) => {
+          const matches = Array.isArray(
+            observation.entry.framework_matches
+          )
+            ? observation.entry.framework_matches
+            : [];
+
+          return matches
+            .map((match: {
+              strand?: string;
+              teacherOverride?: string;
+              finalLevel?: string;
+              assessmentStatus?: string;
+              suggestedLevel?: string;
+              statementMatches?: Array<{
+                statementText?: string;
+              }>;
+              objectives?: string[];
+            }) => {
+              const status = getAssessmentDisplayLabel(
+                match?.teacherOverride ||
+                  match?.finalLevel ||
+                  match?.assessmentStatus ||
+                  match?.suggestedLevel ||
+                  ""
+              );
+
+              return {
+                match,
+                observation,
+                status,
+                statusIndex:
+                  statusOrder.get(
+                    status.trim().toLowerCase()
+                  ) ?? Number.MAX_SAFE_INTEGER,
+              };
+            })
+            .sort(
+              (
+                first: { statusIndex: number },
+                second: { statusIndex: number }
+              ) =>
+                first.statusIndex - second.statusIndex
+            );
+        })
+        .find(({ match, status }) => {
+          const area =
+            typeof match?.strand === "string"
+              ? canonicalAreaNames.get(
+                  match.strand.trim().toLowerCase()
+                )
+              : null;
+
+          return (
+            Boolean(area) &&
+            statusOrder.has(status.trim().toLowerCase())
+          );
+        });
+      const latestMatch = latestAssessment?.match ?? null;
+      const latestArea =
+        typeof latestMatch?.strand === "string"
+          ? canonicalAreaNames.get(
+              latestMatch.strand.trim().toLowerCase()
+            ) ?? latestMatch.strand.trim()
+          : focusArea?.name ?? "Current learning";
+      const latestLookFor =
+        latestMatch?.statementMatches?.[0]
+          ?.statementText ||
+        latestMatch?.objectives?.[0] ||
+        frameworkLookFor;
+      const latestStatus = latestAssessment?.status ?? "";
+      const latestStatusIndex =
+        statusOrder.get(
+          latestStatus.trim().toLowerCase()
+        ) ?? -1;
+      const nextStep = Array.isArray(
+        latestAssessment?.observation.entry.next_steps
+      )
+        ? latestAssessment.observation.entry.next_steps.find(
+            (step: unknown): step is string =>
+              typeof step === "string" &&
+              step.trim().length > 0
+          )
+        : null;
+      const tieBreaker =
+        (learnerIndex + focusDayNumber) %
+        Math.max(pupils.length, 1);
+
+      const observe: TodaysFocusItem & {
+        score: number;
+        tieBreaker: number;
+      } = {
+        learnerId: learner.id,
+        learnerName,
+        kind: "Observe",
+        area: focusArea?.name ?? "Evidence coverage",
+        reason: focusAreaLastSeen
+          ? `This is ${learnerName.split(" ")[0]}’s least recently evidenced learning area.`
+          : `No evidence has yet been recorded for ${focusArea?.name ?? "this learning area"}.`,
+        lookFor: frameworkLookFor,
+        prompt: null,
+        score:
+          focusCoveragePercentage +
+          (focusAreaLastSeen ? 50 : 0),
+        tieBreaker,
+      };
+
+      const support =
+        latestStatusIndex >= 0 &&
+        latestStatusIndex <
+          Math.max(
+            1,
+            Math.floor(assessmentStatusLabels.length / 2)
+          )
+          ? ({
+              learnerId: learner.id,
+              learnerName,
+              kind: "Support",
+              area: latestArea,
+              reason: `Recent evidence in ${latestArea} was recorded as ${latestStatus}.`,
+              lookFor: latestLookFor,
+              prompt: nextStep
+                ? `Saved next step: ${nextStep.trim()}`
+                : "Notice what is achieved independently and where a small prompt is needed.",
+              score:
+                latestAssessment?.observation.timestamp ?? 0,
+              tieBreaker,
+            } satisfies TodaysFocusItem & {
+              score: number;
+              tieBreaker: number;
+            })
+          : null;
+
+      const stretch =
+        latestStatusIndex ===
+          assessmentStatusLabels.length - 1 &&
+        latestStatusIndex >= 0
+          ? ({
+              learnerId: learner.id,
+              learnerName,
+              kind: "Stretch",
+              area: latestArea,
+              reason: `Recent evidence in ${latestArea} was recorded as ${latestStatus}.`,
+              lookFor: latestLookFor,
+              prompt: nextStep
+                ? `Saved next step: ${nextStep.trim()}`
+                : "If this arises naturally, notice whether the learning is applied independently in a new or more complex way.",
+              score:
+                latestAssessment?.observation.timestamp ?? 0,
+              tieBreaker,
+            } satisfies TodaysFocusItem & {
+              score: number;
+              tieBreaker: number;
+            })
+          : null;
+
+      return { observe, support, stretch };
+    }
+  );
+
+  const byLowestScore = <
+    T extends { score: number; tieBreaker: number },
+  >(
+    first: T,
+    second: T
+  ) =>
+    first.score - second.score ||
+    first.tieBreaker - second.tieBreaker;
+  const selected: TodaysFocusItem[] = [];
+  const selectedLearners = new Set<string>();
+  const addItem = (item?: TodaysFocusItem | null) => {
+    if (
+      item &&
+      selected.length < 5 &&
+      !selectedLearners.has(item.learnerId)
+    ) {
+      selected.push(item);
+      selectedLearners.add(item.learnerId);
+    }
+  };
+
+  addItem(
+    learnerCandidates
+      .map(({ support }) => support)
+      .filter(
+        (item): item is NonNullable<typeof item> =>
+          item !== null &&
+          !selectedLearners.has(item.learnerId)
+      )
+      .sort(byLowestScore)[0]
+  );
+
+  addItem(
+    learnerCandidates
+      .map(({ stretch }) => stretch)
+      .filter(
+        (item): item is NonNullable<typeof item> =>
+          item !== null &&
+          !selectedLearners.has(item.learnerId)
+      )
+      .sort(byLowestScore)[0]
+  );
+
+  learnerCandidates
+    .map(({ observe }) => observe)
+    .sort(byLowestScore)
+    .forEach(addItem);
+
+  return selected;
+};
+
+const focusNow = focusScheduleNow;
+const focusToday = new Date(focusNow);
+focusToday.setHours(0, 0, 0, 0);
+const focusTomorrow = new Date(focusToday);
+focusTomorrow.setDate(focusTomorrow.getDate() + 1);
+const todaysEvidenceCutoff = new Date(focusToday);
+todaysEvidenceCutoff.setDate(todaysEvidenceCutoff.getDate() - 1);
+todaysEvidenceCutoff.setHours(15, 0, 0, 0);
+const tomorrowsEvidenceCutoff = new Date(focusToday);
+tomorrowsEvidenceCutoff.setHours(15, 0, 0, 0);
+const tomorrowFocusAvailable =
+  focusNow.getTime() >= tomorrowsEvidenceCutoff.getTime();
+const todaysFocusItems = buildFocusItems(
+  focusToday,
+  todaysEvidenceCutoff
+);
+const tomorrowsFocusItems = tomorrowFocusAvailable
+  ? buildFocusItems(focusTomorrow, tomorrowsEvidenceCutoff)
+  : [];
+const displayedFocusItems =
+  focusDay === "tomorrow" && tomorrowFocusAvailable
+    ? tomorrowsFocusItems
+    : todaysFocusItems;
 
 const realClassInsights = (() => {
 
@@ -2320,7 +3175,7 @@ function handleReviewLearners() {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const rows = lines
+  const rawRows = lines
     .filter((line, index) => {
       if (index !== 0) return true;
 
@@ -2364,21 +3219,15 @@ if (parts.length >= 5) {
 }
 
 return {
-  rowId: crypto.randomUUID(),
   externalId,
   firstName,
   lastName,
   className,
-  dateOfBirth,
-  isValid: Boolean(
-    firstName &&
-      lastName &&
-      dateOfBirth
-  ),
+  rawDateOfBirth: dateOfBirth,
 };
     });
 
-  if (rows.length === 0) {
+  if (rawRows.length === 0) {
     setImportPreview([]);
     setImportError(
       "No learners were found. Enter one learner per line."
@@ -2386,11 +3235,34 @@ return {
     return;
   }
 
+  const dateOrder =
+    inferLearnerDateOrder(
+      rawRows.map((row) => row.rawDateOfBirth)
+    ) || "DMY";
+  const rows: ImportedLearnerPreview[] = rawRows.map(
+    (row) => {
+      const parsedDate = normaliseLearnerDate(
+        row.rawDateOfBirth,
+        dateOrder
+      );
+
+      return {
+        ...row,
+        rowId: crypto.randomUUID(),
+        dateOfBirth: parsedDate.date,
+        isValid: Boolean(
+          row.firstName.trim() && parsedDate.isValid
+        ),
+      };
+    }
+  );
+
+  setImportDateOrder(dateOrder);
   setImportPreview(rows);
 
   if (rows.some((learner) => !learner.isValid)) {
     setImportError(
-  "Some learners are missing a first name, last name or date of birth."
+      "Some learners need a first name or contain a date that could not be read."
 );
   }
 }
@@ -2414,19 +3286,47 @@ function updateImportPreviewRow(
       const updatedLearner = {
         ...learner,
         [field]: value,
+        ...(field === "dateOfBirth"
+          ? { rawDateOfBirth: value }
+          : {}),
       };
+
+      const parsedDate = normaliseLearnerDate(
+        updatedLearner.rawDateOfBirth,
+        importDateOrder
+      );
 
       return {
         ...updatedLearner,
-isValid: Boolean(
-  updatedLearner.firstName.trim() &&
-    updatedLearner.lastName.trim() &&
-    updatedLearner.dateOfBirth.trim()
-),
+        dateOfBirth: parsedDate.date,
+        isValid: Boolean(
+          updatedLearner.firstName.trim() && parsedDate.isValid
+        ),
       };
     })
   );
 
+  setImportError("");
+}
+
+function changeImportDateOrder(dateOrder: LearnerDateOrder) {
+  setImportDateOrder(dateOrder);
+  setImportPreview((current) =>
+    current.map((learner) => {
+      const parsedDate = normaliseLearnerDate(
+        learner.rawDateOfBirth,
+        dateOrder
+      );
+
+      return {
+        ...learner,
+        dateOfBirth: parsedDate.date,
+        isValid: Boolean(
+          learner.firstName.trim() && parsedDate.isValid
+        ),
+      };
+    })
+  );
   setImportError("");
 }
 
@@ -2517,8 +3417,7 @@ if (isZipFile) {
         .replace(/[^a-z0-9]/g, ""),
 
     complete: (results) => {
-      const rows: ImportedLearnerPreview[] =
-        results.data.map((row) => {
+      const rawRows = results.data.map((row) => {
           const externalId =
             row.externalid ||
             row.pupilid ||
@@ -2554,27 +3453,44 @@ if (isZipFile) {
   "";
 
           return {
-  rowId: crypto.randomUUID(),
-  externalId: externalId.trim(),
-  firstName: firstName.trim(),
-  lastName: lastName.trim(),
-  className: className.trim(),
-  dateOfBirth: dateOfBirth.trim(),
-isValid: Boolean(
-  firstName.trim() &&
-    lastName.trim() &&
-    dateOfBirth.trim()
-),
-};
+            externalId: externalId.trim(),
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            className: className.trim(),
+            rawDateOfBirth: dateOfBirth.trim(),
+          };
         });
 
-      if (rows.length === 0) {
+      if (rawRows.length === 0) {
         setImportError(
           "No learners were found in this CSV file."
         );
         return;
       }
 
+      const dateOrder =
+        inferLearnerDateOrder(
+          rawRows.map((row) => row.rawDateOfBirth)
+        ) || "DMY";
+      const rows: ImportedLearnerPreview[] = rawRows.map(
+        (row) => {
+          const parsedDate = normaliseLearnerDate(
+            row.rawDateOfBirth,
+            dateOrder
+          );
+
+          return {
+            ...row,
+            rowId: crypto.randomUUID(),
+            dateOfBirth: parsedDate.date,
+            isValid: Boolean(
+              row.firstName && parsedDate.isValid
+            ),
+          };
+        }
+      );
+
+      setImportDateOrder(dateOrder);
       setImportPreview(rows);
 
       if (results.errors.length > 0) {
@@ -2583,7 +3499,7 @@ isValid: Boolean(
         );
       } else if (rows.some((learner) => !learner.isValid)) {
         setImportError(
-  "Some learners are missing a first name, last name or date of birth."
+          "Some learners need a first name or contain a date that could not be read."
 );
       }
     },
@@ -2630,6 +3546,7 @@ async function handleImportLearners() {
           className: learner.className,
           dateOfBirth: learner.dateOfBirth,
         })),
+        dateOrder: importDateOrder,
       }),
     });
 
@@ -2721,6 +3638,90 @@ useEffect(() => {
   };
 }, []);
 
+useEffect(() => {
+  if (learnersLoading || headerIntentHandled.current) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const panel = params.get("panel");
+
+  if (!panel) {
+    headerIntentHandled.current = true;
+    return;
+  }
+
+  const requestedLearnerId = params.get("learner");
+  const validLearnerId = pupils.some(
+    (learner) => learner.id === requestedLearnerId
+  )
+    ? requestedLearnerId
+    : null;
+
+  if (validLearnerId) {
+    setSelectedChildren([validLearnerId]);
+  }
+
+  if (panel === "observation") {
+    openObservationComposer();
+  } else if (panel === "focus") {
+    openTodaysFocus();
+  } else if (panel === "settings") {
+    void openSettings();
+  } else if (panel === "ptc" && validLearnerId) {
+    setShowPTCNotes(true);
+  } else if (panel === "report" && validLearnerId) {
+    setShowReportHelper(true);
+  }
+
+  headerIntentHandled.current = true;
+  params.delete("panel");
+  params.delete("learner");
+  const remainingQuery = params.toString();
+  window.history.replaceState(
+    null,
+    "",
+    remainingQuery ? `/?${remainingQuery}` : "/"
+  );
+}, [learnersLoading, pupils]);
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get("embedded") !== "1") return;
+
+  document.documentElement.dataset.oasisEmbeddedOverlay = "true";
+
+  return () => {
+    delete document.documentElement.dataset.oasisEmbeddedOverlay;
+  };
+}, []);
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+
+  if (
+    params.get("embedded") !== "1" ||
+    window.parent === window ||
+    (!showObservationModal && !showTodaysFocus)
+  ) {
+    return;
+  }
+
+  let secondFrame = 0;
+  const firstFrame = window.requestAnimationFrame(() => {
+    secondFrame = window.requestAnimationFrame(() => {
+      window.parent.postMessage(
+        { type: "oasis:header-overlay-ready" },
+        window.location.origin
+      );
+    });
+  });
+
+  return () => {
+    window.cancelAnimationFrame(firstFrame);
+    if (secondFrame) window.cancelAnimationFrame(secondFrame);
+  };
+}, [showObservationModal, showTodaysFocus]);
+
 <div className="mt-6">
 
   <p className="mb-3 text-sm font-semibold text-slate-700">
@@ -2760,49 +3761,6 @@ useEffect(() => {
 
 </div>
 
-const evidenceDetails = [
-  {
-    month: "Sep",
-    level: "Developing",
-    area: "Mathematics",
-    observation:
-      "Matthew measured three plants using a ruler and recorded the results independently.",
-    confidence: 87,
-  },
-  {
-    month: "Oct",
-    level: "Developing",
-    area: "Research Skills",
-    observation:
-      "Matthew collected information and compared growth patterns across several plants.",
-    confidence: 89,
-  },
-  {
-    month: "Nov",
-    level: "Secure",
-    area: "Mathematics",
-    observation:
-      "Matthew explained differences in plant growth and justified his conclusions.",
-    confidence: 91,
-  },
-  {
-    month: "Dec",
-    level: "Secure",
-    area: "Communication",
-    observation:
-      "Matthew shared findings with peers and answered questions confidently.",
-    confidence: 88,
-  },
-  {
-    month: "Jan",
-    level: "Exceeding",
-    area: "Critical Thinking",
-    observation:
-      "Matthew independently suggested improvements to the investigation process.",
-    confidence: 94,
-  },
-];
-
 function closeImportLearnersModal() {
   setShowImportLearners(false);
   setImportMode("paste");
@@ -2812,6 +3770,8 @@ function closeImportLearnersModal() {
 }
 
 function toggleChild(id: string) {
+  invalidateObservationAnalysis();
+
   if (selectedChildren.includes(id)) {
     setSelectedChildren(
       selectedChildren.filter((childId) => childId !== id)
@@ -2822,7 +3782,7 @@ function toggleChild(id: string) {
 }
 
 const journeyLevelCount =
-  activeFramework.assessmentLevels.length;
+  assessmentStatusLabels.length;
 
 const levelToY = (level: number) => {
   const top = 35;
@@ -2890,27 +3850,19 @@ const dateOfBirth = newLearnerDob.trim();
     return;
   }
 
-  if (!lastName) {
-    alert("Please enter the learner's last name.");
-    return;
-  }
-
-  if (!dateOfBirth) {
-    alert("Please enter the learner's date of birth.");
-    return;
-  }
-
   const today = new Date()
     .toISOString()
     .slice(0, 10);
 
-  if (dateOfBirth > today) {
+  if (dateOfBirth && dateOfBirth > today) {
     alert("The learner's date of birth cannot be in the future.");
     return;
   }
 
   try {
     setIsSavingLearner(true);
+
+    let savedLearner = null;
 
     if (editingLearner) {
       const response = await fetch("/api/learners", {
@@ -2934,6 +3886,8 @@ const dateOfBirth = newLearnerDob.trim();
           result.error || "Failed to update learner."
         );
       }
+
+      savedLearner = result.learner ?? null;
     } else {
       const response = await fetch("/api/learners", {
         method: "POST",
@@ -2962,24 +3916,34 @@ const dateOfBirth = newLearnerDob.trim();
       }
     }
 
-    const learnersResponse = await fetch(
-      "/api/learners",
-      {
-        cache: "no-store",
-      }
-    );
-
-    const learnersResult =
-      await learnersResponse.json();
-
-    if (!learnersResponse.ok) {
-      throw new Error(
-        learnersResult.error ||
-          "The learner was saved, but the list could not refresh."
+    if (editingLearner && savedLearner) {
+      setPupils((current) =>
+        current.map((learner) =>
+          learner.id === savedLearner.id
+            ? { ...learner, ...savedLearner }
+            : learner
+        )
       );
-    }
+    } else {
+      const learnersResponse = await fetch(
+        "/api/learners",
+        {
+          cache: "no-store",
+        }
+      );
 
-    setPupils(learnersResult.learners || []);
+      const learnersResult =
+        await learnersResponse.json();
+
+      if (!learnersResponse.ok) {
+        throw new Error(
+          learnersResult.error ||
+            "The learner was saved, but the list could not refresh."
+        );
+      }
+
+      setPupils(learnersResult.learners || []);
+    }
 
   setNewLearnerFirstName("");
 setNewLearnerLastName("");
@@ -3132,22 +4096,6 @@ statement.progression?.forEach(
     }
   }
 );
-if (progressionLevels.length > 0) {
-  const sortedProgressionLevels = [
-    ...uniqueProgressionLevels,
-  ].sort((a, b) => a - b);
-
-  const hasMissingLevel =
-    sortedProgressionLevels.some(
-      (level, index) => level !== index + 1
-    );
-
-  if (hasMissingLevel) {
-    errors.push(
-      `${statement.text || statement.id}: progression levels must run consecutively from Level 1.`
-    );
-  }
-}
 const hasInvalidProgressionLevel =
   progressionLevels.some(
     (level) =>
@@ -3159,6 +4107,30 @@ if (hasInvalidProgressionLevel) {
     `${statement.text || statement.id}: progression levels must be whole numbers starting at Level 1.`
   );
 }
+
+statement.expectedProgression?.forEach(
+  (expectation) => {
+    if (
+      !framework.stages?.some(
+        (stage) => stage.id === expectation.stageId
+      )
+    ) {
+      errors.push(
+        `${statement.text || statement.id}: an expected progression range refers to an unknown learner stage.`
+      );
+    }
+
+    if (
+      expectation.minExpectedLevel < 1 ||
+      expectation.maxExpectedLevel <
+        expectation.minExpectedLevel
+    ) {
+      errors.push(
+        `${statement.text || statement.id}: expected progression range is invalid.`
+      );
+    }
+  }
+);
     });
   });
 
@@ -3231,6 +4203,21 @@ if (hasInvalidProgressionLevel) {
 
   return errors;
 }
+
+function getObjectiveExpectationRangeCount(
+  framework: FrameworkDefinition
+) {
+  return framework.areaDefinitions.reduce(
+    (total, area) =>
+      total +
+      area.statements.reduce(
+        (statementTotal, statement) =>
+          statementTotal + (statement.expectedProgression?.length ?? 0),
+        0
+      ),
+    0
+  );
+}
 async function loadSavedFrameworks() {
   try {
     const response = await fetch("/api/frameworks");
@@ -3295,6 +4282,8 @@ function handleCloseFrameworkModal() {
   setMappedFrameworkPreview(null);
   setFrameworkSaveMessage("");
   setFrameworkMappingError("");
+  setFrameworkProcessingStage(null);
+  setFrameworkRightsConfirmed(false);
   setShowFrameworkModal(false);
 },
     });
@@ -3308,6 +4297,8 @@ setFrameworkExtraction(null);
 setMappedFrameworkPreview(null);
 setFrameworkMappingError("");
 setFrameworkSaveMessage("");
+setFrameworkProcessingStage(null);
+setFrameworkRightsConfirmed(false);
 setShowFrameworkModal(false);
 }
 
@@ -3327,11 +4318,13 @@ async function handleSaveFrameworkDraft() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          definition:
-            mappedFrameworkPreview,
-          sourceText: frameworkText,
-        }),
+body: JSON.stringify({
+  definition:
+    mappedFrameworkPreview,
+  sourceText: frameworkText,
+  rightsConfirmed:
+    frameworkRightsConfirmed,
+}),
       }
     );
 
@@ -3368,6 +4361,7 @@ setFrameworkText("");
 setFrameworkFile(null);
 setFrameworkExtraction(null);
 setMappedFrameworkPreview(null);
+setFrameworkRightsConfirmed(false);
 
   } catch (error) {
     console.error(
@@ -3382,23 +4376,61 @@ setMappedFrameworkPreview(null);
     );
   }
 }
-async function handleFrameworkFileUpload() {
-  if (!frameworkFile) {
-    setFrameworkMappingError(
-      "Choose a framework file first."
+
+async function handleSendFrameworkSupport() {
+  if (
+    frameworkSupportMessage.trim().length < 10
+  ) {
+    setFrameworkSupportError(
+      "Please tell us a little more about the problem."
     );
     return;
   }
 
- try {
-  setIsExtractingFramework(true);
-  setFrameworkMappingError("");
+  if (
+    frameworkSupportFile &&
+    frameworkSupportFile.size >
+      15 * 1024 * 1024
+  ) {
+    setFrameworkSupportError(
+      "The attachment is too large. Maximum file size is 15 MB."
+    );
+    return;
+  }
+
+  try {
+    setFrameworkSupportSending(true);
+    setFrameworkSupportError("");
+    setFrameworkSupportSuccess("");
 
     const formData = new FormData();
-    formData.append("file", frameworkFile);
+
+    formData.append(
+      "message",
+      frameworkSupportMessage.trim()
+    );
+
+    formData.append(
+      "frameworkName",
+      mappedFrameworkPreview?.name ||
+        frameworkFile?.name ||
+        ""
+    );
+
+    formData.append(
+      "importError",
+      frameworkMappingError || ""
+    );
+
+    if (frameworkSupportFile) {
+      formData.append(
+        "attachment",
+        frameworkSupportFile
+      );
+    }
 
     const response = await fetch(
-      "/api/extract-framework",
+      "/api/support/framework",
       {
         method: "POST",
         body: formData,
@@ -3412,28 +4444,108 @@ async function handleFrameworkFileUpload() {
     if (!response.ok) {
       throw new Error(
         result.error ||
-          "The framework file could not be uploaded."
+          "Your support request could not be sent."
       );
     }
 
-if (
-  !result.text ||
-  !result.text.trim()
-) {
-  throw new Error(
-    "The file was uploaded, but no readable text was extracted."
+    setFrameworkSupportSuccess(
+      "Your request has been sent to OASIS Support."
+    );
+
+    setFrameworkSupportMessage("");
+    setFrameworkSupportFile(null);
+  } catch (error) {
+    console.error(
+      "OASIS support request failed:",
+      error
+    );
+
+    setFrameworkSupportError(
+      error instanceof Error
+        ? error.message
+        : "Your support request could not be sent."
+    );
+  } finally {
+    setFrameworkSupportSending(false);
+  }
+}
+async function handleFrameworkFileUpload() {
+  if (!frameworkRightsConfirmed) {
+  setFrameworkMappingError(
+    "Confirm that you have the right or appropriate licence to use this framework before processing it."
   );
+  return;
+}
+  if (!frameworkFile) {
+    setFrameworkMappingError(
+      "Choose a framework file first."
+    );
+    return;
+  }
+
+ try {
+  setIsExtractingFramework(true);
+  setFrameworkProcessingStage("preparing");
+  setFrameworkMappingError("");
+
+    const result = await uploadAndExtractFrameworkFile(
+      frameworkFile,
+      setFrameworkProcessingStage
+    );
+
+const extractedText =
+  typeof result.text === "string"
+    ? result.text.trim()
+    : "";
+
+const meaningfulExtractedText =
+  extractedText
+    .replace(
+      /--\s*\d+\s+of\s+\d+\s*--/gi,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+if (
+  meaningfulExtractedText.length < 100
+) {
+  setFrameworkProcessingStage(null);
+  setFrameworkText("");
+  setFrameworkExtraction(null);
+  setMappedFrameworkPreview(null);
+
+  setFrameworkMappingError(
+    "OASIS could not extract enough readable framework content from this document."
+  );
+
+  setShowFrameworkReadHelpModal(true);
+
+  return;
 }
 
-setFrameworkText(result.text);
+setFrameworkText(extractedText);
 
 setFrameworkExtraction(
   result.extraction ?? null
 );
 
-setMappedFrameworkPreview(null);
-setFrameworkHasUnsavedChanges(false);
+if (result.mappedFramework) {
+  setMappedFrameworkPreview(
+    result.mappedFramework
+  );
+  setFrameworkHasUnsavedChanges(true);
+  setFrameworkProcessingStage(null);
+} else {
+  setMappedFrameworkPreview(null);
+  setFrameworkHasUnsavedChanges(false);
+  await handleMapFramework(
+    extractedText,
+    result.extraction ?? null
+  );
+}
   } catch (error) {
+    setFrameworkProcessingStage(null);
     setFrameworkMappingError(
       error instanceof Error
         ? error.message
@@ -3444,9 +4556,18 @@ setFrameworkHasUnsavedChanges(false);
   }
 }
 
-async function handleMapFramework() {
+async function handleMapFramework(
+  text = frameworkText,
+  extraction = frameworkExtraction
+) {
+  if (!frameworkRightsConfirmed) {
+  setFrameworkMappingError(
+    "Confirm that you have the right or appropriate licence to use this framework before processing it."
+  );
+  return;
+}
   const trimmedFrameworkText =
-    frameworkText.trim();
+    text.trim();
 
   setFrameworkMappingError("");
 
@@ -3459,6 +4580,7 @@ async function handleMapFramework() {
 
   try {
     setIsMappingFramework(true);
+    setFrameworkProcessingStage("organising");
     setMappedFrameworkPreview(null);
 
     const response = await fetch(
@@ -3472,7 +4594,7 @@ async function handleMapFramework() {
   frameworkText:
     trimmedFrameworkText,
 
-  frameworkExtraction,
+  frameworkExtraction: extraction,
 }),
       }
     );
@@ -3498,8 +4620,10 @@ async function handleMapFramework() {
       result.mappedFramework
     );
 setFrameworkHasUnsavedChanges(true);
+setFrameworkProcessingStage(null);
 
   } catch (error) {
+    setFrameworkProcessingStage(null);
     console.error(
       "Framework mapping failed:",
       error
@@ -3604,6 +4728,10 @@ useEffect(() => {
 
       const result = await response.json();
 
+      if (response.status === 401) {
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(
           result.error ||
@@ -3669,6 +4797,10 @@ async function refreshClassObservations() {
 
     const result = await response.json();
 
+    if (response.status === 401) {
+      return;
+    }
+
     if (!response.ok) {
       throw new Error(
         result.error ||
@@ -3686,8 +4818,6 @@ async function refreshClassObservations() {
       "Failed to load class observations:",
       error
     );
-
-    setClassObservations([]);
   }
 }
 
@@ -3783,6 +4913,7 @@ return {
   }
 );
 
+  let uploadedEvidencePath: string | null = null;
 
   try {
 type JournalSaveResponse = {
@@ -3790,6 +4921,27 @@ type JournalSaveResponse = {
   error?: string;
   message?: string;
 };
+
+if (evidenceImage) {
+  const evidenceFormData = new FormData();
+  evidenceFormData.append("file", evidenceImage);
+
+  const uploadResponse = await fetch("/api/evidence", {
+    method: "POST",
+    body: evidenceFormData,
+  });
+  const uploadResult = await uploadResponse
+    .json()
+    .catch(() => ({}));
+
+  if (!uploadResponse.ok || typeof uploadResult.path !== "string") {
+    throw new Error(
+      uploadResult.error || "Failed to upload photo evidence."
+    );
+  }
+
+  uploadedEvidencePath = uploadResult.path;
+}
 
 const journalPayload = {
   learner_ids: selectedChildren,
@@ -3813,8 +4965,7 @@ const journalPayload = {
   assessment_context:
     analysis.assessmentContext,
 
-  image_url:
-    evidenceImage?.name || null,
+  image_url: uploadedEvidencePath,
 };
 
 async function sendJournalRequest(
@@ -3856,6 +5007,11 @@ if (!response.ok) {
 }
 
     setSavedToJournal(true);
+    setEvidenceImage(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
 
     await refreshClassObservations();
 
@@ -3869,9 +5025,30 @@ if (savedObservation && selectedChildren.length === 1) {
 }
 
   } catch (error) {
+    if (uploadedEvidencePath) {
+      await fetch(
+        `/api/evidence?path=${encodeURIComponent(uploadedEvidencePath)}`,
+        { method: "DELETE" }
+      ).catch(() => undefined);
+    }
+
     console.error(error);
     alert("Failed to save observation.");
   }
+}
+
+async function discardDuplicateEvidence() {
+  const path = duplicateSavePayload?.image_url;
+
+  if (typeof path === "string" && path) {
+    await fetch(
+      `/api/evidence?path=${encodeURIComponent(path)}`,
+      { method: "DELETE" }
+    ).catch(() => undefined);
+  }
+
+  setShowDuplicateObservationModal(false);
+  setDuplicateSavePayload(null);
 }
 
 async function handleConfirmDuplicateSave() {
@@ -3909,6 +5086,11 @@ async function handleConfirmDuplicateSave() {
     setShowDuplicateObservationModal(false);
 setDuplicateSavePayload(null);
 setSavedToJournal(true);
+setEvidenceImage(null);
+
+if (fileInputRef.current) {
+  fileInputRef.current.value = "";
+}
 
 await refreshClassObservations();
   } catch (error) {
@@ -3935,6 +5117,53 @@ async function openJournal(name: string) {
   setLoadingJournal(false);
 }
 
+async function confirmObservationDeletion() {
+  if (!observationToDelete?.id) return;
+
+  try {
+    setDeletingObservation(true);
+    setObservationDeleteError("");
+
+    const response = await fetch("/api/journal", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: observationToDelete.id,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "The observation could not be deleted."
+      );
+    }
+
+    const deletedId = observationToDelete.id;
+    setJournalEntries((current) =>
+      current.filter((entry) => entry.id !== deletedId)
+    );
+    setLearnerObservations((current) =>
+      current.filter((entry) => entry.id !== deletedId)
+    );
+    setExpandedEntry((current) =>
+      current === deletedId ? null : current
+    );
+    setObservationToDelete(null);
+    await refreshClassObservations();
+  } catch (error) {
+    setObservationDeleteError(
+      error instanceof Error
+        ? error.message
+        : "The observation could not be deleted."
+    );
+  } finally {
+    setDeletingObservation(false);
+  }
+}
+
 {/* HEADER */}
 
 if (checkingOnboarding) {
@@ -3949,155 +5178,105 @@ if (checkingOnboarding) {
 
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-8">
-      <div className="mx-auto max-w-7xl"></div>
-      <div className="mb-6 flex items-center justify-between">
+    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-8">
+<OasisHeader
+  className="-mx-4 -mt-4 mb-8 sm:-mx-8 sm:-mt-8"
+  selectedLearnerIds={selectedChildren}
+  accountName={accountName}
+  accountEmail={accountEmail}
+  onPTCNotes={() => setShowPTCNotes(true)}
+  onReportHelper={() => setShowReportHelper(true)}
+  onAddObservation={openObservationComposer}
+  onTodaysFocus={openTodaysFocus}
+  onSettings={() => void openSettings()}
+  ptcNotesActive={showPTCNotes}
+  reportHelperActive={showReportHelper}
+  addObservationActive={showObservationModal}
+  todaysFocusActive={showTodaysFocus}
+  settingsActive={showSettings}
+/>
 
-        </div>
+<div id="learners" className="mb-8 scroll-mt-28 rounded-3xl border border-slate-200 bg-white shadow-lg">
 
-{/* HEADER */}
+  <div className="rounded-t-3xl border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-7 sm:px-8">
+    <div className="flex items-start gap-4">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          className="h-6 w-6"
+          aria-hidden="true"
+        >
+          <circle cx="9" cy="8" r="3" />
+          <circle cx="17" cy="9" r="2.4" />
+          <path strokeLinecap="round" d="M3.5 19c.4-4 2.2-6 5.5-6s5.1 2 5.5 6" />
+          <path strokeLinecap="round" d="M14.5 14c3.7-.6 5.6 1.1 6 4" />
+        </svg>
+      </div>
 
-<div className="mb-8 flex items-start justify-between">
-
-  {/* LEFT SIDE */}
-
-  <div>
-
-    <img
-      src="/oasis-logo.png"
-      alt="OASIS"
-      className="h-48 w-48 object-contain"
-    />
-
-    <p className="mt-2 text-sm tracking-[0.25em] text-slate-500">
-      OBSERVATION • ASSESSMENT • INSIGHT
-    </p>
-
-  </div>
-<form
-  action="/auth/signout"
-  method="post"
-  className="fixed right-3 top-3 z-50"
->
-  <button
-    type="submit"
-    aria-label="Sign out"
-    title="Sign out"
-   className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-  >
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15 8.25 18.75 12 15 15.75M18.75 12H9"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 5.25V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v15A1.5 1.5 0 0 0 4.5 21h6a1.5 1.5 0 0 0 1.5-1.5v-.75"
-      />
-    </svg>
-  </button>
-</form>
-  {/* RIGHT SIDE */}
-
-  <div className="flex items-center gap-3">
-
-    <button
-      onClick={() => setShowFrameworkModal(true)}
-      className="rounded-2xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-    >
-      Upload Framework
-    </button>
-
-    <button
-      onClick={() => setShowBaselineModal(true)}
-      className="rounded-2xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-    >
-      Add Baseline
-    </button>
-
-<button
-  onClick={() => setShowPTCNotes(true)}
-  disabled={selectedChildren.length === 0}
-  className="rounded-2xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
->
-  PTC Notes
-</button>
-
-<button
-  onClick={() => setShowReportHelper(true)}
-  disabled={selectedChildren.length === 0}
-  className="rounded-2xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
->
-  Report Helper
-</button>
-
-    <button
-      onClick={() => setShowTodaysFocus(true)}
-      className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white shadow-lg transition hover:bg-slate-700"
-    >
-      Today's Focus
-    </button>
-
-
-
+      <div>
+        <p className="text-sm font-semibold text-cyan-700">
+          Observation workspace
+        </p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+          Your class
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
+          Select one child to explore their learning, or several when an observation happens naturally in a group.
+        </p>
+      </div>
+    </div>
   </div>
 
-</div>
+  <div className="p-6 sm:p-8">
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 className="text-lg font-bold text-slate-900">
+          Choose who you&apos;re observing
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {pupils.length} active {pupils.length === 1 ? "child" : "children"}
+        </p>
+      </div>
 
-<div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+      <button
+        type="button"
+        onClick={() => setShowManageLearners(true)}
+        className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:self-auto"
+      >
+        Manage class
+      </button>
+    </div>
 
-  <div className="mb-4 flex items-center justify-between">
+    <div className="flex flex-wrap gap-6">
 
-    <div className="mb-4 flex items-center justify-between">
+    {pupils.map((child) => {
+      const evidenceStatus =
+        learnerEvidenceStatus.get(child.id) ?? {
+          count: 0,
+          percentage: 0,
+          colour: "red" as const,
+          statusText: "Needs more observation",
+          lastObservationDate: null,
+        };
 
-  <div className="flex items-center gap-3">
-
-    <h2 className="text-xl font-bold text-slate-900">
-      Learners
-    </h2>
-
-    <button
-      onClick={() => setShowManageLearners(true)}
-      className="rounded-lg border border-slate-300 px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-50"
-    >
-      Manage
-    </button>
-
-  </div>
-
-
-
-</div>
-
-    <p className="text-sm text-slate-500">
-      Select one or more learners
-    </p>
-
-  </div>
-
-  <div className="flex flex-wrap gap-6">
-
-    {pupils.map((child) => (
+      return (
       <button
         key={`${child.firstName}-${child.lastName}`}
+        type="button"
         onClick={() => toggleChild(child.id)}
         className="group relative flex flex-col items-center"
+        aria-pressed={selectedChildren.includes(child.id)}
+        aria-label={`${child.firstName} ${child.lastName}: ${evidenceStatus.count} of ${weeklyObservationTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
       >
 
         <div
           className={`relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition ${
             selectedChildren.includes(child.id)
               ? "border-blue-500 bg-slate-300"
-              : "border-slate-200 bg-slate-300"
+              : "border-slate-200 bg-slate-300 group-hover:border-cyan-300"
           }`}
         >
 
@@ -4107,12 +5286,13 @@ if (checkingOnboarding) {
 
           <span
             className={`absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-white ${
-              child.status === "green"
+              evidenceStatus.colour === "green"
                 ? "bg-green-500"
-                : child.status === "yellow"
+                : evidenceStatus.colour === "yellow"
                 ? "bg-yellow-400"
                 : "bg-red-500"
             }`}
+            aria-hidden="true"
           />
 
         </div>
@@ -4121,52 +5301,36 @@ if (checkingOnboarding) {
   {child.firstName}
 </span>
 
-<div className="pointer-events-none absolute left-0 top-full z-50 mt-3 hidden w-72 -rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block hover:block">
+<div className="pointer-events-none absolute left-0 top-full z-50 mt-3 hidden w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block group-focus:block">
 
   <p className="font-semibold text-slate-900">
     {child.firstName} {child.lastName}
   </p>
 
+  <p className="mt-2 text-sm font-medium text-slate-700">
+    This week: {evidenceStatus.count} of{" "}
+    {weeklyObservationTarget} observations
+  </p>
+
   <p className="mt-1 text-xs text-slate-500">
-    Last Observation • {child.lastObservationDate}
+    {evidenceStatus.percentage}% ·{" "}
+    {evidenceStatus.statusText}
   </p>
 
-  <p className="mt-3 text-sm text-slate-700">
-    {child.lastObservation}
+  <p className="mt-3 text-xs text-slate-500">
+    {evidenceStatus.lastObservationDate
+      ? `Last observation: ${evidenceStatus.lastObservationDate.toLocaleDateString()}`
+      : "No observations yet"}
   </p>
-
-  <div className="mt-3 flex flex-wrap items-center gap-2">
-
-  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-    {child.lastLevel}
-  </span>
-
-  {child.send && (
-    <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700">
-      ⭐ SEND
-    </span>
-  )}
-
-  {child.eal && (
-    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-      🌍 EAL
-    </span>
-  )}
-
-  {child.gifted && (
-    <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
-      🚀 Gifted
-    </span>
-  )}
-
-</div>
 
 </div>
 
       </button>
-    ))}
+      );
+    })}
 
    <button
+  type="button"
   onClick={() => setShowAddLearnerModal(true)}
   className="flex flex-col items-center"
 >
@@ -4185,11 +5349,95 @@ if (checkingOnboarding) {
 
     </button>
 
+    </div>
   </div>
 
 </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
+{showObservationModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-observation-title"
+      className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-slate-50 p-5 shadow-2xl sm:p-7"
+    >
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h2 id="add-observation-title" className="text-2xl font-bold text-slate-900">
+            Add Observation
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Capture evidence, analyse it and save it to the journal.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={closeObservationComposer}
+          className="text-xl text-slate-400 hover:text-slate-900"
+          aria-label="Close observation"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-slate-900">
+            Learners
+          </p>
+
+          <p className="text-xs text-slate-500">
+            {selectedChildren.length > 0
+              ? `${selectedChildren.length} selected`
+              : "Select one or more"}
+          </p>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {pupils.map((learner) => {
+            const isSelected =
+              selectedChildren.includes(learner.id);
+            const evidenceStatus =
+              learnerEvidenceStatus.get(learner.id);
+            const statusColour =
+              evidenceStatus?.colour === "green"
+                ? "bg-green-500"
+                : evidenceStatus?.colour === "yellow"
+                  ? "bg-yellow-400"
+                  : "bg-red-500";
+
+            return (
+              <button
+                key={learner.id}
+                type="button"
+                onClick={() => toggleChild(learner.id)}
+                title={`${learner.firstName} ${learner.lastName}`}
+                aria-label={`${isSelected ? "Deselect" : "Select"} ${learner.firstName} ${learner.lastName}`}
+                aria-pressed={isSelected}
+                className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition ${
+                  isSelected
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-400"
+                }`}
+              >
+                {(
+                  learner.firstName[0] +
+                  learner.lastName[0]
+                ).toUpperCase()}
+
+                <span
+                  className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${statusColour}`}
+                  aria-hidden="true"
+                />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+        <div id="observation-composer" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
 
   <button
     onClick={() => setShowObservationPanel(!showObservationPanel)}
@@ -4217,9 +5465,10 @@ if (checkingOnboarding) {
   <input
     type="date"
     value={observationDate}
-    onChange={(event) =>
+    onChange={(event) => {
+      invalidateObservationAnalysis();
       setObservationDate(event.target.value)
-    }
+    }}
     max={new Date().toISOString().slice(0, 10)}
     className="mt-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-black"
   />
@@ -4231,13 +5480,16 @@ if (checkingOnboarding) {
 
         <textarea
           value={observation}
-          onChange={(e) => setObservation(e.target.value)}
+          onChange={(e) => {
+            invalidateObservationAnalysis();
+            setObservation(e.target.value);
+          }}
           style={{
             color: "#000000",
             WebkitTextFillColor: "#000000",
             opacity: 1,
           }}
-          className="mt-2 h-56 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
+          className="mt-2 h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
           placeholder="Type or paste an observation..."
         />
 
@@ -4777,6 +6029,10 @@ const hasOverride =
 
         )}
 
+    </div>
+  </div>
+)}
+
         <div className="my-8 flex items-center gap-4">
 </div>
 
@@ -4788,7 +6044,7 @@ const hasOverride =
     <div className="h-px flex-1 bg-slate-200" />
 
     <h2 className="whitespace-nowrap text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-      Learner Overview
+      Selected learner
     </h2>
 
     <div className="h-px flex-1 bg-slate-200" />
@@ -4800,7 +6056,7 @@ const hasOverride =
     <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm">
 
       <h3 className="text-lg font-semibold text-slate-900">
-        No Learner Selected
+        Choose a learner to begin
       </h3>
 
       <p className="mt-2 text-slate-500">
@@ -4991,22 +6247,17 @@ const hasOverride =
 
               <div className="mt-6">
                 <svg viewBox="0 0 420 230" className="h-72 w-full">
-                  {[...activeFramework.assessmentLevels]
-  .sort((a, b) => b.order - a.order)
-  .map((level) => {
-    const orderedLevels = [
-      ...activeFramework.assessmentLevels,
-    ].sort((a, b) => a.order - b.order);
-
-    const levelNumber =
-      orderedLevels.findIndex(
-        (item) => item.id === level.id
-      ) + 1;
-
-    const y = levelToY(levelNumber);
+                 {[...assessmentStatusLabels]
+  .map((label, index) => ({
+    label,
+    level: index + 1,
+  }))
+  .reverse()
+  .map(({ label, level }) => {
+    const y = levelToY(level);
 
     return (
-      <g key={level.id}>
+      <g key={label}>
         <line
           x1="155"
           y1={y}
@@ -5022,7 +6273,7 @@ const hasOverride =
           fontSize="12"
           fill="#64748b"
         >
-          {level.label}
+          {label}
         </text>
       </g>
     );
@@ -5041,41 +6292,26 @@ const hasOverride =
   journey.length
 );
                     const y = levelToY(point.level);
-const labelEvery =
-  journey.length <= 8
-    ? 1
-    : Math.ceil(journey.length / 6);
 
-const showDateLabel =
-  index === 0 ||
-  index === journey.length - 1 ||
-  index % labelEvery === 0;
                     return (
-                     <g key={point.id}>
-                        <circle
-  cx={x}
-  cy={y}
-  r={journeyDotRadius}
-  fill="#0f172a"
-  stroke="white"
-  strokeWidth="3"
-  className="cursor-pointer"
-  onClick={() => setSelectedEvidence(point)}
-/>
-                          
-
-                        {showDateLabel && (
-  <text
-    x={x}
-    y="218"
-    textAnchor="middle"
-    fontSize="12"
-    fill="#64748b"
+                    <g key={point.id}>
+  <circle
+    cx={x}
+    cy={y}
+    r={journeyDotRadius}
+    fill="#0f172a"
+    stroke="white"
+    strokeWidth="3"
+    className="cursor-pointer"
+    onClick={() => setSelectedEvidence(point)}
   >
-    {point.label}
-  </text>
-)}
-                      </g>
+    <title>
+      {`${point.fullDate} • ${getAssessmentDisplayLabel(
+        point.levelLabel
+      )}`}
+    </title>
+  </circle>
+</g>
                     );
                   })}
                 </svg>
@@ -5331,7 +6567,7 @@ const showDateLabel =
   </>
 )}
 
-<div className="my-10 flex items-center gap-4">
+<div className="hidden">
 
   <div className="h-px flex-1 bg-slate-200" />
 
@@ -5343,7 +6579,7 @@ const showDateLabel =
 
 </div>
 
-<div className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
+<div id="class-attainment" className="hidden">
 
 {/* CLASS ATTAINMENT OVERVIEW */}
 
@@ -5678,10 +6914,7 @@ const showDateLabel =
       <div className="mt-7 flex justify-end gap-3">
         <button
           type="button"
-          onClick={() => {
-            setShowDuplicateObservationModal(false);
-            setDuplicateSavePayload(null);
-          }}
+          onClick={discardDuplicateEvidence}
           className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
         >
           Cancel
@@ -5910,7 +7143,7 @@ const showDateLabel =
 
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
 
-          {["Below", "Developing", "Secure", "Exceeding"].map((level) => (
+          {assessmentStatusLabels.map((level) => (
             <button
               key={level}
               onClick={() => setTeacherLevel(level)}
@@ -6030,6 +7263,14 @@ const showDateLabel =
           <p className="mt-2 text-slate-500">
             Edit or archive learners.
           </p>
+
+          {learnersMissingDateOfBirth.length > 0 && (
+            <p className="mt-3 inline-flex rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
+              {learnersMissingDateOfBirth.length} learner
+              {learnersMissingDateOfBirth.length === 1 ? "" : "s"} need a
+              date of birth
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -6059,7 +7300,7 @@ const showDateLabel =
 
           <div
             key={index}
-            className="flex items-center justify-between rounded-2xl border border-slate-200 p-4"
+            className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
           >
 
             <div>
@@ -6072,9 +7313,19 @@ const showDateLabel =
                 Status: {child.status}
               </p>
 
+              {child.dateOfBirth ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Date of birth recorded
+                </p>
+              ) : (
+                <p className="mt-1 text-xs font-semibold text-amber-700">
+                  Date of birth needed for analysis
+                </p>
+              )}
+
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
 
 <button
   onClick={() => openJournal(child.id)}
@@ -6103,7 +7354,7 @@ const showDateLabel =
 
   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
 >
-  Edit
+  {child.dateOfBirth ? "Edit" : "Add date of birth"}
 </button>
 
               <button
@@ -6311,6 +7562,31 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
       <p className="text-sm text-slate-500">
         {importPreview.length} learners found
       </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <label
+          htmlFor="learner-import-date-order"
+          className="text-sm font-medium text-slate-700"
+        >
+          Numeric date order
+        </label>
+        <select
+          id="learner-import-date-order"
+          value={importDateOrder}
+          onChange={(event) =>
+            changeImportDateOrder(
+              event.target.value as LearnerDateOrder
+            )
+          }
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+        >
+          <option value="DMY">Day / Month / Year</option>
+          <option value="MDY">Month / Day / Year</option>
+        </select>
+        <span className="text-xs text-slate-500">
+          Inferred from the whole file. Change it before import if needed.
+        </span>
+      </div>
     </div>
 
     <div className="overflow-x-auto">
@@ -6324,9 +7600,19 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
   </span>
 </th>
     <th className="px-4 py-3">First name</th>
-    <th className="px-4 py-3">Last name</th>
+    <th className="px-4 py-3">
+      Last name
+      <span className="ml-1 text-xs font-normal text-slate-400">
+        (optional)
+      </span>
+    </th>
 <th className="px-4 py-3">Class</th>
-<th className="px-4 py-3">Date of birth</th>
+<th className="px-4 py-3">
+  Date of birth
+  <span className="ml-1 text-xs font-normal text-slate-400">
+    (optional)
+  </span>
+</th>
 <th className="px-4 py-3">Status</th>
     <th className="px-4 py-3">Import action</th>
     <th className="px-4 py-3 text-right">
@@ -6374,6 +7660,7 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
       <td className="px-3 py-3">
         <input
           type="text"
+          placeholder="Not shared"
           value={learner.lastName}
           onChange={(event) =>
             updateImportPreviewRow(
@@ -6678,7 +7965,21 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
 
 {expanded && (
   <div className="border-t border-slate-200 px-6 pb-6">
-   
+
+    {typeof entry.image_url === "string" &&
+      entry.image_url.trim() && (
+        <div className="mt-6">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Photo evidence
+          </p>
+
+          <img
+            src={`/api/evidence?path=${encodeURIComponent(entry.image_url)}`}
+            alt="Observation evidence"
+            className="max-h-96 rounded-2xl border border-slate-200 object-contain"
+          />
+        </div>
+      )}
 
 
     <div className="mt-6">
@@ -6832,6 +8133,19 @@ match.statementMatches.length > 0 ? (
         </p>
       )}
     </div>
+
+    <div className="mt-6 border-t border-slate-200 pt-5">
+      <button
+        type="button"
+        onClick={() => {
+          setObservationDeleteError("");
+          setObservationToDelete(entry);
+        }}
+        className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+      >
+        Delete observation
+      </button>
+    </div>
   </div>
 )}
 
@@ -6849,6 +8163,55 @@ match.statementMatches.length > 0 ? (
     </div>
 )}
 
+{observationToDelete && (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
+    <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+      <h2 className="text-xl font-bold text-slate-900">
+        Delete observation?
+      </h2>
+
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        This permanently removes the journal entry and its photo
+        evidence. This action cannot be undone.
+      </p>
+
+      <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+        {observationToDelete.observation ||
+          "Observation text unavailable"}
+      </p>
+
+      {observationDeleteError && (
+        <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {observationDeleteError}
+        </p>
+      )}
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          disabled={deletingObservation}
+          onClick={() => {
+            setObservationToDelete(null);
+            setObservationDeleteError("");
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={deletingObservation}
+          onClick={confirmObservationDeletion}
+          className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          {deletingObservation ? "Deleting…" : "Delete permanently"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {showAddLearnerModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
@@ -6864,7 +8227,7 @@ match.statementMatches.length > 0 ? (
           </h2>
 
           <p className="mt-2 text-slate-500">
-            Create a new learner profile.
+            Create a learner profile. Private details can be added later.
           </p>
         </div>
 
@@ -6896,7 +8259,7 @@ match.statementMatches.length > 0 ? (
 
         <div>
           <label className="block text-sm font-semibold text-slate-700">
-            Last Name
+            Last Name <span className="font-normal text-slate-400">(optional)</span>
           </label>
 
           <input
@@ -6965,7 +8328,7 @@ match.statementMatches.length > 0 ? (
 
         <div>
           <label className="block text-sm font-semibold text-slate-700">
-            Date of Birth
+            Date of Birth <span className="font-normal text-slate-400">(optional)</span>
           </label>
 
           <input
@@ -6973,6 +8336,9 @@ match.statementMatches.length > 0 ? (
             value={newLearnerDob}
             onChange={(e) =>
               setNewLearnerDob(e.target.value)
+            }
+            onInput={(e) =>
+              setNewLearnerDob(e.currentTarget.value)
             }
             className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
           />
@@ -7024,6 +8390,9 @@ match.statementMatches.length > 0 ? (
           <p className="mt-2 text-slate-500">
             Import your school's assessment framework.
           </p>
+
+
+
         </div>
 
         <button
@@ -7049,7 +8418,33 @@ match.statementMatches.length > 0 ? (
     </div>
 
     <div className="mt-4 space-y-3">
-      {savedFrameworks.map((savedFramework) => (
+{[...savedFrameworks]
+  .sort((first, second) => {
+    const statusOrder: Record<string, number> = {
+      active: 0,
+      draft: 1,
+      archived: 2,
+    };
+
+    const statusDifference =
+      (statusOrder[first.status] ?? 99) -
+      (statusOrder[second.status] ?? 99);
+
+    if (statusDifference !== 0) {
+      return statusDifference;
+    }
+
+    return (
+      new Date(second.updated_at).getTime() -
+      new Date(first.updated_at).getTime()
+    );
+  })
+  .filter(
+    (framework) =>
+      showArchivedFrameworks ||
+      framework.status !== "archived"
+  )
+  .map((savedFramework) => (
         <div
           key={savedFramework.id}
           className={`flex items-center justify-between gap-4 rounded-xl border p-4 ${
@@ -7086,10 +8481,30 @@ match.statementMatches.length > 0 ? (
       savedFramework.status.slice(1)}
   </span>
 
+  <span
+  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+    savedFramework.framework_import_status === "ready"
+      ? "bg-emerald-100 text-emerald-800"
+      : savedFramework.framework_import_status === "needs_review"
+      ? "bg-amber-100 text-amber-800"
+      : savedFramework.framework_import_status === "processing"
+      ? "bg-blue-100 text-blue-800"
+      : "bg-red-100 text-red-700"
+  }`}
+>
+  {
+    frameworkImportStatusLabels[
+      savedFramework.framework_import_status
+    ] ?? "Unknown"
+  }
+</span>
+
 {savedFramework.status === "active" && (
   <button
     type="button"
     onClick={() => {
+setFrameworkRightsConfirmed(false);
+
       setMappedFrameworkPreview({
         ...savedFramework.definition,
         version: "",
@@ -7113,6 +8528,9 @@ setFrameworkExtraction(null);
     <button
       type="button"
       onClick={() => {
+        setFrameworkRightsConfirmed(
+  savedFramework.rights_confirmed === true
+);
         setMappedFrameworkPreview(
           savedFramework.definition
         );
@@ -7136,6 +8554,9 @@ setFrameworkMappingError("");
   <button
     type="button"
     onClick={() => {
+      setFrameworkRightsConfirmed(
+  savedFramework.rights_confirmed === true
+);
       setFrameworkConfirm({
         title: "Activate framework?",
         message: `This will make "${savedFramework.name}" version ${savedFramework.version} the active framework. Any currently active framework will be archived.`,
@@ -7257,6 +8678,39 @@ setFrameworkMappingError("");
 </div>
         </div>
       ))}
+
+      {savedFrameworks.some(
+        (framework) =>
+          framework.status === "archived"
+      ) && (
+        <button
+          type="button"
+          onClick={() =>
+            setShowArchivedFrameworks(
+              (current) => !current
+            )
+          }
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+        >
+          <span>
+            Archived frameworks (
+            {
+              savedFrameworks.filter(
+                (framework) =>
+                  framework.status ===
+                  "archived"
+              ).length
+            }
+            )
+          </span>
+
+          <span className="text-slate-400">
+            {showArchivedFrameworks
+              ? "▲"
+              : "▼"}
+          </span>
+        </button>
+      )}
     </div>
   </div>
 )}
@@ -7267,11 +8721,11 @@ setFrameworkMappingError("");
   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
     <div>
       <h3 className="text-xl font-bold text-slate-900">
-        Paste framework text
+        Add a framework
       </h3>
 
       <p className="mt-1 text-sm text-slate-500">
-        Paste the framework content below. OASIS will identify
+        Upload a file or paste framework content below. OASIS will identify
         stages, learning areas, statements and assessment levels.
       </p>
     </div>
@@ -7292,6 +8746,9 @@ setFrameworkMappingError("");
       event.dataTransfer.files?.[0] ?? null;
 
     setFrameworkFile(droppedFile);
+    setFrameworkExtraction(null);
+    setMappedFrameworkPreview(null);
+    setFrameworkProcessingStage(null);
     setFrameworkMappingError("");
   }}
 >
@@ -7300,7 +8757,7 @@ setFrameworkMappingError("");
   </label>
 
   <p className="mt-1 text-xs text-slate-500">
-    Choose a PDF, Word document, or text file.
+    Choose a PDF, Word document, text file or photographed framework page. Scans are read automatically.
   </p>
 
 <div className="mt-4">
@@ -7320,7 +8777,7 @@ setFrameworkMappingError("");
 <input
   id="framework-file-upload"
   type="file"
-  accept=".pdf,.docx,.txt"
+  accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp"
   className="hidden"
   onChange={(event) => {
     const selectedFile =
@@ -7328,6 +8785,8 @@ setFrameworkMappingError("");
 
     setFrameworkFile(selectedFile);
     setFrameworkExtraction(null);
+    setMappedFrameworkPreview(null);
+    setFrameworkProcessingStage(null);
     setFrameworkMappingError("");
   }}
 />
@@ -7339,23 +8798,105 @@ setFrameworkMappingError("");
 
   {frameworkFile && (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3">
-      <p className="min-w-0 truncate text-sm font-medium text-slate-600">
-        Selected: {frameworkFile.name}
-      </p>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-700">
+          {frameworkFile.name}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {formatFrameworkFileSize(frameworkFile.size)} · OASIS selects the
+          best reading method automatically
+        </p>
+      </div>
 
 <button
   type="button"
-  onClick={handleFrameworkFileUpload}
+  onClick={() => {
+    if (frameworkRightsConfirmed) {
+      void handleFrameworkFileUpload();
+      return;
+    }
+
+    setFrameworkRightsPendingAction(
+      "extract"
+    );
+    setShowFrameworkRightsModal(true);
+  }}
   disabled={isExtractingFramework}
   className="shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
 >
 {isExtractingFramework
-  ? "Extracting framework..."
-  : "Extract framework text"}
+  ? "Reading framework…"
+  : "Read and map framework"}
 </button>
     </div>
   )}
+  {!isExtractingFramework && (
+    <p className="mt-3 text-xs leading-5 text-slate-500">
+      Large or scanned frameworks may take a few minutes. OASIS will preserve
+      the original structure for you to review before saving.
+    </p>
+  )}
+
+  {(isExtractingFramework || isMappingFramework) &&
+    frameworkProcessingStage && (
+      <div
+        role="status"
+        className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-4"
+      >
+        <p className="text-sm font-semibold text-slate-800">
+          {frameworkProcessingLabels[frameworkProcessingStage]}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-slate-600">
+          Large visual frameworks can take several minutes. Keep this window
+          open while OASIS prepares the complete review.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {[
+            ["uploading", "Upload securely"],
+            ["reading", "Read pages and tables"],
+            ["organising", "Organise learning areas"],
+          ].map(([stage, label]) => {
+            const order = ["preparing", "uploading", "reading", "organising"];
+            const isReached =
+              order.indexOf(frameworkProcessingStage) >= order.indexOf(stage);
+
+            return (
+              <div
+                key={stage}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                  isReached
+                    ? "bg-white text-cyan-800"
+                    : "bg-cyan-100/60 text-slate-500"
+                }`}
+              >
+                {isReached ? "●" : "○"} {label}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
 </div>
+
+{(frameworkExtraction?.ocrApplied ||
+  frameworkExtraction?.visualMappingApplied) && (
+  <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+    <p className="text-sm font-semibold text-slate-800">
+      {frameworkExtraction.visualMappingApplied
+        ? "Complex framework mapped visually"
+        : "Scanned framework read with visual OCR"}
+    </p>
+    <p className="mt-1 text-xs leading-5 text-slate-600">
+      Layout confidence: {frameworkExtraction.layoutConfidence ?? "low"}.
+      Review objective and progression columns before saving.
+    </p>
+    {frameworkExtraction.warnings?.length ? (
+      <p className="mt-1 text-xs leading-5 text-amber-700">
+        {frameworkExtraction.warnings.join(" ")}
+      </p>
+    ) : null}
+  </div>
+)}
 
 
 </div>
@@ -7377,13 +8918,23 @@ setFrameworkMappingError("");
       {frameworkText.trim().length.toLocaleString()} characters
     </p>
 
-    <button
-      type="button"
-      onClick={handleMapFramework}
-      disabled={
-        isMappingFramework ||
-        frameworkText.trim().length < 100
-      }
+<button
+  type="button"
+  onClick={() => {
+    if (frameworkRightsConfirmed) {
+      void handleMapFramework();
+      return;
+    }
+
+    setFrameworkRightsPendingAction(
+      "map"
+    );
+    setShowFrameworkRightsModal(true);
+  }}
+  disabled={
+    isMappingFramework ||
+    frameworkText.trim().length < 100
+  }
       className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
     >
       {isMappingFramework ? (
@@ -7394,18 +8945,28 @@ setFrameworkMappingError("");
     </span>
   </span>
 ) : (
-  "Map Framework with AI"
+  "Read and map framework"
 )}
     </button>
   </div>
 
-  {frameworkMappingError && (
-    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-      <p className="text-sm font-medium text-red-700">
-        {frameworkMappingError}
-      </p>
-    </div>
-  )}
+{frameworkMappingError && (
+  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+    <p className="text-sm font-medium text-amber-800">
+      OASIS couldn&apos;t read this framework.
+    </p>
+
+    <button
+      type="button"
+      onClick={() =>
+        setShowFrameworkReadHelpModal(true)
+      }
+      className="text-sm font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-950"
+    >
+      View help
+    </button>
+  </div>
+)}
 
   {mappedFrameworkPreview && (
     <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
@@ -7620,6 +9181,11 @@ onClick={() => {
                           (stageId) =>
                             stageId !== stage.id
                         ),
+                      expectedProgression:
+                        currentStatement.expectedProgression?.filter(
+                          (expectation) =>
+                            expectation.stageId !== stage.id
+                        ),
                     })
                   ),
               })
@@ -7820,15 +9386,18 @@ onClick={() => {
     </div>
 
     <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-      {mappedFrameworkPreview.expectationBands?.length ?? 0}
+      {(mappedFrameworkPreview.expectationBands?.length ?? 0) > 0
+        ? mappedFrameworkPreview.expectationBands?.length
+        : `${getObjectiveExpectationRangeCount(mappedFrameworkPreview)} ranges`}
     </span>
   </div>
 
   {(mappedFrameworkPreview.expectationBands?.length ?? 0) === 0 ? (
     <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
       <p className="text-sm text-slate-600">
-        No explicit expectation bands were identified in
-        this framework.
+        {getObjectiveExpectationRangeCount(mappedFrameworkPreview) > 0
+          ? "This framework defines expectations separately for each objective. Open a learning area below to review its age/class ranges."
+          : "No explicit expectation bands were identified in this framework."}
       </p>
     </div>
   ) : (
@@ -8379,6 +9948,25 @@ onClick={() => {
       </div>
     </div>
   )}
+{statement.expectedProgression &&
+  statement.expectedProgression.length > 0 && (
+    <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800">
+        Objective-specific age/class expectations
+      </p>
+      <p className="mt-2 text-sm leading-6 text-slate-700">
+        {statement.expectedProgression
+          .map((expectation) => {
+            const stage = mappedFrameworkPreview.stages?.find(
+              (item) => item.id === expectation.stageId
+            );
+
+            return `${stage?.label ?? expectation.stageId}: levels ${expectation.minExpectedLevel}–${expectation.maxExpectedLevel}`;
+          })
+          .join(" · ")}
+      </p>
+    </div>
+  )}
                         <div className="mt-3">
   <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
     Guidance notes
@@ -8686,7 +10274,10 @@ onClick={() => {
   <button
     type="button"
     onClick={handleSaveFrameworkDraft}
-    disabled={!frameworkIsValid}
+    disabled={
+  !frameworkIsValid ||
+  !frameworkRightsConfirmed
+}
     className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
   >
     Save as draft
@@ -8698,6 +10289,399 @@ onClick={() => {
 </div>
 
 )}
+{showFrameworkRightsModal && (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            Before we process this framework
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Please confirm that you have permission to use
+            this framework within OASIS.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setFrameworkRightsConfirmed(false);
+            setFrameworkRightsPendingAction(null);
+            setShowFrameworkRightsModal(false);
+          }}
+          className="text-slate-500 hover:text-slate-900"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={frameworkRightsConfirmed}
+            onChange={(event) => {
+              setFrameworkRightsConfirmed(
+                event.target.checked
+              );
+            }}
+            className="mt-1 h-4 w-4"
+          />
+
+          <div>
+            <p className="text-sm font-semibold leading-6 text-slate-800">
+              I confirm that I have the right, permission or
+              appropriate licence to use and process this
+              framework within OASIS.
+            </p>
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Uploaded frameworks remain the responsibility
+              of the organisation or user providing them and
+              are not automatically added to the public OASIS
+              Framework Library.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <div className="mt-7 flex justify-end gap-3 border-t border-slate-200 pt-5">
+        <button
+          type="button"
+          onClick={() => {
+            setFrameworkRightsConfirmed(false);
+            setFrameworkRightsPendingAction(null);
+            setShowFrameworkRightsModal(false);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={!frameworkRightsConfirmed}
+          onClick={() => {
+            const pendingAction =
+              frameworkRightsPendingAction;
+
+            setShowFrameworkRightsModal(false);
+            setFrameworkRightsPendingAction(null);
+
+            if (pendingAction === "extract") {
+              void handleFrameworkFileUpload();
+            }
+
+            if (pendingAction === "map") {
+              void handleMapFramework();
+            }
+          }}
+          className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {frameworkRightsPendingAction === "map"
+            ? "Confirm & Map Framework"
+            : "Confirm & Extract"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showFrameworkReadHelpModal && (
+  <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            We couldn&apos;t read this framework
+          </h2>
+
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Some frameworks use scanned pages, unusual tables or
+            layouts that OASIS may not understand yet.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setShowFrameworkReadHelpModal(false)
+          }
+          className="text-slate-500 hover:text-slate-900"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mt-5 rounded-2xl bg-slate-50 p-5">
+        <p className="text-sm leading-6 text-slate-700">
+          <span className="font-semibold text-slate-900">
+            OASIS is still learning.
+          </span>{" "}
+          Send us the framework and we&apos;ll do our best to
+          teach OASIS how to read this format.
+        </p>
+      </div>
+
+      <div className="mt-7 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5">
+        <button
+          type="button"
+          onClick={() => {
+            setShowFrameworkReadHelpModal(false);
+            setFrameworkFile(null);
+            setFrameworkExtraction(null);
+            setFrameworkText("");
+            setMappedFrameworkPreview(null);
+            setFrameworkMappingError("");
+
+            setTimeout(() => {
+              document
+                .getElementById(
+                  "framework-file-upload"
+                )
+                ?.click();
+            }, 0);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          Try another file
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowFrameworkReadHelpModal(false);
+
+            setFrameworkSupportMessage(
+              frameworkMappingError
+                ? `OASIS had trouble reading this framework:\n\n${frameworkMappingError}`
+                : ""
+            );
+
+            setFrameworkSupportFile(
+              frameworkFile
+            );
+
+            setFrameworkSupportError("");
+            setFrameworkSupportSuccess("");
+            setShowFrameworkSupportModal(true);
+          }}
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+        >
+          Contact OASIS Support
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showFrameworkSupportModal && (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-xl rounded-3xl bg-white p-8 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            Contact OASIS Support
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Tell us what happened. You can also attach the
+            framework or document you were working with.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowFrameworkSupportModal(false);
+            setFrameworkSupportMessage("");
+            setFrameworkSupportFile(null);
+            setFrameworkSupportError("");
+            setFrameworkSupportSuccess("");
+          }}
+          className="text-slate-500 hover:text-slate-900"
+        >
+          ✕
+        </button>
+      </div>
+
+      {frameworkSupportSuccess ? (
+        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <p className="font-semibold text-emerald-800">
+            ✓ {frameworkSupportSuccess}
+          </p>
+
+          <p className="mt-2 text-sm text-emerald-700">
+            OASIS Support will review your request and follow up
+            using the email linked to your account.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowFrameworkSupportModal(false);
+              setFrameworkSupportMessage("");
+              setFrameworkSupportFile(null);
+              setFrameworkSupportError("");
+              setFrameworkSupportSuccess("");
+            }}
+            className="mt-5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+          >
+            Close
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="mt-6">
+            <label className="block text-sm font-semibold text-slate-800">
+              What can we help with?
+            </label>
+
+            <textarea
+              value={frameworkSupportMessage}
+              onChange={(event) => {
+                setFrameworkSupportMessage(
+                  event.target.value
+                );
+                setFrameworkSupportError("");
+              }}
+              maxLength={5000}
+              placeholder="Describe the problem you encountered..."
+              className="mt-2 min-h-36 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-900"
+            />
+
+            <p className="mt-1 text-right text-xs text-slate-400">
+              {frameworkSupportMessage.length.toLocaleString()}
+              /5,000
+            </p>
+          </div>
+
+          <div className="mt-5">
+            <label className="block text-sm font-semibold text-slate-800">
+              Attachment
+              <span className="ml-2 font-normal text-slate-400">
+                Optional
+              </span>
+            </label>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              PDF, DOCX, XLSX, CSV, TXT, JPG or PNG. Maximum 15 MB.
+            </p>
+
+            <input
+              type="file"
+              accept=".pdf,.docx,.xlsx,.csv,.txt,.jpg,.jpeg,.png"
+              onChange={(event) => {
+                const selectedFile =
+                  event.target.files?.[0] ?? null;
+
+                if (
+                  selectedFile &&
+                  selectedFile.size >
+                    15 * 1024 * 1024
+                ) {
+                  setFrameworkSupportFile(null);
+                  setFrameworkSupportError(
+                    "The attachment is too large. Maximum file size is 15 MB."
+                  );
+
+                  event.currentTarget.value =
+                    "";
+
+                  return;
+                }
+
+                setFrameworkSupportFile(
+                  selectedFile
+                );
+
+                setFrameworkSupportError("");
+              }}
+              className="mt-3 block w-full cursor-pointer rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+            />
+
+            {frameworkSupportFile && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-700">
+                    {frameworkSupportFile.name}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    {(
+                      frameworkSupportFile.size /
+                      1024 /
+                      1024
+                    ).toFixed(2)}{" "}
+                    MB
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrameworkSupportFile(
+                      null
+                    );
+                  }}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+
+          {frameworkSupportError && (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-medium text-red-700">
+                {frameworkSupportError}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-7 flex items-center justify-end gap-3 border-t border-slate-200 pt-5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowFrameworkSupportModal(
+                  false
+                );
+                setFrameworkSupportMessage("");
+                setFrameworkSupportFile(null);
+                setFrameworkSupportError("");
+                setFrameworkSupportSuccess("");
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleSendFrameworkSupport
+              }
+              disabled={
+                frameworkSupportSending ||
+                frameworkSupportMessage
+                  .trim().length < 10
+              }
+              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {frameworkSupportSending
+                ? "Sending..."
+                : "Send to OASIS Support"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+)}
+
 {showBaselineModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-2xl">
@@ -8918,12 +10902,17 @@ onClick={() => {
 {showReportHelper && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
-    <div className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="report-helper-title"
+      className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl"
+    >
 
       <div className="flex items-start justify-between">
 
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">
+          <h2 id="report-helper-title" className="text-3xl font-bold text-slate-900">
             Export Report Helper
           </h2>
 
@@ -8933,8 +10922,10 @@ onClick={() => {
         </div>
 
         <button
+          type="button"
           onClick={() => setShowReportHelper(false)}
           className="text-slate-500 hover:text-slate-900"
+          aria-label="Close report helper"
         >
           ✕
         </button>
@@ -8975,6 +10966,7 @@ onClick={() => {
       <div className="mt-8 flex justify-end gap-3">
 
         <button
+          type="button"
           onClick={() => setShowReportHelper(false)}
           className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700"
         >
@@ -8982,9 +10974,12 @@ onClick={() => {
         </button>
 
         <button
-          className="rounded-xl bg-slate-900 px-5 py-3 font-medium text-white hover:bg-slate-700"
+          type="button"
+          disabled
+          title="PDF export is not available yet"
+          className="cursor-not-allowed rounded-xl bg-slate-200 px-5 py-3 font-medium text-slate-500"
         >
-          Export PDF
+          PDF export coming soon
         </button>
 
       </div>
@@ -8994,112 +10989,558 @@ onClick={() => {
   </div>
 )}
 
-{showTodaysFocus && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-    <div className="w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl">
-      <div className="flex items-start justify-between">
+{showSettings && (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+      className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+    >
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">
-            Today's Focus
+          <h2 id="settings-title" className="text-3xl font-bold text-slate-900">
+            Settings
           </h2>
-
-          <p className="mt-1 text-slate-500">
-            Daily priorities based on missing evidence and learner needs.
+          <p className="mt-1 text-sm text-slate-500">
+            Manage your account, school calendar and how OASIS interprets evidence.
           </p>
         </div>
 
         <button
-          onClick={() => setShowTodaysFocus(false)}
-          className="text-slate-500 hover:text-slate-900"
+          type="button"
+          onClick={() => setShowSettings(false)}
+          className="text-xl text-slate-400 hover:text-slate-900"
+          aria-label="Close settings"
         >
           ✕
         </button>
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl bg-slate-100 p-5">
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-bold text-slate-900">
+              Setup and data
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Existing framework and baseline tools remain available here.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettings(false);
+                router.push("/settings/academic-year");
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Academic year & terms
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettings(false);
+                setShowFrameworkModal(true);
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Frameworks
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettings(false);
+                setShowBaselineModal(true);
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Add baseline
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-7 grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 p-5">
           <h3 className="text-lg font-bold text-slate-900">
-            Learners to Notice
+            Account
           </h3>
 
-          <div className="mt-4 space-y-4 text-slate-800">
-            <div>
-              <p className="font-semibold">Matthew</p>
-              <p className="text-sm text-slate-600">
-                Look for self-management evidence during independent learning.
-              </p>
-            </div>
+          <label className="mt-5 block text-sm font-semibold text-slate-700">
+            Name
+          </label>
+          <input
+            value={accountNameDraft}
+            onChange={(event) => {
+              setAccountNameDraft(event.target.value);
+              setSettingsError("");
+              setSettingsMessage("");
+            }}
+            placeholder="Your name"
+            autoComplete="name"
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900"
+          />
 
-            <div>
-              <p className="font-semibold">Emma</p>
-              <p className="text-sm text-slate-600">
-                Collect mathematics evidence linked to measuring and comparing.
-              </p>
-            </div>
+          <label className="mt-4 block text-sm font-semibold text-slate-700">
+            Email
+          </label>
+          <input
+            type="email"
+            value={accountEmailDraft}
+            onChange={(event) => {
+              setAccountEmailDraft(event.target.value);
+              setSettingsError("");
+              setSettingsMessage("");
+            }}
+            autoComplete="email"
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900"
+          />
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Changing your email requires confirmation at the new address.
+          </p>
 
-            <div>
-              <p className="font-semibold">Lucas</p>
-              <p className="text-sm text-slate-600">
-                Observe communication during group discussion.
-              </p>
-            </div>
+          <button
+            type="button"
+            onClick={() => void saveAccount()}
+            disabled={
+              accountSaving ||
+              !accountEmailDraft.trim()
+            }
+            className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {accountSaving ? "Saving…" : "Save profile"}
+          </button>
 
-            <div>
-              <p className="font-semibold">Olivia</p>
-              <p className="text-sm text-slate-600">
-                Look for creativity evidence during provision time.
-              </p>
-            </div>
+          <div className="mt-6 border-t border-slate-200 pt-5">
+            <h4 className="font-semibold text-slate-900">
+              School access
+            </h4>
+            <p className="mt-1 text-xs text-slate-500">
+              These details are managed by your school.
+            </p>
 
-            <div>
-              <p className="font-semibold">Noah</p>
-              <p className="text-sm text-slate-600">
-                Check research skills during inquiry exploration.
-              </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  School
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {accountContextLoading
+                    ? "Loading…"
+                    : accountSchoolName || "Not linked"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Role
+                </p>
+                <p className="mt-1 text-sm font-semibold capitalize text-slate-900">
+                  {accountContextLoading
+                    ? "Loading…"
+                    : accountRole.replaceAll("_", " ") ||
+                      "Member"}
+                </p>
+              </div>
             </div>
           </div>
+
+          <div className="mt-6 border-t border-slate-200 pt-5">
+            <h4 className="font-semibold text-slate-900">
+              Change password
+            </h4>
+
+            <div className="mt-3 grid gap-3">
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => {
+                  setNewPassword(event.target.value);
+                  setSettingsError("");
+                  setSettingsMessage("");
+                }}
+                placeholder="New password"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900"
+              />
+
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  setSettingsError("");
+                  setSettingsMessage("");
+                }}
+                placeholder="Confirm new password"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void changePassword()}
+              disabled={
+                passwordSaving ||
+                !newPassword ||
+                !confirmPassword
+              }
+              className="mt-4 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {passwordSaving
+                ? "Changing…"
+                : "Change password"}
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 p-5">
+          <h3 className="text-lg font-bold text-slate-900">
+            Assessment
+          </h3>
+
+          <label className="mt-5 block text-sm font-semibold text-slate-700">
+            Expected observations per learner per week
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            step={1}
+            value={settingsWeeklyTarget}
+            onChange={(event) => {
+              setSettingsWeeklyTarget(
+                Number(event.target.value)
+              );
+              setSettingsError("");
+              setSettingsMessage("");
+            }}
+            className="mt-2 w-28 rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
+          />
+
+          <label className="mt-5 block text-sm font-semibold text-slate-700">
+            Expectation mode
+          </label>
+          <select
+            value={settingsExpectationMode}
+            onChange={(event) => {
+              setSettingsExpectationMode(
+                event.target.value as
+                  | "developmental_trajectory"
+                  | "end_of_year_threshold"
+              );
+              setSettingsError("");
+              setSettingsMessage("");
+            }}
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900"
+          >
+            <option value="developmental_trajectory">
+              Developmental trajectory
+            </option>
+            <option value="end_of_year_threshold">
+              End-of-year threshold
+            </option>
+          </select>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-sm font-semibold text-slate-700">
+                Assessment status labels
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setSettingsStatusLabels((current) => [
+                    ...current,
+                    "",
+                  ])
+                }
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+              >
+                + Add status
+              </button>
+            </div>
+
+            <div className="mt-2 space-y-2">
+              {settingsStatusLabels.map((label, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    value={label}
+                    onChange={(event) => {
+                      setSettingsStatusLabels((current) =>
+                        current.map((currentLabel, labelIndex) =>
+                          labelIndex === index
+                            ? event.target.value
+                            : currentLabel
+                        )
+                      );
+                      setSettingsError("");
+                      setSettingsMessage("");
+                    }}
+                    className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  />
+
+                  {settingsStatusLabels.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettingsStatusLabels((current) =>
+                          current.filter(
+                            (_, labelIndex) =>
+                              labelIndex !== index
+                          )
+                        )
+                      }
+                      className="px-2 text-lg text-slate-400 hover:text-red-600"
+                      aria-label={`Remove ${label || "status"}`}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void saveAssessmentSettings()}
+            disabled={settingsSaving}
+            className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {settingsSaving
+              ? "Saving…"
+              : "Save assessment settings"}
+          </button>
+        </section>
+      </div>
+
+      {settingsError && (
+        <p className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {settingsError}
+        </p>
+      )}
+
+      {settingsMessage && (
+        <p className="mt-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          {settingsMessage}
+        </p>
+      )}
+    </div>
+  </div>
+)}
+
+{showTodaysFocus && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="todays-focus-title"
+      className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-7"
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 id="todays-focus-title" className="text-3xl font-bold text-slate-900">
+            {focusDay === "tomorrow" && tomorrowFocusAvailable
+              ? "Tomorrow’s Focus"
+              : "Today’s Focus"}
+          </h2>
+
+          <p className="mt-1 text-slate-500">
+            Specific things to notice if they arise naturally
+            {focusDay === "tomorrow" && tomorrowFocusAvailable
+              ? " tomorrow."
+              : " today."}
+          </p>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-2xl bg-slate-100 p-5">
-            <h3 className="text-lg font-bold text-slate-900">
-              Class Focus
-            </h3>
+        <button
+          type="button"
+          onClick={closeTodaysFocus}
+          className="text-slate-500 hover:text-slate-900"
+          aria-label="Close focus"
+        >
+          ✕
+        </button>
+      </div>
 
-            <p className="mt-3 text-slate-800">
-              80% of learners need more recent evidence in Physical and
-              Creativity.
-            </p>
-
-            <p className="mt-2 text-sm text-slate-600">
-              Suggested focus: outdoor learning, construction, role play, and
-              open-ended creative tasks.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-slate-100 p-5">
-            <h3 className="text-lg font-bold text-slate-900">
-              Evidence Gaps
-            </h3>
-
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-800">
-              <li>Physical: low evidence across the class</li>
-              <li>Creativity: limited recent observations</li>
-              <li>Self-Management: inconsistent evidence for 5 learners</li>
-            </ul>
-          </div>
-
-          <div className="rounded-2xl bg-slate-100 p-5">
-            <h3 className="text-lg font-bold text-slate-900">
-              Suggested Teaching Lens
-            </h3>
-
-            <p className="mt-3 text-slate-800">
-              During today’s provision, prioritise noticing how learners plan,
-              persist, collaborate and explain their choices.
-            </p>
-          </div>
+      <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setFocusDay("today")}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              focusDay === "today"
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => setFocusDay("tomorrow")}
+            disabled={!tomorrowFocusAvailable}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+              focusDay === "tomorrow" && tomorrowFocusAvailable
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Tomorrow
+          </button>
         </div>
+        <p className="text-xs font-medium text-slate-500 sm:text-right">
+          {tomorrowFocusAvailable
+            ? "Tomorrow’s focus is ready for preparation."
+            : "Tomorrow’s focus becomes available at 3:00 pm local time."}
+        </p>
+      </div>
+
+      {displayedFocusItems.length > 0 ? (
+        <>
+          <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+            <span className="mr-1 text-sm font-semibold text-slate-700">
+              {displayedFocusItems.length} priorities
+            </span>
+
+            {(["Observe", "Support", "Stretch"] as const).map(
+              (kind) => {
+                const count = displayedFocusItems.filter(
+                  (item) => item.kind === kind
+                ).length;
+                const summaryClasses =
+                  kind === "Support"
+                    ? "bg-amber-100 text-amber-800"
+                    : kind === "Stretch"
+                      ? "bg-purple-100 text-purple-800"
+                      : "bg-blue-100 text-blue-800";
+
+                return (
+                  <span
+                    key={kind}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${summaryClasses}`}
+                  >
+                    {count} {kind}
+                  </span>
+                );
+              }
+            )}
+          </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {displayedFocusItems.map((item, index) => {
+            const kindClasses =
+              item.kind === "Support"
+                ? "bg-amber-100 text-amber-800"
+                : item.kind === "Stretch"
+                  ? "bg-purple-100 text-purple-800"
+                  : "bg-blue-100 text-blue-800";
+
+            return (
+              <article
+                key={`${item.learnerId}-${item.kind}`}
+                className="flex flex-col rounded-2xl border border-slate-200 p-4"
+              >
+                <div className="flex flex-1 flex-col">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-slate-400">
+                        {index + 1}
+                      </span>
+
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${kindClasses}`}
+                      >
+                        {item.kind}
+                      </span>
+
+                      <span className="text-xs font-medium text-slate-500">
+                        {item.area}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-2 text-base font-bold text-slate-900">
+                      {item.learnerName}
+                    </h3>
+
+                    <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Look for
+                      </p>
+
+                      <p className="mt-1 text-sm leading-5 text-slate-800">
+                        {item.lookFor}
+                      </p>
+                    </div>
+
+                    <details className="mt-2 text-sm text-slate-600">
+                      <summary className="cursor-pointer font-semibold text-slate-500 hover:text-slate-800">
+                        Why this priority
+                      </summary>
+
+                      <div className="mt-2 rounded-xl border border-slate-200 p-3 leading-5">
+                        <p>{item.reason}</p>
+
+                        {item.prompt && (
+                          <p className="mt-2 border-t border-slate-200 pt-2">
+                            {item.prompt}
+                          </p>
+                        )}
+                      </div>
+                    </details>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedChildren([
+                        item.learnerId,
+                      ]);
+                      setShowTodaysFocus(false);
+                      openObservationComposer();
+                    }}
+                    className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                  >
+                    Select learner
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        </>
+      ) : (
+        <div className="mt-8 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">
+          Add learners to create this focus.
+        </div>
+      )}
+
+      <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+        <p className="text-xs font-medium text-emerald-800 sm:text-sm">
+          These are priorities, not a checklist. Notice what
+          happens naturally; other needs will rotate into future
+          days.
+        </p>
+
+        <p className="mt-1 text-xs text-emerald-700">
+          OASIS has not assumed that any learners should work or
+          play together. You can select additional learners if a
+          genuine group moment occurs.
+        </p>
+
+        <p className="mt-2 border-t border-emerald-200 pt-2 text-xs font-medium text-emerald-800">
+          Focus priorities are fixed for the day. A preview for the next day is prepared at 3:00 pm local time so there is time to plan without turning these suggestions into a checklist.
+        </p>
       </div>
     </div>
   </div>
@@ -9108,12 +11549,17 @@ onClick={() => {
 {showPTCNotes && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
-    <div className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ptc-notes-title"
+      className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl"
+    >
 
       <div className="flex items-start justify-between">
 
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">
+          <h2 id="ptc-notes-title" className="text-3xl font-bold text-slate-900">
             Export PTC Notes
           </h2>
 
@@ -9123,8 +11569,10 @@ onClick={() => {
         </div>
 
         <button
+          type="button"
           onClick={() => setShowPTCNotes(false)}
           className="text-slate-500 hover:text-slate-900"
+          aria-label="Close PTC notes"
         >
           ✕
         </button>
@@ -9165,6 +11613,7 @@ onClick={() => {
       <div className="mt-8 flex justify-end gap-3">
 
         <button
+          type="button"
           onClick={() => setShowPTCNotes(false)}
           className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700"
         >
@@ -9172,9 +11621,12 @@ onClick={() => {
         </button>
 
         <button
-          className="rounded-xl bg-slate-900 px-5 py-3 font-medium text-white hover:bg-slate-700"
+          type="button"
+          disabled
+          title="PDF export is not available yet"
+          className="cursor-not-allowed rounded-xl bg-slate-200 px-5 py-3 font-medium text-slate-500"
         >
-          Export PDF
+          PDF export coming soon
         </button>
 
       </div>

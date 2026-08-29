@@ -324,6 +324,7 @@ export default function OnboardingPage() {
 
       await loadAcademicYear();
 
+      setSavedMessage("");
       setCurrentStep(2);
     } catch (error) {
       setError(
@@ -716,7 +717,7 @@ export default function OnboardingPage() {
             </p>
           )}
 
-          {savedMessage && (
+          {currentStep === 1 && savedMessage && (
             <p className="mt-5 text-sm font-medium text-emerald-700">
               {savedMessage}
             </p>

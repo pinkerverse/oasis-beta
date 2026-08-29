@@ -33,3 +33,22 @@ input::placeholder,
 textarea::placeholder {
   color: #94a3b8;
 }
+
+html[data-oasis-embedded-overlay="true"],
+html[data-oasis-embedded-overlay="true"] body,
+html[data-oasis-embedded-overlay="true"] body > main {
+  background: transparent !important;
+}
+
+html[data-oasis-embedded-overlay="true"] body > main {
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+
+html[data-oasis-embedded-overlay="true"] body > main > :not(.fixed) {
+  visibility: hidden !important;
+}
+
+html[data-oasis-embedded-overlay="true"] body > main > .fixed {
+  visibility: visible !important;
+}

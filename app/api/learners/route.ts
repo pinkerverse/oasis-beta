@@ -1,52 +1,23 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  inferLearnerDateOrder,
+  normaliseLearnerDate,
+  normaliseOptionalSurname,
+  type LearnerDateOrder,
+} from "@/lib/learner-import";
 
 export const dynamic = "force-dynamic";
 
 type ImportedLearner = {
   externalId?: string;
   firstName: string;
-  lastName: string;
+  lastName?: string;
   className?: string;
-  dateOfBirth?: string;
+  dateOfBirth?: string | null;
 };
-
-function normaliseDateOfBirth(value: unknown) {
-  if (typeof value !== "string") {
-    return "";
-  }
-
-  const dateOfBirth = value.trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
-    return "";
-  }
-
-  const parsedDate = new Date(
-    `${dateOfBirth}T00:00:00.000Z`
-  );
-
-  if (
-    Number.isNaN(parsedDate.getTime()) ||
-    parsedDate.toISOString().slice(0, 10) !==
-      dateOfBirth
-  ) {
-    return "";
-  }
-
-  const today = new Date()
-    .toISOString()
-    .slice(0, 10);
-
-  if (dateOfBirth > today) {
-    return "";
-  }
-
-  return dateOfBirth;
-}
 
 // LOAD ACTIVE LEARNERS
 export async function GET() {
@@ -121,7 +92,6 @@ const authenticatedSupabase =
 // IMPORT OR UPDATE LEARNERS
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
     const schoolId = await getCurrentSchoolId();
 
 if (!schoolId) {
@@ -134,6 +104,8 @@ if (!schoolId) {
   );
 }
 
+    const body = await request.json();
+
     if (!Array.isArray(body.learners)) {
       return NextResponse.json(
         { error: "A learners array is required." },
@@ -144,20 +116,31 @@ if (!schoolId) {
     const learners: ImportedLearner[] =
       body.learners;
 
+    const requestedDateOrder: LearnerDateOrder | null =
+      body.dateOrder === "MDY" || body.dateOrder === "DMY"
+        ? body.dateOrder
+        : null;
+    const dateOrder =
+      requestedDateOrder ||
+      inferLearnerDateOrder(
+        learners.map((learner) => learner.dateOfBirth)
+      ) ||
+      "DMY";
+
     const invalidLearner = learners.some(
-  (learner) =>
-    !learner.firstName?.trim() ||
-    !learner.lastName?.trim() ||
-    !normaliseDateOfBirth(
-      learner.dateOfBirth
-    )
-);
+      (learner) =>
+        !learner.firstName?.trim() ||
+        !normaliseLearnerDate(
+          learner.dateOfBirth,
+          dateOrder
+        ).isValid
+    );
 
     if (invalidLearner) {
       return NextResponse.json(
         {
           error:
-            "Each learner requires a first name, last name and valid date of birth."
+            "Each learner needs a first name. Any supplied date of birth must be a valid past date."
         },
         { status: 400 }
       );
@@ -175,12 +158,16 @@ const rows = learners.map((learner) => {
       suppliedExternalId ||
       `IMPORT-${crypto.randomUUID()}`,
       first_name: learner.firstName.trim(),
-      last_name: learner.lastName.trim(),
+      last_name: normaliseOptionalSurname(
+        learner.lastName
+      ),
       class_name:
         learner.className?.trim() || null,
-      date_of_birth: normaliseDateOfBirth(
-        learner.dateOfBirth
-      ),
+      date_of_birth:
+        normaliseLearnerDate(
+          learner.dateOfBirth,
+          dateOrder
+        ).date || null,
          active: true,
   };
 });
@@ -220,7 +207,6 @@ const rows = learners.map((learner) => {
 // UPDATE ONE LEARNER
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json();
     const schoolId = await getCurrentSchoolId();
 
 if (!schoolId) {
@@ -232,6 +218,8 @@ if (!schoolId) {
     { status: 401 }
   );
 }
+
+    const body = await request.json();
 
     const id =
       typeof body.id === "string"
@@ -253,10 +241,10 @@ if (!schoolId) {
         ? body.className.trim()
         : "";
 
-    const dateOfBirth =
-      normaliseDateOfBirth(
-        body.dateOfBirth
-      );
+    const parsedDateOfBirth = normaliseLearnerDate(
+      body.dateOfBirth,
+      body.dateOrder === "MDY" ? "MDY" : "DMY"
+    );
 
     if (!id) {
       return NextResponse.json(
@@ -267,13 +255,12 @@ if (!schoolId) {
 
     if (
       !firstName ||
-      !lastName ||
-      !dateOfBirth
+      !parsedDateOfBirth.isValid
     ) {
       return NextResponse.json(
         {
           error:
-            "First name, last name and a valid date of birth are required.",
+            "A first name is required. Any supplied date of birth must be a valid past date.",
         },
         { status: 400 }
       );
@@ -284,9 +271,9 @@ if (!schoolId) {
         .from("learners")
         .update({
           first_name: firstName,
-          last_name: lastName,
+          last_name: normaliseOptionalSurname(lastName),
           class_name: className || null,
-          date_of_birth: dateOfBirth,
+          date_of_birth: parsedDateOfBirth.date || null,
         })
        .eq("id", id)
 .eq("school_id", schoolId)
@@ -345,7 +332,6 @@ if (!schoolId) {
 // ARCHIVE ONE LEARNER
 export async function DELETE(request: Request) {
   try {
-    const body = await request.json();
 const schoolId = await getCurrentSchoolId();
 
 if (!schoolId) {
@@ -357,6 +343,8 @@ if (!schoolId) {
     { status: 401 }
   );
 }
+    const body = await request.json();
+
     const id =
       typeof body.id === "string"
         ? body.id.trim()

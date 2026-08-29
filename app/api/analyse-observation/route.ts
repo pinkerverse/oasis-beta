@@ -117,6 +117,21 @@ function resolveSuggestedFrameworkStage(
 
 export async function POST(request: Request) {
   try {
+    const schoolId = await getCurrentSchoolId();
+
+    if (!schoolId) {
+      return Response.json(
+        {
+          error:
+            "You must be signed in and linked to a school to analyse observations.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const authenticatedSupabase =
+      await createServerSupabaseClient();
+
     const body = await request.json();
 
     const observation =
@@ -126,7 +141,7 @@ export async function POST(request: Request) {
 
     const frameworkKey = body.frameworkKey || "eyfs";
 
-    const learners: SelectedLearner[] = Array.isArray(body.learners)
+    const submittedLearners: SelectedLearner[] = Array.isArray(body.learners)
       ? body.learners.filter(
           (learner: unknown): learner is SelectedLearner =>
             typeof learner === "object" &&
@@ -136,25 +151,77 @@ export async function POST(request: Request) {
         )
       : [];
 
-    const selectedNames = learners.map((learner) => learner.name);
-const selectedLearnerIds = learners.map(
-  (learner) => learner.id
-);
+    const selectedLearnerIds = [
+      ...new Set(
+        submittedLearners
+          .map((learner) => learner.id.trim())
+          .filter(Boolean)
+      ),
+    ];
 
-const schoolId = await getCurrentSchoolId();
+    if (selectedLearnerIds.length === 0) {
+      return Response.json(
+        { error: "At least one learner must be selected." },
+        { status: 400 }
+      );
+    }
 
-if (!schoolId) {
-  return Response.json(
-    {
-      error:
-        "You must be signed in and linked to a school to analyse observations.",
-    },
-    { status: 401 }
-  );
-}
+    const {
+      data: schoolLearners,
+      error: schoolLearnersError,
+    } = await authenticatedSupabase
+      .from("learners")
+      .select("id, first_name, last_name, date_of_birth")
+      .eq("school_id", schoolId)
+      .eq("active", true)
+      .in("id", selectedLearnerIds);
 
-const authenticatedSupabase =
-  await createServerSupabaseClient();
+    if (schoolLearnersError) {
+      console.error(
+        "Selected learner verification failed:",
+        schoolLearnersError
+      );
+
+      return Response.json(
+        { error: "The selected learners could not be verified." },
+        { status: 500 }
+      );
+    }
+
+    const learners: SelectedLearner[] =
+      selectedLearnerIds.flatMap((learnerId) => {
+        const learner = schoolLearners?.find(
+          (candidate) => candidate.id === learnerId
+        );
+
+        if (!learner) {
+          return [];
+        }
+
+        return [
+          {
+            id: learner.id,
+            name: [learner.first_name, learner.last_name]
+              .filter(Boolean)
+              .join(" "),
+            dateOfBirth: learner.date_of_birth,
+          },
+        ];
+      });
+
+    if (learners.length !== selectedLearnerIds.length) {
+      return Response.json(
+        {
+          error:
+            "One or more selected learners do not belong to this school.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const selectedNames = learners.map(
+      (learner) => learner.name
+    );
 
 const {
   data: activeFrameworkAssignment,
@@ -1094,6 +1161,53 @@ const validatedLearnerAnalyses:
 
 parsed.learnerAnalyses =
   validatedLearnerAnalyses;
+
+const normalizeLearnerName = (name: string) =>
+  name
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+const selectedNames = learners.map(
+  (learner) => learner.name
+);
+const normalizedSelectedNames = selectedNames.map(
+  (name) => {
+    const fullName = normalizeLearnerName(name);
+
+    return {
+      fullName,
+      firstName: fullName.split(" ")[0] ?? "",
+    };
+  }
+);
+const mentionedNames =
+  Array.isArray(parsed.learnerMismatch?.mentionedNames)
+    ? parsed.learnerMismatch.mentionedNames.filter(
+        (name: unknown): name is string =>
+          typeof name === "string" &&
+          name.trim().length > 0
+      )
+    : [];
+const unmatchedMentionedNames = mentionedNames.filter(
+  (name: string) => {
+    const normalizedName = normalizeLearnerName(name);
+
+    return !normalizedSelectedNames.some(
+      ({ fullName, firstName }) =>
+        normalizedName === fullName ||
+        normalizedName === firstName
+    );
+  }
+);
+
+parsed.learnerMismatch = {
+  detected: unmatchedMentionedNames.length > 0,
+  mentionedNames: unmatchedMentionedNames,
+  selectedNames,
+};
+
 if (validatedLearnerAnalyses.length === 1) {
   const singleLearnerAnalysis =
     validatedLearnerAnalyses[0];

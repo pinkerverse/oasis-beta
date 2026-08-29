@@ -60,12 +60,16 @@ const userId = claimsData?.claims?.sub;
 const isLoginPage =
   request.nextUrl.pathname === "/login";
 
+const isAuthCallback =
+  request.nextUrl.pathname === "/auth/callback";
+
 const isApiRoute =
   request.nextUrl.pathname.startsWith("/api/");
 
 if (
   !userId &&
   !isLoginPage &&
+  !isAuthCallback &&
   !isApiRoute
 ) {
   const redirectUrl =
