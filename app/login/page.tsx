@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
 
-type AuthMode = "signin" | "signup" | "forgot" | "reset";
+type AuthMode = "signin" | "signup" | "forgot" | "reset" | "request";
 
 const INVITATION_ONLY_BETA =
   process.env.NEXT_PUBLIC_BETA_INVITE_ONLY !== "false";
@@ -39,6 +39,13 @@ const AUTH_COPY: Record<
     submit: "Update password",
     loading: "Updating password…",
   },
+  request: {
+    title: "Request beta access",
+    description:
+      "Tell us a little about your setting and we’ll review your request.",
+    submit: "Send request",
+    loading: "Sending request…",
+  },
 };
 
 function LoginForm() {
@@ -52,6 +59,10 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [school, setSchool] = useState("");
+  const [role, setRole] = useState("Teacher");
+  const [requestNote, setRequestNote] = useState("");
+  const [website, setWebsite] = useState("");
   const [error, setError] = useState(searchParams.get("error") ?? "");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -132,6 +143,35 @@ function LoginForm() {
 
         setMessage(
           "If an account exists for that email, a password-reset link is on its way."
+        );
+        return;
+      }
+
+      if (mode === "request") {
+        const response = await fetch("/api/support/beta-access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            email,
+            school,
+            role,
+            note: requestNote,
+            website,
+          }),
+        });
+        const result = (await response.json()) as {
+          error?: string;
+          message?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(result.error || "Your request could not be sent.");
+        }
+
+        setMessage(
+          result.message ||
+            "Thanks—your beta access request has been sent to OASIS."
         );
         return;
       }
@@ -225,11 +265,18 @@ function LoginForm() {
               <span className="font-semibold text-slate-900">Private beta.</span>{" "}
               Access is currently by invitation. If you have been invited, sign
               in with the email address used for your invitation.
+              <button
+                type="button"
+                onClick={() => changeMode("request")}
+                className="mt-2 block font-semibold text-cyan-800 underline decoration-cyan-300 underline-offset-4 hover:text-cyan-950"
+              >
+                Request beta access
+              </button>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {mode === "signup" && (
+            {(mode === "signup" || mode === "request") && (
               <div>
                 <label htmlFor="name" className="text-sm font-semibold text-slate-700">
                   Your name
@@ -261,6 +308,86 @@ function LoginForm() {
                   className="mt-1.5 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                 />
               </div>
+            )}
+
+            {mode === "request" && (
+              <>
+                <div>
+                  <label
+                    htmlFor="school"
+                    className="text-sm font-semibold text-slate-700"
+                  >
+                    School or setting
+                  </label>
+                  <input
+                    id="school"
+                    type="text"
+                    autoComplete="organization"
+                    required
+                    maxLength={160}
+                    value={school}
+                    onChange={(event) => setSchool(event.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="role"
+                    className="text-sm font-semibold text-slate-700"
+                  >
+                    Your role
+                  </label>
+                  <select
+                    id="role"
+                    required
+                    value={role}
+                    onChange={(event) => setRole(event.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  >
+                    <option>Teacher</option>
+                    <option>School leader</option>
+                    <option>Early years practitioner</option>
+                    <option>Teaching assistant</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="request-note"
+                    className="text-sm font-semibold text-slate-700"
+                  >
+                    What would you like to use OASIS for?{" "}
+                    <span className="font-normal text-slate-500">Optional</span>
+                  </label>
+                  <textarea
+                    id="request-note"
+                    rows={3}
+                    maxLength={1000}
+                    value={requestNote}
+                    onChange={(event) => setRequestNote(event.target.value)}
+                    className="mt-1.5 w-full resize-none rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+
+                <div className="hidden" aria-hidden="true">
+                  <label htmlFor="website">Website</label>
+                  <input
+                    id="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={website}
+                    onChange={(event) => setWebsite(event.target.value)}
+                  />
+                </div>
+
+                <p className="text-xs leading-5 text-slate-500">
+                  By sending this request, you agree that OASIS may contact you
+                  about private beta access.
+                </p>
+              </>
             )}
 
             {showPassword && (
@@ -331,7 +458,7 @@ function LoginForm() {
             </button>
           </form>
 
-          {(mode === "forgot" || mode === "reset") && (
+          {(mode === "forgot" || mode === "reset" || mode === "request") && (
             <button
               type="button"
               onClick={() => changeMode("signin")}
