@@ -2230,6 +2230,8 @@ type TodaysFocusItem = {
   kind: "Observe" | "Support" | "Stretch";
   area: string;
   reason: string;
+  frameworkStatement: string;
+  progressionLabel: string | null;
   lookFor: string;
   prompt: string | null;
 };
@@ -2293,45 +2295,123 @@ const buildFocusItems = (
     return months;
   };
 
-  const getAgeAppropriateStatement = (
+  const getAgeAppropriateFocus = (
     area: (typeof activeAreas)[number],
-    dateOfBirth: unknown
+    dateOfBirth: unknown,
+    rotationSeed: number
   ) => {
     const ageMonths = getLearnerAgeMonths(dateOfBirth);
+    const orderedStages = [
+      ...(activeFramework.stages ?? []),
+    ].sort((first, second) => first.order - second.order);
 
-    if (!activeFramework.stages?.length) {
-      return area.statements[0];
-    }
+    const matchingStage =
+      ageMonths === null
+        ? null
+        : orderedStages
+            .filter(
+              (stage) =>
+                (stage.minAgeMonths === undefined ||
+                  ageMonths >= stage.minAgeMonths) &&
+                (stage.maxAgeMonths === undefined ||
+                  ageMonths <= stage.maxAgeMonths)
+            )
+            .sort(
+              (first, second) =>
+                second.order - first.order
+            )[0] ?? null;
 
-    const unscopedStatement = area.statements.find(
-      (statement) => !statement.stageIds?.length
+    const eligibleStatements = area.statements.filter(
+      (statement) =>
+        !statement.stageIds?.length ||
+        !matchingStage ||
+        statement.stageIds.includes(matchingStage.id)
     );
 
-    if (ageMonths === null) {
-      return unscopedStatement;
+    const statementPool =
+      eligibleStatements.length > 0
+        ? eligibleStatements
+        : area.statements;
+
+    const statement =
+      statementPool.length > 0
+        ? statementPool[
+            ((rotationSeed % statementPool.length) +
+              statementPool.length) %
+              statementPool.length
+          ]
+        : null;
+
+    if (!statement) {
+      return null;
     }
 
-    const matchingStageIds = new Set(
-      activeFramework.stages
-        .filter(
-          (stage) =>
-            (stage.minAgeMonths === undefined ||
-              ageMonths >= stage.minAgeMonths) &&
-            (stage.maxAgeMonths === undefined ||
-              ageMonths <= stage.maxAgeMonths)
+    const progression = [
+      ...(statement.progression ?? []),
+    ].sort(
+      (first, second) => first.level - second.level
+    );
+
+    const expectedRange = matchingStage
+      ? statement.expectedProgression?.find(
+          (range) =>
+            range.stageId === matchingStage.id
         )
-        .map((stage) => stage.id)
-    );
+      : null;
 
-    return (
-      area.statements.find(
-        (statement) =>
-          statement.stageIds?.some((stageId) =>
-            matchingStageIds.has(stageId)
-          )
+    let targetLevel = expectedRange?.minExpectedLevel;
+
+    if (
+      expectedRange &&
+      ageMonths !== null &&
+      typeof matchingStage?.minAgeMonths === "number" &&
+      typeof matchingStage.maxAgeMonths === "number" &&
+      matchingStage.maxAgeMonths >
+        matchingStage.minAgeMonths
+    ) {
+      const positionInStage = Math.min(
+        1,
+        Math.max(
+          0,
+          (ageMonths - matchingStage.minAgeMonths) /
+            (matchingStage.maxAgeMonths -
+              matchingStage.minAgeMonths)
+        )
+      );
+
+      targetLevel = Math.round(
+        expectedRange.minExpectedLevel +
+          positionInStage *
+            (expectedRange.maxExpectedLevel -
+              expectedRange.minExpectedLevel)
+      );
+    }
+
+    const progressionLevel =
+      progression.find(
+        (level) => level.level === targetLevel
       ) ??
-      unscopedStatement
-    );
+      (targetLevel === undefined
+        ? progression[0]
+        : [...progression].sort(
+            (first, second) =>
+              Math.abs(first.level - targetLevel!) -
+              Math.abs(second.level - targetLevel!)
+          )[0]);
+
+    const lookFor =
+      progressionLevel?.descriptors
+        .filter(Boolean)
+        .join(" · ") ||
+      statement.guidance?.trim() ||
+      statement.text;
+
+    return {
+      statement,
+      progressionLevel,
+      matchingStage,
+      lookFor,
+    };
   };
 
   const learnerCandidates = pupils.map(
@@ -2409,13 +2489,15 @@ const buildFocusItems = (
       const focusAreaLastSeen = focusArea
         ? latestAreaEvidence.get(focusArea.name) ?? null
         : null;
+      const frameworkFocus = focusArea
+        ? getAgeAppropriateFocus(
+            focusArea,
+            learner.dateOfBirth,
+            focusDayNumber + learnerIndex
+          )
+        : null;
       const frameworkLookFor =
-        (focusArea
-          ? getAgeAppropriateStatement(
-              focusArea,
-              learner.dateOfBirth
-            )?.text
-          : null) ??
+        frameworkFocus?.lookFor ??
         `Notice naturally occurring evidence in ${focusArea?.name ?? "the active framework"}.`;
       const weeklyObservationCount = observations.filter(
         ({ timestamp }) =>
@@ -2444,7 +2526,9 @@ const buildFocusItems = (
               assessmentStatus?: string;
               suggestedLevel?: string;
               statementMatches?: Array<{
+                statementId?: string;
                 statementText?: string;
+                developmentalLevel?: number | null;
               }>;
               objectives?: string[];
             }) => {
@@ -2494,10 +2578,27 @@ const buildFocusItems = (
               latestMatch.strand.trim().toLowerCase()
             ) ?? latestMatch.strand.trim()
           : focusArea?.name ?? "Current learning";
-      const latestLookFor =
-        latestMatch?.statementMatches?.[0]
-          ?.statementText ||
+      const latestStatementMatch =
+        latestMatch?.statementMatches?.[0];
+      const latestProgressionDescription =
+        latestStatementMatch?.statementId &&
+        typeof latestStatementMatch.developmentalLevel ===
+          "number"
+          ? getProgressionDescription(
+              latestArea,
+              latestStatementMatch.statementId,
+              latestStatementMatch.developmentalLevel
+            )
+          : "";
+      const latestFrameworkStatement =
+        latestStatementMatch?.statementText ||
         latestMatch?.objectives?.[0] ||
+        frameworkFocus?.statement.text ||
+        focusArea?.name ||
+        "Current learning";
+      const latestLookFor =
+        latestProgressionDescription ||
+        latestFrameworkStatement ||
         frameworkLookFor;
       const latestStatus = latestAssessment?.status ?? "";
       const latestStatusIndex =
@@ -2528,6 +2629,22 @@ const buildFocusItems = (
         reason: focusAreaLastSeen
           ? `This is ${learnerName.split(" ")[0]}’s least recently evidenced learning area.`
           : `No evidence has yet been recorded for ${focusArea?.name ?? "this learning area"}.`,
+        frameworkStatement:
+          frameworkFocus?.statement.text ||
+          focusArea?.name ||
+          "Active framework",
+        progressionLabel:
+          frameworkFocus?.progressionLevel
+            ? `Level ${frameworkFocus.progressionLevel.level}${
+                frameworkFocus.progressionLevel.label
+                  ? ` · ${frameworkFocus.progressionLevel.label}`
+                  : ""
+              }${
+                frameworkFocus.matchingStage
+                  ? ` · ${frameworkFocus.matchingStage.label}`
+                  : ""
+              }`
+            : null,
         lookFor: frameworkLookFor,
         prompt: null,
         score:
@@ -2549,6 +2666,13 @@ const buildFocusItems = (
               kind: "Support",
               area: latestArea,
               reason: `Recent evidence in ${latestArea} was recorded as ${latestStatus}.`,
+              frameworkStatement:
+                latestFrameworkStatement,
+              progressionLabel:
+                typeof latestStatementMatch?.developmentalLevel ===
+                "number"
+                  ? `Level ${latestStatementMatch.developmentalLevel}`
+                  : null,
               lookFor: latestLookFor,
               prompt: nextStep
                 ? `Saved next step: ${nextStep.trim()}`
@@ -2572,6 +2696,13 @@ const buildFocusItems = (
               kind: "Stretch",
               area: latestArea,
               reason: `Recent evidence in ${latestArea} was recorded as ${latestStatus}.`,
+              frameworkStatement:
+                latestFrameworkStatement,
+              progressionLabel:
+                typeof latestStatementMatch?.developmentalLevel ===
+                "number"
+                  ? `Level ${latestStatementMatch.developmentalLevel}`
+                  : null,
               lookFor: latestLookFor,
               prompt: nextStep
                 ? `Saved next step: ${nextStep.trim()}`
@@ -2602,7 +2733,7 @@ const buildFocusItems = (
   const addItem = (item?: TodaysFocusItem | null) => {
     if (
       item &&
-      selected.length < 5 &&
+      selected.length < 8 &&
       !selectedLearners.has(item.learnerId)
     ) {
       selected.push(item);
@@ -11625,6 +11756,13 @@ onClick={() => {
                         Look for
                       </p>
 
+                      <p className="mt-1 text-xs font-semibold text-blue-700">
+                        {item.frameworkStatement}
+                        {item.progressionLabel
+                          ? ` · ${item.progressionLabel}`
+                          : ""}
+                      </p>
+
                       <p className="mt-1 text-sm leading-5 text-slate-800">
                         {item.lookFor}
                       </p>
@@ -11632,11 +11770,25 @@ onClick={() => {
 
                     <details className="mt-2 text-sm text-slate-600">
                       <summary className="cursor-pointer font-semibold text-slate-500 hover:text-slate-800">
-                        Why this priority
+                        Why this priority &amp; what to notice
                       </summary>
 
                       <div className="mt-2 rounded-xl border border-slate-200 p-3 leading-5">
-                        <p>{item.reason}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Why selected
+                        </p>
+
+                        <p className="mt-1">{item.reason}</p>
+
+                        <div className="mt-3 border-t border-slate-200 pt-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            What counts as useful evidence
+                          </p>
+
+                          <p className="mt-1 font-medium text-slate-800">
+                            {item.lookFor}
+                          </p>
+                        </div>
 
                         {item.prompt && (
                           <p className="mt-2 border-t border-slate-200 pt-2">
