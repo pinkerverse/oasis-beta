@@ -133,7 +133,7 @@ function LoginForm() {
       }
 
       if (mode === "forgot") {
-        const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/login?mode=reset")}`;
+        const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`;
         const { error: resetError } =
           await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: callbackUrl,
