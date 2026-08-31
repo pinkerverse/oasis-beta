@@ -422,6 +422,19 @@ const frameworkStatementsText =
     })
     .join("\n\n");
 
+const frameworkAreaNames =
+  framework.areaDefinitions.map(
+    (area) => area.name
+  );
+
+const frameworkStatementIds =
+  framework.areaDefinitions.flatMap(
+    (area) =>
+      area.statements.map(
+        (statement) => statement.id
+      )
+  );
+
     if (!observation) {
       return Response.json(
         { error: "Observation is required." },
@@ -511,9 +524,12 @@ ${observation}
 
 Assessment rules:
 - Only match learning areas that are clearly evidenced in the observation.
+- A concise observation can still clearly evidence several statements. Match every supplied statement that is directly supported, including when the evidence matches one of its developmental progression descriptors.
+- Do not require the observation to demonstrate every behaviour in a progression descriptor before matching the parent statement.
 - Only use framework statements supplied above.
 - Copy matched framework statement text exactly as supplied.
 - Do not invent, rewrite or paraphrase framework statements.
+- Copy the containing framework area name exactly as supplied above. Do not shorten, paraphrase or replace symbols such as "&" with words.
 - If no supplied statement is clearly evidenced for an area, do not match that area.
 - Assess every matched learning area independently.
 - Different learning areas may receive different levels.
@@ -584,6 +600,7 @@ Learner mismatch rules:
     properties: {
       strand: {
         type: "string",
+        enum: frameworkAreaNames,
       },
 
       objectives: {
@@ -602,6 +619,7 @@ statementMatches: {
     properties: {
       statementId: {
         type: "string",
+        enum: frameworkStatementIds,
       },
 
       statementText: {
@@ -685,6 +703,7 @@ learnerAnalyses: {
           properties: {
             strand: {
               type: "string",
+              enum: frameworkAreaNames,
             },
 
             objectives: {
@@ -703,6 +722,7 @@ learnerAnalyses: {
                 properties: {
                   statementId: {
                     type: "string",
+                    enum: frameworkStatementIds,
                   },
 
                   statementText: {
@@ -901,17 +921,6 @@ function validateFrameworkMatches(
       continue;
     }
 
-    const strand = match.strand.trim();
-
-    const validArea =
-      framework.areaDefinitions.find(
-        (area) => area.name === strand
-      );
-
-    if (!validArea) {
-      continue;
-    }
-
 const assessmentStatus =
   typeof match.assessmentStatus === "string" &&
   assessmentLevelLabels.includes(
@@ -953,8 +962,6 @@ const suggestedLevel = assessmentStatus;
 
                 if (
   !validStatement ||
-  validStatement.areaName !==
-    strand ||
   !evidence
 ) {
   return null;
@@ -1013,6 +1020,32 @@ return {
       continue;
     }
 
+    const canonicalStrand =
+      validStatementsById.get(
+        uniqueStatementMatches[0].statementId
+      )?.areaName;
+
+    if (!canonicalStrand) {
+      continue;
+    }
+
+    const sameAreaStatementMatches =
+      uniqueStatementMatches.filter(
+        (statement) =>
+          validStatementsById.get(
+            statement.statementId
+          )?.areaName === canonicalStrand
+      );
+
+    if (sameAreaStatementMatches.length === 0) {
+      continue;
+    }
+
+    // The statement ID is authoritative. This preserves a genuine
+    // framework match even if an older model response varies the area
+    // punctuation or wording slightly.
+    const strand = canonicalStrand;
+
     const confidence = Math.min(
       100,
       Math.max(
@@ -1026,12 +1059,12 @@ return {
       strand,
       source: "ai",
       objectives:
-        uniqueStatementMatches.map(
+        sameAreaStatementMatches.map(
           (statement) =>
             statement.statementText
         ),
       statementMatches:
-        uniqueStatementMatches,
+        sameAreaStatementMatches,
         assessmentStatus: suggestedLevel,
       suggestedLevel,
       confidence,

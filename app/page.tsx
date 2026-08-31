@@ -367,6 +367,11 @@ const [manualAreaId, setManualAreaId] = useState("");
 const [manualStatementIds, setManualStatementIds] =
   useState<string[]>([]);
 
+const [
+  manualStatementLevels,
+  setManualStatementLevels,
+] = useState<Record<string, number>>({});
+
 const [manualAreaLevel, setManualAreaLevel] =
   useState("");
 
@@ -378,21 +383,68 @@ const selectedManualArea =
     (area) => area.id === manualAreaId
   ) || null;
 
+const manualProgressionSelectionMissing =
+  selectedManualArea?.statements.some(
+    (statement) =>
+      manualStatementIds.includes(statement.id) &&
+      Array.isArray(statement.progression) &&
+      statement.progression.length > 0 &&
+      !manualStatementLevels[statement.id]
+  ) ?? false;
+
 function toggleManualStatement(statementId: string) {
-  setManualStatementIds((current) =>
-    current.includes(statementId)
-      ? current.filter((id) => id !== statementId)
-      : [...current, statementId]
-  );
+  setManualStatementIds((current) => {
+    if (current.includes(statementId)) {
+      setManualStatementLevels((levels) => {
+        const updated = { ...levels };
+        delete updated[statementId];
+        return updated;
+      });
+
+      return current.filter(
+        (id) => id !== statementId
+      );
+    }
+
+    return [...current, statementId];
+  });
 }
 
 function resetManualLearningAreaForm() {
   setManualAreaId("");
   setManualStatementIds([]);
+  setManualStatementLevels({});
  setManualAreaLevel(
   assessmentStatusLabels[0] ?? ""
 );
   setManualAreaEvidence("");
+}
+
+function getProgressionDescription(
+  areaName: string,
+  statementId: string,
+  developmentalLevel: number | null
+) {
+  if (developmentalLevel === null) {
+    return "";
+  }
+
+  const statement =
+    activeFramework.areaDefinitions
+      .find((area) => area.name === areaName)
+      ?.statements.find(
+        (item) => item.id === statementId
+      );
+
+  const progressionLevel =
+    statement?.progression?.find(
+      (item) =>
+        item.level === developmentalLevel
+    );
+
+  return progressionLevel?.descriptors
+    .filter(Boolean)
+    .join(" · ") ?? "";
 }
 
 function handleAddManualLearningArea() {
@@ -435,7 +487,9 @@ function handleAddManualLearningArea() {
         statementId: statement.id,
         statementText: statement.text,
         evidence: manualAreaEvidence.trim(),
-        developmentalLevel: null,
+        developmentalLevel:
+          manualStatementLevels[statement.id] ??
+          null,
       })
     ),
 assessmentStatus: manualAreaLevel,
@@ -5768,6 +5822,12 @@ if (checkingOnboarding) {
   </div>
 
   <div className="mt-5 space-y-4">
+   {(displayedLearnerAnalysis?.frameworkMatches ?? []).length === 0 && (
+     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+       No framework statement was returned for this observation. Try analysing it again, or use <strong>Add learning area</strong> to review the precise framework statements and progressions yourself.
+     </div>
+   )}
+
    {(displayedLearnerAnalysis?.frameworkMatches ?? []).map(
   (match, matchIndex) => {
     const overrideKey = `${
@@ -5928,6 +5988,12 @@ const hasOverride =
                   </p>
 
                   <div className="space-y-5">
+  {(displayedLearnerAnalysis?.frameworkMatches ?? []).length === 0 && (
+    <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+      No matches to display yet. OASIS will show the exact framework statement and its matched progression here.
+    </p>
+  )}
+
   {(displayedLearnerAnalysis?.frameworkMatches ?? []).map(
   (match, matchIndex) => (
     <div
@@ -5968,11 +6034,19 @@ const hasOverride =
 
       <div className="mt-4 space-y-3">
         {match.statementMatches?.length > 0 ? (
-          match.statementMatches.map((statement) => (
-            <div
-              key={`${match.strand}-${statement.statementId}`}
-              className="rounded-xl border border-slate-200 bg-white p-4"
-            >
+          match.statementMatches.map((statement) => {
+            const progressionDescription =
+              getProgressionDescription(
+                match.strand,
+                statement.statementId,
+                statement.developmentalLevel
+              );
+
+            return (
+              <div
+                key={`${match.strand}-${statement.statementId}`}
+                className="rounded-xl border border-slate-200 bg-white p-4"
+              >
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {statement.statementId}
               </p>
@@ -5981,9 +6055,17 @@ const hasOverride =
                 {statement.statementText}
               </p>
 {statement.developmentalLevel !== null && (
-  <p className="mt-2 text-sm font-medium text-slate-600">
-    Developmental level: {statement.developmentalLevel}
-  </p>
+  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Matched progression · Level {statement.developmentalLevel}
+    </p>
+
+    {progressionDescription && (
+      <p className="mt-1 text-sm text-slate-800">
+        {progressionDescription}
+      </p>
+    )}
+  </div>
 )}
               <div className="mt-3 rounded-xl bg-blue-50 p-3">
                 <p className="text-xs font-semibold text-blue-700">
@@ -5994,8 +6076,9 @@ const hasOverride =
                   {statement.evidence}
                 </p>
               </div>
-            </div>
-          ))
+              </div>
+            );
+          })
         ) : (
           <ul className="ml-5 list-disc text-slate-700">
             {match.objectives.map((objective) => (
@@ -6971,6 +7054,7 @@ const hasOverride =
             onChange={(event) => {
               setManualAreaId(event.target.value);
               setManualStatementIds([]);
+              setManualStatementLevels({});
             }}
             className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
           >
@@ -6979,7 +7063,7 @@ const hasOverride =
             {activeFramework.areaDefinitions
               .filter(
                 (area) =>
-                  !analysis?.frameworkMatches.some(
+                  !displayedLearnerAnalysis?.frameworkMatches.some(
                     (match) => match.strand === area.name
                   )
               )
@@ -6998,33 +7082,95 @@ const hasOverride =
             </p>
 
             <div className="mt-2 space-y-2">
-              {selectedManualArea.statements.map((statement) => (
-                <label
-                  key={statement.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 hover:bg-slate-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={manualStatementIds.includes(
-                      statement.id
+              {selectedManualArea.statements.map((statement) => {
+                const isSelected =
+                  manualStatementIds.includes(statement.id);
+
+                const progression =
+                  Array.isArray(statement.progression)
+                    ? [...statement.progression].sort(
+                        (first, second) =>
+                          first.level - second.level
+                      )
+                    : [];
+
+                return (
+                  <div
+                    key={statement.id}
+                    className={`rounded-xl border p-4 ${
+                      isSelected
+                        ? "border-blue-300 bg-blue-50/40"
+                        : "border-slate-200"
+                    }`}
+                  >
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() =>
+                          toggleManualStatement(statement.id)
+                        }
+                        className="mt-1"
+                      />
+
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Framework statement
+                        </p>
+
+                        <p className="mt-1 font-semibold text-slate-900">
+                          {statement.text}
+                        </p>
+                      </div>
+                    </label>
+
+                    {isSelected && progression.length > 0 && (
+                      <fieldset className="ml-7 mt-4 border-t border-slate-200 pt-4">
+                        <legend className="text-sm font-semibold text-slate-800">
+                          Which progression best matches the observation?
+                        </legend>
+
+                        <div className="mt-3 space-y-2">
+                          {progression.map((progressionLevel) => (
+                            <label
+                              key={progressionLevel.level}
+                              className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 hover:border-blue-300"
+                            >
+                              <input
+                                type="radio"
+                                name={`manual-progression-${statement.id}`}
+                                checked={
+                                  manualStatementLevels[statement.id] ===
+                                  progressionLevel.level
+                                }
+                                onChange={() =>
+                                  setManualStatementLevels((current) => ({
+                                    ...current,
+                                    [statement.id]: progressionLevel.level,
+                                  }))
+                                }
+                                className="mt-1"
+                              />
+
+                              <span className="text-sm leading-6 text-slate-700">
+                                <strong className="text-slate-900">
+                                  Level {progressionLevel.level}
+                                  {progressionLevel.label
+                                    ? ` — ${progressionLevel.label}`
+                                    : ""}
+                                </strong>
+                                {progressionLevel.descriptors.length > 0
+                                  ? `: ${progressionLevel.descriptors.join(" · ")}`
+                                  : ""}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
                     )}
-                    onChange={() =>
-                      toggleManualStatement(statement.id)
-                    }
-                    className="mt-1"
-                  />
-
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">
-                      {statement.id}
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-800">
-                      {statement.text}
-                    </p>
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -7086,6 +7232,7 @@ const hasOverride =
           disabled={
             !manualAreaId ||
             manualStatementIds.length === 0 ||
+            manualProgressionSelectionMissing ||
             !manualAreaEvidence.trim()
           }
           className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
