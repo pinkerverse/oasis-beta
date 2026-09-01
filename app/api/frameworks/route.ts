@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { FrameworkDefinition } from "@/lib/framework";
+import { getFrameworkValidationErrors } from "@/lib/framework-validation";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -45,6 +46,10 @@ if (!schoolId) {
 const authenticatedSupabase =
   await createServerSupabaseClient();
 const body = await request.json();
+const draftId =
+  typeof body?.id === "string"
+    ? body.id.trim()
+    : "";
 const rightsConfirmed =
   body?.rightsConfirmed === true;
 
@@ -119,30 +124,6 @@ if (userError || !user) {
       );
     }
 
-    if (
-      definition.areaDefinitions.length === 0
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "The framework must contain at least one learning area.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (
-      definition.assessmentLevels.length === 0
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "The framework must contain at least one assessment level.",
-        },
-        { status: 400 }
-      );
-    }
-
     const definitionToSave: FrameworkDefinition = {
       ...definition,
       key: frameworkKey,
@@ -150,16 +131,22 @@ if (userError || !user) {
       version: frameworkVersion,
     };
 
+const frameworkLookup = authenticatedSupabase
+  .from("framework_versions")
+  .select("id, status")
+  .eq("school_id", schoolId);
+
 const {
   data: existingFramework,
   error: existingFrameworkError,
-} = await authenticatedSupabase
-  .from("framework_versions")
-  .select("id, status")
-  .eq("school_id", schoolId)
-  .eq("framework_key", frameworkKey)
-  .eq("version", frameworkVersion)
-  .maybeSingle();
+} = draftId
+  ? await frameworkLookup
+      .eq("id", draftId)
+      .maybeSingle()
+  : await frameworkLookup
+      .eq("framework_key", frameworkKey)
+      .eq("version", frameworkVersion)
+      .maybeSingle();
 
 if (existingFrameworkError) {
   console.error(
@@ -174,6 +161,17 @@ if (existingFrameworkError) {
         "The framework could not be checked.",
     },
     { status: 500 }
+  );
+}
+
+if (draftId && !existingFramework) {
+  return NextResponse.json(
+    {
+      error:
+        "This framework draft could not be found.",
+      code: "FRAMEWORK_DRAFT_NOT_FOUND",
+    },
+    { status: 404 }
   );
 }
 
@@ -195,7 +193,9 @@ if (existingFramework) {
   const updateResult = await authenticatedSupabase
     .from("framework_versions")
 .update({
+  framework_key: frameworkKey,
   name: frameworkName,
+  version: frameworkVersion,
   definition: definitionToSave,
   source_text: sourceText,
 
@@ -633,7 +633,8 @@ const authenticatedSupabase =
     name,
     version,
     status,
-    rights_confirmed
+    rights_confirmed,
+    definition
   `
 )
      .eq("id", frameworkId)
@@ -680,6 +681,35 @@ if (!framework.rights_confirmed) {
         {
           error:
             "Only draft frameworks can be activated.",
+        },
+        { status: 409 }
+      );
+    }
+
+    if (!isFrameworkDefinition(framework.definition)) {
+      return NextResponse.json(
+        {
+          error:
+            "This draft is incomplete and cannot be activated yet.",
+          code: "FRAMEWORK_DRAFT_INVALID",
+        },
+        { status: 409 }
+      );
+    }
+
+    const activationValidationErrors =
+      getFrameworkValidationErrors(
+        framework.definition
+      );
+
+    if (activationValidationErrors.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Resolve the framework warnings before activation.",
+          code: "FRAMEWORK_DRAFT_INVALID",
+          validationErrors:
+            activationValidationErrors,
         },
         { status: 409 }
       );
