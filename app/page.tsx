@@ -18,6 +18,10 @@ import {
   normaliseLearnerDate,
   type LearnerDateOrder,
 } from "@/lib/learner-import";
+import {
+  createFallbackFocusGuidance,
+  type FocusGuidanceRequest,
+} from "@/lib/focus-guidance";
 
 
 
@@ -2227,6 +2231,7 @@ const learnerEvidenceStatus = (() => {
 })();
 
 type TodaysFocusItem = {
+  guidanceId: string;
   learnerId: string;
   learnerName: string;
   kind: "Observe" | "Support" | "Stretch";
@@ -2236,6 +2241,27 @@ type TodaysFocusItem = {
   progressionLabel: string | null;
   lookFor: string;
   prompt: string | null;
+};
+
+const createFocusGuidanceId = (
+  focusDate: Date,
+  learnerId: string,
+  kind: TodaysFocusItem["kind"],
+  context: string
+) => {
+  let hash = 2166136261;
+
+  for (let index = 0; index < context.length; index += 1) {
+    hash ^= context.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return [
+    focusDate.toISOString().slice(0, 10),
+    learnerId,
+    kind.toLowerCase(),
+    (hash >>> 0).toString(36),
+  ].join(":");
 };
 
 const buildFocusItems = (
@@ -2624,6 +2650,16 @@ const buildFocusItems = (
         score: number;
         tieBreaker: number;
       } = {
+        guidanceId: createFocusGuidanceId(
+          focusDate,
+          learner.id,
+          "Observe",
+          [
+            focusArea?.name ?? "Evidence coverage",
+            frameworkFocus?.statement.text ?? "",
+            frameworkLookFor,
+          ].join("|")
+        ),
         learnerId: learner.id,
         learnerName,
         kind: "Observe",
@@ -2663,6 +2699,17 @@ const buildFocusItems = (
             Math.floor(assessmentStatusLabels.length / 2)
           )
           ? ({
+              guidanceId: createFocusGuidanceId(
+                focusDate,
+                learner.id,
+                "Support",
+                [
+                  latestArea,
+                  latestFrameworkStatement,
+                  latestLookFor,
+                  nextStep ?? "",
+                ].join("|")
+              ),
               learnerId: learner.id,
               learnerName,
               kind: "Support",
@@ -2693,6 +2740,17 @@ const buildFocusItems = (
           assessmentStatusLabels.length - 1 &&
         latestStatusIndex >= 0
           ? ({
+              guidanceId: createFocusGuidanceId(
+                focusDate,
+                learner.id,
+                "Stretch",
+                [
+                  latestArea,
+                  latestFrameworkStatement,
+                  latestLookFor,
+                  nextStep ?? "",
+                ].join("|")
+              ),
               learnerId: learner.id,
               learnerName,
               kind: "Stretch",
@@ -2796,6 +2854,22 @@ const displayedFocusItems =
   focusDay === "tomorrow" && tomorrowFocusAvailable
     ? tomorrowsFocusItems
     : todaysFocusItems;
+const focusGuidanceRequestById = new Map(
+  displayedFocusItems.map(
+    (item): [string, FocusGuidanceRequest] => [
+      item.guidanceId,
+      {
+      id: item.guidanceId,
+      kind: item.kind,
+      area: item.area,
+      frameworkStatement: item.frameworkStatement,
+      progressionLabel: item.progressionLabel,
+      descriptor: item.lookFor,
+      savedNextStep: item.prompt,
+      },
+    ]
+  )
+);
 
 const realClassInsights = (() => {
 
@@ -11697,7 +11771,7 @@ onClick={() => {
           </h2>
 
           <p className="mt-1 text-slate-500">
-            Specific things to notice if they arise naturally
+            Two practical ways to explore each priority if it arises naturally
             {focusDay === "tomorrow" && tomorrowFocusAvailable
               ? " tomorrow."
               : " today."}
@@ -11786,6 +11860,17 @@ onClick={() => {
                 : item.kind === "Stretch"
                   ? "bg-purple-100 text-purple-800"
                   : "bg-blue-100 text-blue-800";
+            const guidanceRequest =
+              focusGuidanceRequestById.get(item.guidanceId) ?? {
+                id: item.guidanceId,
+                kind: item.kind,
+                area: item.area,
+                frameworkStatement: item.frameworkStatement,
+                progressionLabel: item.progressionLabel,
+                descriptor: item.lookFor,
+                savedNextStep: item.prompt,
+              };
+            const guidance = createFallbackFocusGuidance(guidanceRequest);
 
             return (
               <article
@@ -11815,25 +11900,59 @@ onClick={() => {
                     </h3>
 
                     <div className="mt-3 rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Look for
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Try one of these today
+                        </p>
+                      </div>
+
+                      <p className="mt-1 text-sm leading-5 text-slate-700">
+                        {guidance.friendlyGoal}
                       </p>
 
-                      <p className="mt-1 text-xs font-semibold text-blue-700">
-                        {item.frameworkStatement}
-                        {item.progressionLabel
-                          ? ` · ${item.progressionLabel}`
-                          : ""}
-                      </p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {guidance.suggestions.map((suggestion, suggestionIndex) => (
+                          <section
+                            key={`${item.guidanceId}-${suggestionIndex}`}
+                            className="rounded-xl border border-slate-200 bg-white p-3"
+                          >
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
+                              Option {suggestionIndex + 1}
+                            </p>
+                            <h4 className="mt-1 text-sm font-bold text-slate-900">
+                              {suggestion.title}
+                            </h4>
+                            <p className="mt-1 text-sm leading-5 text-slate-700">
+                              {suggestion.setup}
+                            </p>
 
-                      <p className="mt-1 text-sm leading-5 text-slate-800">
-                        {item.lookFor}
-                      </p>
+                            <div className="mt-2 rounded-lg bg-blue-50 px-2.5 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                                Notice
+                              </p>
+                              <p className="mt-0.5 text-xs leading-5 text-slate-700">
+                                {suggestion.notice}
+                              </p>
+                            </div>
+
+                            <div className="mt-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                You could ask
+                              </p>
+                              <ul className="mt-1 space-y-1 text-xs leading-5 text-slate-700">
+                                {suggestion.questions.map((question) => (
+                                  <li key={question}>“{question}”</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </section>
+                        ))}
+                      </div>
                     </div>
 
                     <details className="mt-2 text-sm text-slate-600">
                       <summary className="cursor-pointer font-semibold text-slate-500 hover:text-slate-800">
-                        Why this priority &amp; what to notice
+                        Why this priority &amp; framework link
                       </summary>
 
                       <div className="mt-2 rounded-xl border border-slate-200 p-3 leading-5">
@@ -11845,10 +11964,17 @@ onClick={() => {
 
                         <div className="mt-3 border-t border-slate-200 pt-3">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            What counts as useful evidence
+                            Framework connection
                           </p>
 
-                          <p className="mt-1 font-medium text-slate-800">
+                          <p className="mt-1 text-xs font-semibold text-blue-700">
+                            {item.frameworkStatement}
+                            {item.progressionLabel
+                              ? ` · ${item.progressionLabel}`
+                              : ""}
+                          </p>
+
+                          <p className="mt-1 text-sm text-slate-700">
                             {item.lookFor}
                           </p>
                         </div>
