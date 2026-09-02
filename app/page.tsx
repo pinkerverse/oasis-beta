@@ -22,6 +22,14 @@ import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
 } from "@/lib/focus-guidance";
+import {
+  getAcademicYearReadiness,
+  getAreaFocusPriorityScore,
+  getReadinessLabel,
+  selectReadinessProgression,
+  selectReadyStatement,
+  type StatementEvidenceSummary,
+} from "@/lib/focus-readiness";
 
 
 
@@ -2239,6 +2247,7 @@ type TodaysFocusItem = {
   reason: string;
   frameworkStatement: string;
   progressionLabel: string | null;
+  readinessLabel: string;
   lookFor: string;
   prompt: string | null;
 };
@@ -2288,6 +2297,11 @@ const buildFocusItems = (
   const focusDayNumber = Math.floor(
     new Date(focusDate).setHours(0, 0, 0, 0) / 86400000
   );
+  const academicYearReadiness = getAcademicYearReadiness(
+    schoolCalendar.academicYear?.start_date ??
+      schoolCalendar.terms[0]?.start_date,
+    focusDate
+  );
   const focusWeekStart = new Date(focusDate);
   const focusDayOfWeek = focusWeekStart.getDay();
   focusWeekStart.setDate(
@@ -2326,7 +2340,8 @@ const buildFocusItems = (
   const getAgeAppropriateFocus = (
     area: (typeof activeAreas)[number],
     dateOfBirth: unknown,
-    rotationSeed: number
+    rotationSeed: number,
+    statementEvidence: Map<string, StatementEvidenceSummary>
   ) => {
     const ageMonths = getLearnerAgeMonths(dateOfBirth);
     const orderedStages = [
@@ -2361,14 +2376,12 @@ const buildFocusItems = (
         ? eligibleStatements
         : area.statements;
 
-    const statement =
-      statementPool.length > 0
-        ? statementPool[
-            ((rotationSeed % statementPool.length) +
-              statementPool.length) %
-              statementPool.length
-          ]
-        : null;
+    const statement = selectReadyStatement({
+      statements: statementPool,
+      evidenceByStatement: statementEvidence,
+      readiness: academicYearReadiness,
+      rotationSeed,
+    });
 
     if (!statement) {
       return null;
@@ -2415,17 +2428,14 @@ const buildFocusItems = (
       );
     }
 
-    const progressionLevel =
-      progression.find(
-        (level) => level.level === targetLevel
-      ) ??
-      (targetLevel === undefined
-        ? progression[0]
-        : [...progression].sort(
-            (first, second) =>
-              Math.abs(first.level - targetLevel!) -
-              Math.abs(second.level - targetLevel!)
-          )[0]);
+    const statementEvidenceSummary = statementEvidence.get(statement.id);
+    const progressionLevel = selectReadinessProgression({
+      progression,
+      evidence: statementEvidenceSummary,
+      expectedMinimum: targetLevel,
+      expectedMaximum: expectedRange?.maxExpectedLevel,
+      readiness: academicYearReadiness,
+    });
 
     const lookFor =
       progressionLevel?.descriptors
@@ -2439,6 +2449,12 @@ const buildFocusItems = (
       progressionLevel,
       matchingStage,
       lookFor,
+      readinessLabel: getReadinessLabel({
+        readiness: academicYearReadiness,
+        evidenceCount: statementEvidenceSummary?.count ?? 0,
+        selectedLevel: progressionLevel?.level ?? null,
+        lowestLevel: progression[0]?.level ?? null,
+      }),
     };
   };
 
@@ -2473,6 +2489,11 @@ const buildFocusItems = (
         string,
         number
       >();
+      const areaEvidenceCounts = new Map<string, number>();
+      const statementEvidence = new Map<
+        string,
+        StatementEvidenceSummary
+      >();
 
       for (const observation of observations) {
         const matches = Array.isArray(
@@ -2497,6 +2518,11 @@ const buildFocusItems = (
           const existing =
             latestAreaEvidence.get(areaName);
 
+          areaEvidenceCounts.set(
+            areaName,
+            (areaEvidenceCounts.get(areaName) ?? 0) + 1
+          );
+
           if (
             existing === undefined ||
             observation.timestamp > existing
@@ -2506,13 +2532,66 @@ const buildFocusItems = (
               observation.timestamp
             );
           }
+
+          const statementMatches = Array.isArray(match?.statementMatches)
+            ? match.statementMatches
+            : [];
+
+          for (const statementMatch of statementMatches) {
+            if (typeof statementMatch?.statementId !== "string") {
+              continue;
+            }
+
+            const statementId = statementMatch.statementId.trim();
+
+            if (!statementId) {
+              continue;
+            }
+
+            const current = statementEvidence.get(statementId) ?? {
+              count: 0,
+              levels: [],
+              latestAt: null,
+            };
+            const developmentalLevel =
+              typeof statementMatch.developmentalLevel === "number"
+                ? statementMatch.developmentalLevel
+                : null;
+
+            statementEvidence.set(statementId, {
+              count: current.count + 1,
+              levels:
+                developmentalLevel === null
+                  ? current.levels
+                  : [...current.levels, developmentalLevel],
+              latestAt: Math.max(
+                current.latestAt ?? 0,
+                observation.timestamp
+              ),
+            });
+          }
         }
       }
 
       const focusArea = [...activeAreas].sort(
-        (first, second) =>
-          (latestAreaEvidence.get(first.name) ?? 0) -
-          (latestAreaEvidence.get(second.name) ?? 0)
+        (first, second) => {
+          const firstScore = getAreaFocusPriorityScore({
+            areaName: first.name,
+            evidenceCount: areaEvidenceCounts.get(first.name) ?? 0,
+            latestAt: latestAreaEvidence.get(first.name) ?? null,
+            focusDate,
+            readiness: academicYearReadiness,
+          });
+          const secondScore = getAreaFocusPriorityScore({
+            areaName: second.name,
+            evidenceCount: areaEvidenceCounts.get(second.name) ?? 0,
+            latestAt: latestAreaEvidence.get(second.name) ?? null,
+            focusDate,
+            readiness: academicYearReadiness,
+          });
+
+          return firstScore - secondScore;
+        }
       )[0];
       const focusAreaLastSeen = focusArea
         ? latestAreaEvidence.get(focusArea.name) ?? null
@@ -2521,7 +2600,8 @@ const buildFocusItems = (
         ? getAgeAppropriateFocus(
             focusArea,
             learner.dateOfBirth,
-            focusDayNumber + learnerIndex
+            focusDayNumber + learnerIndex,
+            statementEvidence
           )
         : null;
       const frameworkLookFor =
@@ -2633,6 +2713,32 @@ const buildFocusItems = (
         statusOrder.get(
           latestStatus.trim().toLowerCase()
         ) ?? -1;
+      const latestStatementEvidenceSummary =
+        latestStatementMatch?.statementId
+          ? statementEvidence.get(latestStatementMatch.statementId)
+          : undefined;
+      const latestEvidenceCount =
+        latestStatementEvidenceSummary?.count ??
+        areaEvidenceCounts.get(latestArea) ??
+        0;
+      const latestStatementDefinition = activeAreas
+        .find((area) => area.name === latestArea)
+        ?.statements.find(
+          (statement) =>
+            statement.id === latestStatementMatch?.statementId
+        );
+      const latestLowestProgressionLevel = [
+        ...(latestStatementDefinition?.progression ?? []),
+      ].sort((first, second) => first.level - second.level)[0]?.level ?? null;
+      const latestReadinessLabel = getReadinessLabel({
+        readiness: academicYearReadiness,
+        evidenceCount: latestEvidenceCount,
+        selectedLevel:
+          typeof latestStatementMatch?.developmentalLevel === "number"
+            ? latestStatementMatch.developmentalLevel
+            : null,
+        lowestLevel: latestLowestProgressionLevel,
+      });
       const nextStep = Array.isArray(
         latestAssessment?.observation.entry.next_steps
       )
@@ -2664,9 +2770,12 @@ const buildFocusItems = (
         learnerName,
         kind: "Observe",
         area: focusArea?.name ?? "Evidence coverage",
-        reason: focusAreaLastSeen
-          ? `This is ${learnerName.split(" ")[0]}’s least recently evidenced learning area.`
-          : `No evidence has yet been recorded for ${focusArea?.name ?? "this learning area"}.`,
+        reason:
+          !focusAreaLastSeen && academicYearReadiness.phase === "settling"
+            ? `It is week ${academicYearReadiness.week ?? "early"} of the academic year, so OASIS has chosen a foundation step in ${focusArea?.name ?? "this learning area"} before the fuller objective.`
+            : focusAreaLastSeen
+              ? `This is ${learnerName.split(" ")[0]}’s least recently evidenced learning area, and the suggested step is based on what has already been seen.`
+              : `No evidence has yet been recorded for ${focusArea?.name ?? "this learning area"}, so OASIS has selected an accessible starting point.`,
         frameworkStatement:
           frameworkFocus?.statement.text ||
           focusArea?.name ||
@@ -2683,6 +2792,8 @@ const buildFocusItems = (
                   : ""
               }`
             : null,
+        readinessLabel:
+          frameworkFocus?.readinessLabel ?? "Natural starting point",
         lookFor: frameworkLookFor,
         prompt: null,
         score:
@@ -2696,7 +2807,7 @@ const buildFocusItems = (
         latestStatusIndex <
           Math.max(
             1,
-            Math.floor(assessmentStatusLabels.length / 2)
+            Math.ceil(assessmentStatusLabels.length / 2)
           )
           ? ({
               guidanceId: createFocusGuidanceId(
@@ -2722,6 +2833,7 @@ const buildFocusItems = (
                 "number"
                   ? `Level ${latestStatementMatch.developmentalLevel}`
                   : null,
+              readinessLabel: latestReadinessLabel,
               lookFor: latestLookFor,
               prompt: nextStep
                 ? `Saved next step: ${nextStep.trim()}`
@@ -2738,7 +2850,8 @@ const buildFocusItems = (
       const stretch =
         latestStatusIndex ===
           assessmentStatusLabels.length - 1 &&
-        latestStatusIndex >= 0
+        latestStatusIndex >= 0 &&
+        latestEvidenceCount >= 2
           ? ({
               guidanceId: createFocusGuidanceId(
                 focusDate,
@@ -2763,6 +2876,7 @@ const buildFocusItems = (
                 "number"
                   ? `Level ${latestStatementMatch.developmentalLevel}`
                   : null,
+              readinessLabel: latestReadinessLabel,
               lookFor: latestLookFor,
               prompt: nextStep
                 ? `Saved next step: ${nextStep.trim()}`
@@ -11904,6 +12018,9 @@ onClick={() => {
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                           Try one of these today
                         </p>
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                          {item.readinessLabel}
+                        </span>
                       </div>
 
                       <p className="mt-1 text-sm leading-5 text-slate-700">
