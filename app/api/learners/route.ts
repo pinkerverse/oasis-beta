@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import {
+  getCurrentWorkspaceContext,
+  isSchoolAdmin,
+} from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   inferLearnerDateOrder,
@@ -19,12 +22,18 @@ type ImportedLearner = {
   dateOfBirth?: string | null;
 };
 
+function externalIdForClient(value: unknown, workspaceId: string) {
+  if (typeof value !== "string") return value;
+  const prefix = workspaceId + ":";
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+}
+
 // LOAD ACTIVE LEARNERS
 export async function GET() {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-if (!schoolId) {
+if (!context) {
   return NextResponse.json(
     {
       error:
@@ -36,7 +45,7 @@ if (!schoolId) {
 
 const authenticatedSupabase =
   await createServerSupabaseClient();
-    const { data, error } = await authenticatedSupabase
+    let learnerQuery = authenticatedSupabase
       .from("learners")
       .select(
         `
@@ -50,9 +59,19 @@ const authenticatedSupabase =
           created_at
         `
       )
-     .eq("school_id", schoolId)
-.eq("active", true)
-.order("last_name", { ascending: true })
+      .eq("school_id", context.schoolId)
+      .eq("active", true);
+
+    learnerQuery = isSchoolAdmin(context.role)
+      ? learnerQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : learnerQuery.eq("workspace_id", context.workspaceId);
+
+    const { data, error } = await learnerQuery
+      .order("last_name", { ascending: true })
       .order("first_name", { ascending: true });
 
     if (error) {
@@ -64,7 +83,10 @@ const authenticatedSupabase =
 
     const learners = (data || []).map((learner) => ({
       id: learner.id,
-      externalId: learner.external_id,
+      externalId: externalIdForClient(
+        learner.external_id,
+        context.workspaceId
+      ),
       firstName: learner.first_name,
       lastName: learner.last_name,
       className: learner.class_name,
@@ -92,9 +114,9 @@ const authenticatedSupabase =
 // IMPORT OR UPDATE LEARNERS
 export async function POST(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-if (!schoolId) {
+if (!context) {
   return NextResponse.json(
     {
       error:
@@ -153,10 +175,13 @@ const rows = learners.map((learner) => {
       : "";
 
   return {
-    school_id: schoolId,
+    school_id: context.schoolId,
+    workspace_id: context.workspaceId,
     external_id:
-      suppliedExternalId ||
-      `IMPORT-${crypto.randomUUID()}`,
+      context.workspaceId +
+      ":" +
+      (suppliedExternalId ||
+        `IMPORT-${crypto.randomUUID()}`),
       first_name: learner.firstName.trim(),
       last_name: normaliseOptionalSurname(
         learner.lastName
@@ -207,9 +232,9 @@ const rows = learners.map((learner) => {
 // UPDATE ONE LEARNER
 export async function PATCH(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-if (!schoolId) {
+if (!context) {
   return NextResponse.json(
     {
       error:
@@ -266,8 +291,8 @@ if (!schoolId) {
       );
     }
 
-    const { data, error } =
-      await supabaseAdmin
+    let updateQuery =
+      supabaseAdmin
         .from("learners")
         .update({
           first_name: firstName,
@@ -276,8 +301,18 @@ if (!schoolId) {
           date_of_birth: parsedDateOfBirth.date || null,
         })
        .eq("id", id)
-.eq("school_id", schoolId)
-.select(
+       .eq("school_id", context.schoolId);
+
+    updateQuery = isSchoolAdmin(context.role)
+      ? updateQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : updateQuery.eq("workspace_id", context.workspaceId);
+
+    const { data, error } =
+      await updateQuery.select(
           `
             id,
             external_id,
@@ -302,7 +337,10 @@ if (!schoolId) {
       success: true,
       learner: {
         id: data.id,
-        externalId: data.external_id,
+        externalId: externalIdForClient(
+          data.external_id,
+          context.workspaceId
+        ),
         firstName: data.first_name,
         lastName: data.last_name,
         className: data.class_name,
@@ -332,9 +370,9 @@ if (!schoolId) {
 // ARCHIVE ONE LEARNER
 export async function DELETE(request: Request) {
   try {
-const schoolId = await getCurrentSchoolId();
+const context = await getCurrentWorkspaceContext();
 
-if (!schoolId) {
+if (!context) {
   return NextResponse.json(
     {
       error:
@@ -357,13 +395,23 @@ if (!schoolId) {
       );
     }
 
-    const { error } = await supabaseAdmin
+    let archiveQuery = supabaseAdmin
       .from("learners")
       .update({
         active: false,
       })
       .eq("id", id)
-.eq("school_id", schoolId);
+      .eq("school_id", context.schoolId);
+
+    archiveQuery = isSchoolAdmin(context.role)
+      ? archiveQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : archiveQuery.eq("workspace_id", context.workspaceId);
+
+    const { error } = await archiveQuery;
 
     if (error) {
       return NextResponse.json(

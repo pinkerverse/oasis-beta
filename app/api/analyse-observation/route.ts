@@ -6,7 +6,10 @@ import {
 } from "@/lib/framework";
 
 import { supabase } from "@/lib/supabase";
-import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import {
+  getCurrentWorkspaceContext,
+  isSchoolAdmin,
+} from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 const openai = new OpenAI({
@@ -117,9 +120,9 @@ function resolveSuggestedFrameworkStage(
 
 export async function POST(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-    if (!schoolId) {
+    if (!context) {
       return Response.json(
         {
           error:
@@ -166,15 +169,25 @@ export async function POST(request: Request) {
       );
     }
 
+    let schoolLearnersQuery = authenticatedSupabase
+      .from("learners")
+      .select("id, first_name, last_name, date_of_birth")
+      .eq("school_id", context.schoolId)
+      .eq("active", true)
+      .in("id", selectedLearnerIds);
+
+    schoolLearnersQuery = isSchoolAdmin(context.role)
+      ? schoolLearnersQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : schoolLearnersQuery.eq("workspace_id", context.workspaceId);
+
     const {
       data: schoolLearners,
       error: schoolLearnersError,
-    } = await authenticatedSupabase
-      .from("learners")
-      .select("id, first_name, last_name, date_of_birth")
-      .eq("school_id", schoolId)
-      .eq("active", true)
-      .in("id", selectedLearnerIds);
+    } = await schoolLearnersQuery;
 
     if (schoolLearnersError) {
       console.error(
@@ -229,7 +242,7 @@ const {
 } = await authenticatedSupabase
   .from("school_framework_assignments")
   .select("framework_version_id")
-  .eq("school_id", schoolId)
+  .eq("school_id", context.schoolId)
   .eq("is_active", true)
   .maybeSingle();
 
@@ -251,7 +264,7 @@ const {
         "id",
         activeFrameworkAssignment.framework_version_id
       )
-      .eq("school_id", schoolId)
+      .eq("school_id", context.schoolId)
       .maybeSingle()
   : {
       data: null,
@@ -281,7 +294,7 @@ const {
   .select(
     "status_labels, expectation_mode"
   )
-  .eq("school_id", schoolId)
+  .eq("school_id", context.schoolId)
   .maybeSingle();
 
 if (assessmentSettingsError) {

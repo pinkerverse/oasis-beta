@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import {
+  getCurrentWorkspaceContext,
+  isSchoolAdmin,
+} from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -79,9 +82,9 @@ function learnerIdsMatch(
 // --------------------
 export async function POST(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-if (!schoolId) {
+if (!context) {
   return NextResponse.json(
     {
       error:
@@ -156,15 +159,25 @@ const normalizedLearnerIds =
       );
     }
 
+    let schoolLearnersQuery = authenticatedSupabase
+      .from("learners")
+      .select("id")
+      .eq("school_id", context.schoolId)
+      .eq("active", true)
+      .in("id", normalizedLearnerIds);
+
+    schoolLearnersQuery = isSchoolAdmin(context.role)
+      ? schoolLearnersQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : schoolLearnersQuery.eq("workspace_id", context.workspaceId);
+
     const {
       data: schoolLearners,
       error: schoolLearnersError,
-    } = await authenticatedSupabase
-      .from("learners")
-      .select("id")
-      .eq("school_id", schoolId)
-      .eq("active", true)
-      .in("id", normalizedLearnerIds);
+    } = await schoolLearnersQuery;
 
     if (schoolLearnersError) {
       console.error(
@@ -195,10 +208,7 @@ const normalizedLearnerIds =
     }
 
     if (body.allow_duplicate !== true) {
-      const {
-        data: possibleDuplicates,
-        error: duplicateCheckError,
-      } = await authenticatedSupabase
+      let duplicateQuery = authenticatedSupabase
         .from("observations")
         .select(
           `
@@ -209,11 +219,24 @@ const normalizedLearnerIds =
             created_at
           `
         )
-        .eq("school_id", schoolId)
+        .eq("school_id", context.schoolId)
        .overlaps(
   "learner_ids",
   normalizedLearnerIds
-)
+);
+
+      duplicateQuery = isSchoolAdmin(context.role)
+        ? duplicateQuery.or(
+            "workspace_id.eq." +
+              context.workspaceId +
+              ",workspace_id.is.null"
+          )
+        : duplicateQuery.eq("workspace_id", context.workspaceId);
+
+      const {
+        data: possibleDuplicates,
+        error: duplicateCheckError,
+      } = await duplicateQuery
         .order("created_at", {
           ascending: false,
         })
@@ -347,7 +370,8 @@ const rowsToInsert =
           ) ?? {};
 
        return {
-  school_id: schoolId,
+  school_id: context.schoolId,
+  workspace_id: context.workspaceId,
   ...observationToSave,
 
   framework_version_id:
@@ -403,7 +427,8 @@ const rowsToInsert =
       })
    : [
     {
-      school_id: schoolId,
+      school_id: context.schoolId,
+      workspace_id: context.workspaceId,
       ...observationToSave,
       observation: observationText,
       observation_date: observationDate,
@@ -448,9 +473,9 @@ const { data, error } = await authenticatedSupabase
 // --------------------
 export async function GET(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-    if (!schoolId) {
+    if (!context) {
       return NextResponse.json(
         {
           error:
@@ -475,11 +500,21 @@ export async function GET(request: Request) {
 
     // Whole-class evidence for class attainment
     if (scope === "class") {
-      const { data, error } =
-        await authenticatedSupabase
+      let classQuery = authenticatedSupabase
           .from("observations")
           .select("*")
-          .eq("school_id", schoolId)
+          .eq("school_id", context.schoolId);
+
+      classQuery = isSchoolAdmin(context.role)
+        ? classQuery.or(
+            "workspace_id.eq." +
+              context.workspaceId +
+              ",workspace_id.is.null"
+          )
+        : classQuery.eq("workspace_id", context.workspaceId);
+
+      const { data, error } =
+        await classQuery
           .order("observation_date", {
             ascending: false,
           })
@@ -505,12 +540,22 @@ export async function GET(request: Request) {
       });
     }
 
-    const { data, error } =
-      await authenticatedSupabase
+    let learnerQuery = authenticatedSupabase
         .from("observations")
         .select("*")
-        .eq("school_id", schoolId)
-        .contains("learner_ids", [learner])
+        .eq("school_id", context.schoolId)
+        .contains("learner_ids", [learner]);
+
+    learnerQuery = isSchoolAdmin(context.role)
+      ? learnerQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : learnerQuery.eq("workspace_id", context.workspaceId);
+
+    const { data, error } =
+      await learnerQuery
         .order("observation_date", {
           ascending: false,
         })
@@ -549,9 +594,9 @@ export async function GET(request: Request) {
 // --------------------
 export async function DELETE(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-    if (!schoolId) {
+    if (!context) {
       return NextResponse.json(
         { error: "You must be signed in to delete observations." },
         { status: 401 }
@@ -570,13 +615,22 @@ export async function DELETE(request: Request) {
     }
 
     const authenticatedSupabase = await createServerSupabaseClient();
-    const { data: observation, error: lookupError } =
-      await authenticatedSupabase
+    let observationQuery = authenticatedSupabase
         .from("observations")
         .select("id, image_url")
         .eq("id", observationId)
-        .eq("school_id", schoolId)
-        .maybeSingle();
+        .eq("school_id", context.schoolId);
+
+    observationQuery = isSchoolAdmin(context.role)
+      ? observationQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : observationQuery.eq("workspace_id", context.workspaceId);
+
+    const { data: observation, error: lookupError } =
+      await observationQuery.maybeSingle();
 
     if (lookupError) {
       return NextResponse.json(
@@ -592,11 +646,21 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error: deleteError } = await supabaseAdmin
+    let deleteQuery = supabaseAdmin
       .from("observations")
       .delete()
       .eq("id", observationId)
-      .eq("school_id", schoolId);
+      .eq("school_id", context.schoolId);
+
+    deleteQuery = isSchoolAdmin(context.role)
+      ? deleteQuery.or(
+          "workspace_id.eq." +
+            context.workspaceId +
+            ",workspace_id.is.null"
+        )
+      : deleteQuery.eq("workspace_id", context.workspaceId);
+
+    const { error: deleteError } = await deleteQuery;
 
     if (deleteError) {
       return NextResponse.json(
@@ -611,7 +675,7 @@ export async function DELETE(request: Request) {
         : "";
 
     if (
-      evidencePath.startsWith(`${schoolId}/`) &&
+      evidencePath.startsWith(`${context.schoolId}/`) &&
       !evidencePath.includes("..")
     ) {
       const { error: evidenceDeleteError } =

@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import {
+  getCurrentWorkspaceContext,
+  isSchoolAdmin,
+} from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  const schoolId = await getCurrentSchoolId();
+  const context = await getCurrentWorkspaceContext();
 
-  if (!schoolId) {
+  if (!context) {
     return NextResponse.json(
       { error: "No school found." },
       { status: 401 }
@@ -24,13 +27,36 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
 
+  let learnerQuery = supabase
+    .from("learners")
+    .select("id")
+    .eq("id", learnerId)
+    .eq("school_id", context.schoolId);
+
+  learnerQuery = isSchoolAdmin(context.role)
+    ? learnerQuery.or(
+        "workspace_id.eq." +
+          context.workspaceId +
+          ",workspace_id.is.null"
+      )
+    : learnerQuery.eq("workspace_id", context.workspaceId);
+
+  const { data: learner } = await learnerQuery.maybeSingle();
+
+  if (!learner) {
+    return NextResponse.json(
+      { error: "Learner not found." },
+      { status: 404 }
+    );
+  }
+
   const {
     data: academicYear,
     error: academicYearError,
   } = await supabase
     .from("school_academic_years")
     .select("id")
-    .eq("school_id", schoolId)
+    .eq("school_id", context.schoolId)
     .eq("is_current", true)
     .maybeSingle();
 
@@ -47,7 +73,7 @@ export async function GET(request: Request) {
   } = await supabase
     .from("learner_baselines")
     .select("*")
-    .eq("school_id", schoolId)
+    .eq("school_id", context.schoolId)
     .eq("academic_year_id", academicYear.id)
     .eq("learner_id", learnerId)
     .maybeSingle();
@@ -65,9 +91,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const schoolId = await getCurrentSchoolId();
+  const context = await getCurrentWorkspaceContext();
 
-  if (!schoolId) {
+  if (!context) {
     return NextResponse.json(
       { error: "No school found." },
       { status: 401 }
@@ -102,7 +128,7 @@ export async function POST(request: Request) {
   } = await supabase
     .from("school_academic_years")
     .select("id")
-    .eq("school_id", schoolId)
+    .eq("school_id", context.schoolId)
     .eq("is_current", true)
     .maybeSingle();
 
@@ -113,15 +139,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const {
-    data: learner,
-    error: learnerError,
-  } = await supabase
+  let learnerQuery = supabase
     .from("learners")
     .select("id")
     .eq("id", learnerId)
-    .eq("school_id", schoolId)
-    .maybeSingle();
+    .eq("school_id", context.schoolId);
+
+  learnerQuery = isSchoolAdmin(context.role)
+    ? learnerQuery.or(
+        "workspace_id.eq." +
+          context.workspaceId +
+          ",workspace_id.is.null"
+      )
+    : learnerQuery.eq("workspace_id", context.workspaceId);
+
+  const {
+    data: learner,
+    error: learnerError,
+  } = await learnerQuery.maybeSingle();
 
   if (learnerError || !learner) {
     return NextResponse.json(
@@ -135,7 +170,7 @@ export async function POST(request: Request) {
   } = await supabase
     .from("school_framework_assignments")
     .select("framework_version_id")
-    .eq("school_id", schoolId)
+    .eq("school_id", context.schoolId)
     .eq("is_active", true)
     .maybeSingle();
 
@@ -146,7 +181,7 @@ export async function POST(request: Request) {
     .from("learner_baselines")
     .upsert(
       {
-        school_id: schoolId,
+        school_id: context.schoolId,
         academic_year_id: academicYear.id,
         learner_id: learnerId,
         framework_version_id:

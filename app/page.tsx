@@ -11553,32 +11553,49 @@ onClick={() => {
               Setup and data
             </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Existing framework and baseline tools remain available here.
+              Your learner tools stay here. School administration remains
+              separate from your everyday OASIS.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowSettings(false);
-                router.push("/settings/academic-year");
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Academic year & terms
-            </button>
+            {(accountRole === "admin" ||
+              accountRole === "school_admin") && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettings(false);
+                    router.push("/settings/academic-year");
+                  }}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Academic year & terms
+                </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setShowSettings(false);
-                setShowFrameworkModal(true);
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Frameworks
-            </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettings(false);
+                    setShowFrameworkModal(true);
+                  }}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Frameworks
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettings(false);
+                    router.push("/settings/team");
+                  }}
+                  className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-900 hover:bg-cyan-100"
+                >
+                  Invite colleagues
+                </button>
+              </>
+            )}
 
             <button
               type="button"
@@ -11729,6 +11746,8 @@ onClick={() => {
           </div>
         </section>
 
+        {(accountRole === "admin" ||
+          accountRole === "school_admin") ? (
         <section className="rounded-2xl border border-slate-200 p-5">
           <h3 className="text-lg font-bold text-slate-900">
             Assessment
@@ -11851,6 +11870,22 @@ onClick={() => {
               : "Save assessment settings"}
           </button>
         </section>
+        ) : (
+          <section className="rounded-2xl border border-slate-200 p-5">
+            <h3 className="text-lg font-bold text-slate-900">
+              School framework
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Your school’s framework, academic calendar and assessment
+              language are shared with you automatically and managed by a
+              school administrator.
+            </p>
+            <p className="mt-4 rounded-xl bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-900">
+              Your learners, observations and daily focus remain private to
+              your teacher workspace.
+            </p>
+          </section>
+        )}
       </div>
 
       {settingsError && (

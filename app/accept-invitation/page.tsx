@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,6 +14,38 @@ export default function AcceptInvitationPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [schoolName, setSchoolName] = useState("");
+  const [checkingInvitation, setCheckingInvitation] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadInvitation() {
+      try {
+        const response = await fetch(
+          "/api/team/invitations/current",
+          { cache: "no-store" }
+        );
+        const result = await response.json().catch(() => ({}));
+
+        if (
+          !cancelled &&
+          response.ok &&
+          typeof result.invitation?.school?.name === "string"
+        ) {
+          setSchoolName(result.invitation.school.name);
+        }
+      } finally {
+        if (!cancelled) setCheckingInvitation(false);
+      }
+    }
+
+    void loadInvitation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +76,24 @@ export default function AcceptInvitationPage() {
 
       if (updateError) throw updateError;
 
-      router.replace("/onboarding");
+      if (schoolName) {
+        const response = await fetch(
+          "/api/team/invitations/current",
+          { method: "POST" }
+        );
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            result.error ||
+              "OASIS could not connect you to the invited school."
+          );
+        }
+
+        router.replace("/onboarding/teacher");
+      } else {
+        router.replace("/onboarding");
+      }
       router.refresh();
     } catch (submitError) {
       setError(
@@ -78,9 +127,24 @@ export default function AcceptInvitationPage() {
             Welcome to OASIS
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Add your name and choose a password, then we’ll guide you through
-            setting up your school and class.
+            {schoolName
+              ? `Add your name and choose a password. You are joining ${schoolName}; its framework is already selected for you.`
+              : "Add your name and choose a password, then we’ll guide you through setting up your school and class."}
           </p>
+
+          {schoolName && (
+            <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800">
+                School invitation
+              </p>
+              <p className="mt-1 font-semibold text-slate-900">
+                {schoolName}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                This school is fixed by your invitation and cannot be changed.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
@@ -148,10 +212,14 @@ export default function AcceptInvitationPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || checkingInvitation}
               className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? "Preparing OASIS…" : "Continue to school setup"}
+              {loading || checkingInvitation
+                ? "Preparing OASIS…"
+                : schoolName
+                  ? "Continue to my class"
+                  : "Continue to school setup"}
             </button>
           </form>
         </div>

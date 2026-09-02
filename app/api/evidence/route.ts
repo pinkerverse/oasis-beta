@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import {
+  getCurrentWorkspaceContext,
+  isSchoolAdmin,
+  type CurrentWorkspaceContext,
+} from "@/lib/supabase/current-workspace";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const BUCKET = "observation-evidence";
@@ -28,15 +32,48 @@ async function ensureEvidenceBucket() {
   }
 }
 
-function isSchoolEvidencePath(path: string, schoolId: string) {
-  return path.startsWith(`${schoolId}/`) && !path.includes("..");
+async function canAccessEvidencePath(
+  path: string,
+  context: CurrentWorkspaceContext
+) {
+  if (
+    path.includes("..") ||
+    !path.startsWith(`${context.schoolId}/`)
+  ) {
+    return false;
+  }
+
+  if (
+    path.startsWith(
+      `${context.schoolId}/${context.workspaceId}/`
+    )
+  ) {
+    return true;
+  }
+
+  let observationQuery = supabaseAdmin
+    .from("observations")
+    .select("id")
+    .eq("school_id", context.schoolId)
+    .eq("image_url", path);
+
+  observationQuery = isSchoolAdmin(context.role)
+    ? observationQuery.or(
+        "workspace_id.eq." +
+          context.workspaceId +
+          ",workspace_id.is.null"
+      )
+    : observationQuery.eq("workspace_id", context.workspaceId);
+
+  const { data } = await observationQuery.maybeSingle();
+  return Boolean(data);
 }
 
 export async function POST(request: Request) {
   try {
-    const schoolId = await getCurrentSchoolId();
+    const context = await getCurrentWorkspaceContext();
 
-    if (!schoolId) {
+    if (!context) {
       return NextResponse.json(
         { error: "You must be signed in to upload evidence." },
         { status: 401 }
@@ -71,7 +108,9 @@ export async function POST(request: Request) {
 
     const extension =
       file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
-    const path = `${schoolId}/${crypto.randomUUID()}.${extension}`;
+    const path =
+      `${context.schoolId}/${context.workspaceId}/` +
+      `${crypto.randomUUID()}.${extension}`;
     const { error } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(path, await file.arrayBuffer(), {
@@ -92,13 +131,13 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const schoolId = await getCurrentSchoolId();
+  const context = await getCurrentWorkspaceContext();
 
-  if (!schoolId) return new NextResponse(null, { status: 401 });
+  if (!context) return new NextResponse(null, { status: 401 });
 
   const path = new URL(request.url).searchParams.get("path") ?? "";
 
-  if (!isSchoolEvidencePath(path, schoolId)) {
+  if (!(await canAccessEvidencePath(path, context))) {
     return new NextResponse(null, { status: 403 });
   }
 
@@ -117,13 +156,13 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const schoolId = await getCurrentSchoolId();
+  const context = await getCurrentWorkspaceContext();
 
-  if (!schoolId) return new NextResponse(null, { status: 401 });
+  if (!context) return new NextResponse(null, { status: 401 });
 
   const path = new URL(request.url).searchParams.get("path") ?? "";
 
-  if (!isSchoolEvidencePath(path, schoolId)) {
+  if (!(await canAccessEvidencePath(path, context))) {
     return new NextResponse(null, { status: 403 });
   }
 
