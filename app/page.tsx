@@ -766,6 +766,10 @@ import_warnings: string[];
 import_error: string | null;
   }[]
 >([]);
+const [savedFrameworksLoading, setSavedFrameworksLoading] =
+  useState(false);
+const [savedFrameworksError, setSavedFrameworksError] =
+  useState("");
 
 const [
   showArchivedFrameworks,
@@ -4594,8 +4598,13 @@ function getObjectiveExpectationRangeCount(
   );
 }
 async function loadSavedFrameworks() {
+  setSavedFrameworksLoading(true);
+  setSavedFrameworksError("");
+
   try {
-    const response = await fetch("/api/frameworks");
+    const response = await fetch("/api/frameworks", {
+      cache: "no-store",
+    });
 
     const result = await response
       .json()
@@ -4623,13 +4632,21 @@ const activeFrameworkRecord =
 setActiveSavedFramework(
   activeFrameworkRecord?.definition ?? null
 );
+    return true;
   } catch (error) {
     console.error(
       "Saved framework load failed:",
       error
     );
 
-    setSavedFrameworks([]);
+    setSavedFrameworksError(
+      error instanceof Error
+        ? error.message
+        : "Saved frameworks could not be loaded."
+    );
+    return false;
+  } finally {
+    setSavedFrameworksLoading(false);
   }
 }
 function updateFrameworkPreview(
@@ -8858,11 +8875,11 @@ match.statementMatches.length > 0 ? (
 
         <div>
           <h2 className="text-3xl font-bold text-slate-900">
-            Upload Framework
+            Frameworks
           </h2>
 
           <p className="mt-2 text-slate-500">
-            Import your school's assessment framework.
+            View, update or import your school&apos;s assessment framework.
           </p>
 
 
@@ -8879,8 +8896,30 @@ match.statementMatches.length > 0 ? (
 
       </div>
 
+{savedFrameworksLoading && (
+  <div className="mb-6 mt-6 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-medium text-blue-900">
+    Loading your saved frameworks…
+  </div>
+)}
+
+{savedFrameworksError && (
+  <div className="mb-6 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+    <p className="text-sm text-red-800">
+      {savedFrameworksError}
+    </p>
+    <button
+      type="button"
+      onClick={() => void loadSavedFrameworks()}
+      disabled={savedFrameworksLoading}
+      className="rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Try again
+    </button>
+  </div>
+)}
+
 {savedFrameworks.length > 0 && (
-  <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+  <div className="mb-6 mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
     <div>
       <h3 className="font-bold text-slate-900">
         Saved Frameworks
@@ -11578,6 +11617,7 @@ onClick={() => {
                   onClick={() => {
                     setShowSettings(false);
                     setShowFrameworkModal(true);
+                    void loadSavedFrameworks();
                   }}
                   className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                 >
