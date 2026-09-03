@@ -2941,10 +2941,32 @@ const buildFocusItems = (
       .sort(byLowestScore)[0]
   );
 
-  learnerCandidates
+  const observeCandidates = learnerCandidates
     .map(({ observe }) => observe)
-    .sort(byLowestScore)
-    .forEach(addItem);
+    .sort(byLowestScore);
+  const selectedFocusContexts = new Set(
+    selected.map(
+      (item) => `${item.area}|${item.frameworkStatement}`
+    )
+  );
+
+  for (const item of observeCandidates) {
+    const focusContext =
+      `${item.area}|${item.frameworkStatement}`;
+
+    if (
+      !selectedFocusContexts.has(focusContext) &&
+      !selectedLearners.has(item.learnerId)
+    ) {
+      addItem(item);
+
+      if (selectedLearners.has(item.learnerId)) {
+        selectedFocusContexts.add(focusContext);
+      }
+    }
+  }
+
+  observeCandidates.forEach(addItem);
 
   return selected;
 };
@@ -11960,7 +11982,7 @@ onClick={() => {
           </h2>
 
           <p className="mt-1 text-slate-500">
-            Two practical ways to explore each priority if it arises naturally
+            Two short, purposeful teaching episodes for each priority
             {focusDay === "tomorrow" && tomorrowFocusAvailable
               ? " tomorrow."
               : " today."}
@@ -12207,9 +12229,9 @@ onClick={() => {
 
       <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
         <p className="text-xs font-medium text-emerald-800 sm:text-sm">
-          These are priorities, not a checklist. Notice what
-          happens naturally; other needs will rotate into future
-          days.
+          These are priorities, not a checklist. Choose the teaching
+          episode that fits your day, create the opportunity deliberately,
+          and record what the learner can do independently and after one prompt.
         </p>
 
         <p className="mt-1 text-xs text-emerald-700">
