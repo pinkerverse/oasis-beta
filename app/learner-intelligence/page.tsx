@@ -53,8 +53,25 @@ type EvidenceReference = {
 type IntelligenceCard = {
   title: string;
   summary: string;
+  context?: string;
+  teachingResponse?: string;
   evidence: EvidenceReference[];
   tone: "cyan" | "indigo" | "amber" | "emerald" | "slate";
+};
+
+type SynthesisedInsight = {
+  title: string;
+  pattern: string;
+  context: string;
+  teachingResponse: string;
+  evidenceEntryIds: string[];
+};
+
+type SynthesisedIntelligence = {
+  strengths: SynthesisedInsight[];
+  patterns: SynthesisedInsight[];
+  independence: SynthesisedInsight[];
+  nextNoticing: SynthesisedInsight[];
 };
 
 const DEFAULT_FRAMEWORK_AREAS = [
@@ -530,6 +547,28 @@ function InsightCard({ card }: { card: IntelligenceCard }) {
         {card.summary}
       </p>
 
+      {card.context && (
+        <div className="mt-3 rounded-xl border border-white/80 bg-white/70 px-3 py-2.5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+            Where this shows up
+          </p>
+          <p className="mt-1 text-sm leading-5 text-slate-700">
+            {card.context}
+          </p>
+        </div>
+      )}
+
+      {card.teachingResponse && (
+        <div className="mt-3 rounded-xl bg-slate-900 px-3 py-3 text-white">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-200">
+            What this may mean for teaching
+          </p>
+          <p className="mt-1 text-sm leading-5 text-slate-100">
+            {card.teachingResponse}
+          </p>
+        </div>
+      )}
+
       {card.evidence.length > 0 && (
         <details className="mt-4 border-t border-slate-200/80 pt-3">
           <summary className="cursor-pointer text-xs font-bold text-slate-600">
@@ -604,6 +643,11 @@ export default function LearnerIntelligencePage() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
+  const [synthesisedIntelligence, setSynthesisedIntelligence] =
+    useState<SynthesisedIntelligence | null>(null);
+  const [intelligenceLoading, setIntelligenceLoading] =
+    useState(false);
+  const [intelligenceError, setIntelligenceError] = useState("");
   const [frameworkAreas, setFrameworkAreas] = useState(
     DEFAULT_FRAMEWORK_AREAS
   );
@@ -792,6 +836,75 @@ export default function LearnerIntelligencePage() {
     };
   }, [evidenceReloadKey, selectedLearnerId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedLearnerId) {
+      return;
+    }
+
+    async function loadSynthesisedIntelligence() {
+      try {
+        setIntelligenceLoading(true);
+        setIntelligenceError("");
+        setSynthesisedIntelligence(null);
+
+        const response = await fetch("/api/learner-intelligence", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            learnerId: selectedLearnerId,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            result.error ||
+              "Deeper learner interpretation could not be generated."
+          );
+        }
+
+        if (!cancelled) {
+          setSynthesisedIntelligence({
+            strengths: Array.isArray(result.strengths)
+              ? result.strengths
+              : [],
+            patterns: Array.isArray(result.patterns)
+              ? result.patterns
+              : [],
+            independence: Array.isArray(result.independence)
+              ? result.independence
+              : [],
+            nextNoticing: Array.isArray(result.nextNoticing)
+              ? result.nextNoticing
+              : [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setIntelligenceError(
+            error instanceof Error
+              ? error.message
+              : "Deeper learner interpretation could not be generated."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIntelligenceLoading(false);
+        }
+      }
+    }
+
+    void loadSynthesisedIntelligence();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [evidenceReloadKey, selectedLearnerId]);
+
   const selectedLearner = learners.find(
     (learner) => learner.id === selectedLearnerId
   );
@@ -914,6 +1027,51 @@ export default function LearnerIntelligencePage() {
       ),
     [entries, frameworkAreas, statusLabels]
   );
+
+  const displayedIntelligence = useMemo(() => {
+    if (!synthesisedIntelligence) {
+      return intelligence;
+    }
+
+    const entriesById = new Map(
+      entries.map((entry) => [entry.id, entry])
+    );
+    const toCards = (
+      insights: SynthesisedInsight[],
+      tone: IntelligenceCard["tone"]
+    ): IntelligenceCard[] =>
+      insights.map((insight) => ({
+        title: insight.title,
+        summary: insight.pattern,
+        context: insight.context,
+        teachingResponse: insight.teachingResponse,
+        evidence: insight.evidenceEntryIds.flatMap((entryId) => {
+          const entry = entriesById.get(entryId);
+          return entry ? [traceReference(entry)] : [];
+        }),
+        tone,
+      }));
+
+    return {
+      ...intelligence,
+      strengths: toCards(
+        synthesisedIntelligence.strengths,
+        "emerald"
+      ),
+      patterns: toCards(
+        synthesisedIntelligence.patterns,
+        "indigo"
+      ),
+      independence: toCards(
+        synthesisedIntelligence.independence,
+        "cyan"
+      ),
+      noticing: toCards(
+        synthesisedIntelligence.nextNoticing,
+        "amber"
+      ),
+    };
+  }, [entries, intelligence, synthesisedIntelligence]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
@@ -1236,29 +1394,51 @@ export default function LearnerIntelligencePage() {
                         What the evidence may be showing
                       </h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        OASIS requires repeated evidence before describing a strength or pattern. Every interpretation below can be traced to its source observations.
+                        OASIS reads across separate observations to describe what the learner repeatedly does, the conditions in which it appears and what that may mean for teaching. Every interpretation can be traced to its source evidence.
                       </p>
                     </div>
 
+                    {intelligenceLoading && (
+                      <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4">
+                        <p className="text-sm font-bold text-cyan-900">
+                          Reading across this learner&apos;s observations…
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-cyan-800">
+                          Looking for repeated actions, learning conditions,
+                          independence and meaningful change—not simply counting
+                          framework areas.
+                        </p>
+                      </div>
+                    )}
+
+                    {intelligenceError && !intelligenceLoading && (
+                      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+                        {intelligenceError} OASIS is showing the evidence-based
+                        fallback view for now.
+                      </div>
+                    )}
+
+                    {!intelligenceLoading && (
                     <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
+
                       <InsightGroup
-                        title="Emerging strengths"
-                        description="Positive attainment repeated across separate observations."
-                        cards={intelligence.strengths}
-                        emptyMessage="No emerging strength is shown yet. OASIS needs at least two separate observations with positive attainment in the same learning area."
+                        title="How learning appears to happen"
+                        description="Repeated ways the learner engages, develops ideas or makes learning visible across contexts."
+                        cards={displayedIntelligence.patterns}
+                        emptyMessage="There are not yet two distinct observations supporting a meaningful pattern in how this learner learns."
                       />
 
                       <InsightGroup
-                        title="Recurring patterns"
-                        description="The same framework behaviour appearing more than once."
-                        cards={intelligence.patterns}
-                        emptyMessage="No framework behaviour has appeared across enough separate observations to call it a recurring pattern."
+                        title="Emerging capabilities"
+                        description="Specific capabilities demonstrated successfully across separate evidence moments."
+                        cards={displayedIntelligence.strengths}
+                        emptyMessage="No capability is shown as emerging yet. OASIS needs at least two distinct evidence moments demonstrating it successfully."
                       />
 
                       <InsightGroup
                         title="Independence and support"
                         description="Only explicit changes in recorded independence, prompting or guidance."
-                        cards={intelligence.independence}
+                        cards={displayedIntelligence.independence}
                         emptyMessage="The current observations do not yet provide enough explicit evidence about independence or adult support."
                       />
 
@@ -1311,15 +1491,18 @@ export default function LearnerIntelligencePage() {
                         )}
                       </section>
                     </div>
+                    )}
 
+                    {!intelligenceLoading && (
                     <div className="mt-5">
                       <InsightGroup
                         title="Worth noticing next"
-                        description="Evidence-led suggestions to hold lightly if the moment arises naturally."
-                        cards={intelligence.noticing}
+                        description="A focused question or teaching response that can test and extend the current interpretation."
+                        cards={displayedIntelligence.noticing}
                         emptyMessage="There is not yet enough evidence to suggest a useful next noticing priority."
                       />
                     </div>
+                    )}
                   </div>
                 </>
               )}
