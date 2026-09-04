@@ -7,6 +7,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
 type Learner = {
   id: string;
@@ -21,11 +22,19 @@ type Observation = {
   created_at?: string | null;
   framework_matches?: Array<{
     strand?: string | null;
+    statementMatches?: Array<{
+      statementId?: string | null;
+    }> | null;
     teacherOverride?: string | null;
     finalLevel?: string | null;
     assessmentStatus?: string | null;
     suggestedLevel?: string | null;
   }> | null;
+};
+
+type FrameworkAreaReference = {
+  name: string;
+  statements?: Array<{ id?: string | null }> | null;
 };
 
 type AreaAttainment = {
@@ -128,6 +137,9 @@ export default function ClassAttainmentPage() {
   const [learners, setLearners] = useState<Learner[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [frameworkAreas, setFrameworkAreas] = useState<string[]>([]);
+  const [frameworkAreaReferences, setFrameworkAreaReferences] = useState<
+    FrameworkAreaReference[]
+  >([]);
   const [frameworkName, setFrameworkName] = useState("");
   const [statusLabels, setStatusLabels] = useState(DEFAULT_STATUS_LABELS);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
@@ -179,6 +191,7 @@ export default function ClassAttainmentPage() {
           ? journalResult.entries
           : [];
         let loadedFrameworkAreas: string[] = [];
+        let loadedFrameworkAreaReferences: FrameworkAreaReference[] = [];
         let loadedFrameworkName = "";
         let loadedStatusLabels = DEFAULT_STATUS_LABELS;
 
@@ -190,8 +203,11 @@ export default function ClassAttainmentPage() {
             (framework: { status?: string }) => framework.status === "active"
           );
 
+          const activeAreaDefinitions =
+            activeFramework?.definition?.areaDefinitions ?? [];
+          loadedFrameworkAreaReferences = activeAreaDefinitions;
           loadedFrameworkAreas =
-            activeFramework?.definition?.areaDefinitions
+            activeAreaDefinitions
               ?.map((area: { name?: string }) => area.name?.trim())
               .filter(
                 (area: string | undefined): area is string =>
@@ -227,6 +243,9 @@ export default function ClassAttainmentPage() {
           }
 
           loadedFrameworkAreas = [...observedAreas].sort();
+          loadedFrameworkAreaReferences = loadedFrameworkAreas.map(
+            (name) => ({ name })
+          );
         }
 
         if (cancelled) return;
@@ -236,6 +255,7 @@ export default function ClassAttainmentPage() {
         );
         setObservations(loadedObservations);
         setFrameworkAreas(loadedFrameworkAreas);
+        setFrameworkAreaReferences(loadedFrameworkAreaReferences);
         setFrameworkName(loadedFrameworkName);
         setStatusLabels(loadedStatusLabels);
       } catch (loadError) {
@@ -259,8 +279,10 @@ export default function ClassAttainmentPage() {
   }, [reloadKey]);
 
   const attainment = useMemo<AreaAttainment[]>(() => {
-    const canonicalAreaNames = new Map(
-      frameworkAreas.map((area) => [area.trim().toLowerCase(), area])
+    const resolveArea = createFrameworkAreaResolver(
+      frameworkAreaReferences.length
+        ? frameworkAreaReferences
+        : frameworkAreas.map((name) => ({ name }))
     );
     const latestByLearnerArea = new Map<
       string,
@@ -275,8 +297,7 @@ export default function ClassAttainmentPage() {
 
       for (const learnerId of learnerIds) {
         for (const match of entry.framework_matches ?? []) {
-          const rawArea = match.strand?.trim() ?? "";
-          const area = canonicalAreaNames.get(rawArea.toLowerCase()) ?? "";
+          const area = resolveArea(match) ?? "";
           const rawStatus =
             match.teacherOverride?.trim() ||
             match.finalLevel?.trim() ||
@@ -336,7 +357,13 @@ export default function ClassAttainmentPage() {
         total: learners.length,
       };
     });
-  }, [frameworkAreas, learners, observations, statusLabels]);
+  }, [
+    frameworkAreaReferences,
+    frameworkAreas,
+    learners,
+    observations,
+    statusLabels,
+  ]);
 
   const availableAreas = attainment.map((item) => item.area);
   const validSelectedAreas = selectedAreas.filter((area) =>

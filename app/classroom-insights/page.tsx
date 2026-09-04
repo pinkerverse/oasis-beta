@@ -8,6 +8,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
 type Learner = {
   id: string;
@@ -24,7 +25,15 @@ type Observation = {
   created_at?: string | null;
   framework_matches?: Array<{
     strand?: string | null;
+    statementMatches?: Array<{
+      statementId?: string | null;
+    }> | null;
   }> | null;
+};
+
+type FrameworkAreaReference = {
+  name: string;
+  statements?: Array<{ id?: string | null }> | null;
 };
 
 type AreaPeriod = "week" | "all";
@@ -94,6 +103,9 @@ export default function ClassroomInsightsPage() {
   const [learners, setLearners] = useState<Learner[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [frameworkAreas, setFrameworkAreas] = useState<string[]>([]);
+  const [frameworkAreaReferences, setFrameworkAreaReferences] = useState<
+    FrameworkAreaReference[]
+  >([]);
   const [frameworkName, setFrameworkName] = useState("");
   const [weeklyTarget, setWeeklyTarget] = useState(DEFAULT_WEEKLY_TARGET);
   const [areaPeriod, setAreaPeriod] = useState<AreaPeriod>("week");
@@ -152,8 +164,10 @@ export default function ClassroomInsightsPage() {
           const activeFramework = frameworksResult.frameworks?.find(
             (framework: { status?: string }) => framework.status === "active"
           );
-          const activeAreas = activeFramework?.definition?.areaDefinitions
-            ?.map((area: { name?: string }) => area.name?.trim())
+          const activeAreaDefinitions =
+            activeFramework?.definition?.areaDefinitions ?? [];
+          const activeAreas = activeAreaDefinitions
+            .map((area: { name?: string }) => area.name?.trim())
             .filter(
               (area: string | undefined): area is string =>
                 Boolean(area) &&
@@ -164,6 +178,7 @@ export default function ClassroomInsightsPage() {
           if (activeAreas?.length) {
             loadedFrameworkAreas = activeAreas;
             setFrameworkAreas(activeAreas);
+            setFrameworkAreaReferences(activeAreaDefinitions);
             setFrameworkName(activeFramework.definition?.name ?? "");
           }
         }
@@ -195,7 +210,11 @@ export default function ClassroomInsightsPage() {
           }
 
           if (observedAreas.size > 0) {
-            setFrameworkAreas([...observedAreas].sort());
+            const fallbackAreas = [...observedAreas].sort();
+            setFrameworkAreas(fallbackAreas);
+            setFrameworkAreaReferences(
+              fallbackAreas.map((name) => ({ name }))
+            );
           }
         }
       } catch (loadError) {
@@ -227,8 +246,10 @@ export default function ClassroomInsightsPage() {
       const date = observationDate(entry);
       return date && date >= weekStart && date < nextWeek;
     });
-    const canonicalAreaNames = new Map(
-      frameworkAreas.map((area) => [area.toLowerCase(), area])
+    const resolveArea = createFrameworkAreaResolver(
+      frameworkAreaReferences.length
+        ? frameworkAreaReferences
+        : frameworkAreas.map((name) => ({ name }))
     );
     const allAreaNames = new Set(frameworkAreas);
     const activeLearnerIds = new Set(learners.map((learner) => learner.id));
@@ -260,9 +281,7 @@ export default function ClassroomInsightsPage() {
         for (const match of entry.framework_matches ?? []) {
           const rawArea = match.strand?.trim();
           if (!rawArea) continue;
-          learnerAreas.add(
-            canonicalAreaNames.get(rawArea.toLowerCase()) || rawArea
-          );
+          learnerAreas.add(resolveArea(match) || rawArea);
         }
 
         weeklyAreasByLearner.set(learnerId, learnerAreas);
@@ -307,10 +326,7 @@ export default function ClassroomInsightsPage() {
             (match) => {
               const rawArea = match.strand?.trim();
               if (!rawArea) return false;
-              return (
-                (canonicalAreaNames.get(rawArea.toLowerCase()) || rawArea) ===
-                area
-              );
+              return resolveArea(match) === area;
             }
           );
 
@@ -379,7 +395,14 @@ export default function ClassroomInsightsPage() {
       ).length,
       weekStart,
     };
-  }, [areaPeriod, frameworkAreas, learners, observations, weeklyTarget]);
+  }, [
+    areaPeriod,
+    frameworkAreaReferences,
+    frameworkAreas,
+    learners,
+    observations,
+    weeklyTarget,
+  ]);
 
   const visibleLearners = showAllLearners
     ? insight.learnerCoverage

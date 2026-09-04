@@ -7,6 +7,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
 type Learner = {
   id: string;
@@ -168,6 +169,9 @@ function buildLearnerIntelligence(
   frameworkAreas: string[],
   statusLabels: string[]
 ) {
+  const resolveArea = createFrameworkAreaResolver(
+    frameworkAreas.map((name) => ({ name }))
+  );
   const statusOrder = new Map(
     statusLabels.map((label, index) => [
       label.trim().toLowerCase(),
@@ -227,7 +231,7 @@ function buildLearnerIntelligence(
 
   for (const entry of entries) {
     for (const match of entry.framework_matches ?? []) {
-      const area = match.strand?.trim();
+      const area = resolveArea(match) || match.strand?.trim();
       if (!area) continue;
 
       const statementEvidenceText =
@@ -395,21 +399,14 @@ function buildLearnerIntelligence(
     });
   }
 
-  const canonicalAreaNames = new Map(
-    frameworkAreas.map((area) => [area.toLowerCase(), area])
-  );
-  const observedCanonicalAreas = new Set(
-    [...areaEvidence.keys()].map(
-      (area) => canonicalAreaNames.get(area.toLowerCase()) || area
-    )
-  );
+  const observedCanonicalAreas = new Set(areaEvidence.keys());
   const gaps = frameworkAreas.filter(
     (area) => !observedCanonicalAreas.has(area)
   );
   const lightlyObserved = frameworkAreas.filter((area) => {
     const matchingEvidence = [...areaEvidence.entries()].find(
       ([observedArea]) =>
-        observedArea.toLowerCase() === area.toLowerCase()
+        observedArea === area
     )?.[1];
     const distinctEntries = new Set(
       matchingEvidence?.map((item) => item.entry.id) ?? []
@@ -431,7 +428,9 @@ function buildLearnerIntelligence(
   const noticing: IntelligenceCard[] = [];
   const latestStepAreas = new Set(
     (latestSavedNextStep?.framework_matches ?? [])
-      .map((match) => match.strand?.trim().toLowerCase())
+      .map((match) =>
+        (resolveArea(match) || match.strand?.trim())?.toLowerCase()
+      )
       .filter(Boolean)
   );
   const relatedStrength = strengths.find((strength) =>
