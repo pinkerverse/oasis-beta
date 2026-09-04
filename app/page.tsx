@@ -3046,8 +3046,6 @@ const focusProgressMessage = focusCoverageComplete
         : "The week’s evidence picture is beginning to form.";
 
 const sharedFocus = (() => {
-  if (!focusCoverageComplete) return null;
-
   const evidenceLedItems = displayedFocusPlan.learnerCandidates.flatMap(
     (candidate) =>
       [candidate.support, candidate.stretch].filter(
@@ -3066,11 +3064,25 @@ const sharedFocus = (() => {
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
 
-  const group = [...groups.values()].sort(
+  const orderedGroups = [...groups.values()].sort(
     (first, second) =>
       second.length - first.length ||
       first[0].guidanceId.localeCompare(second[0].guidanceId)
-  )[0];
+  );
+  const strongestGroupSize = orderedGroups[0]?.length ?? 0;
+  const strongestGroups = orderedGroups.filter(
+    (candidateGroup) => candidateGroup.length === strongestGroupSize
+  );
+  const sharedFocusDayNumber = Math.floor(
+    new Date(
+      focusDay === "tomorrow" && tomorrowFocusAvailable
+        ? focusTomorrow
+        : focusToday
+    ).setHours(0, 0, 0, 0) / 86400000
+  );
+  const group = strongestGroups.length
+    ? strongestGroups[sharedFocusDayNumber % strongestGroups.length]
+    : undefined;
   const representative = group?.[0];
 
   if (!representative) return null;
@@ -12108,7 +12120,7 @@ onClick={() => {
           <p className="mt-1 text-slate-500">
             {focusCoverageComplete
               ? "Weekly coverage is complete, so the emphasis shifts to one shared learning opportunity."
-              : `Purposeful teaching and noticing for the learners still building this week’s evidence picture${
+              : `One shared class opportunity, alongside purposeful noticing for learners still building this week’s evidence picture${
                   focusDay === "tomorrow" && tomorrowFocusAvailable
                     ? " tomorrow."
                     : " today."
@@ -12210,7 +12222,7 @@ onClick={() => {
           <div className="p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
-                Shared daily focus
+                Whole-class daily focus
               </span>
               <span className="text-xs font-semibold text-slate-500">
                 {sharedFocus.representative.area}
