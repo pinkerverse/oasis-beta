@@ -203,7 +203,7 @@ export default function ClassroomInsightsPage() {
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "Classroom insights could not be loaded."
+              : "Classroom intelligence could not be loaded."
           );
         }
       } finally {
@@ -390,7 +390,7 @@ export default function ClassroomInsightsPage() {
   );
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
+    <main className="min-h-screen min-w-0 overflow-x-hidden bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
       <OasisHeader
         className="-mx-4 sm:-mx-8"
         activePage="classroom-insights"
@@ -405,8 +405,8 @@ export default function ClassroomInsightsPage() {
         onClose={() => setHeaderOverlay(null)}
       />
 
-      <div className="mx-auto max-w-7xl pt-10">
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+      <div className="mx-auto w-full min-w-0 max-w-7xl pt-10">
+        <section className="w-full min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
           <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
@@ -417,7 +417,7 @@ export default function ClassroomInsightsPage() {
                   The class evidence picture
                 </p>
                 <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-                  Classroom Insights
+                  Classroom Intelligence
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
                   See where evidence is building across the class, where the picture is still thin, and what may be worth noticing when it arises naturally.
@@ -432,7 +432,7 @@ export default function ClassroomInsightsPage() {
           </div>
 
           {loading ? (
-            <div className="p-6 sm:p-8">
+            <div className="min-w-0 p-6 sm:p-8">
               <div className="grid gap-4 sm:grid-cols-3">
                 {Array.from({ length: 3 }).map((_, index) => (
                   <div
@@ -446,7 +446,7 @@ export default function ClassroomInsightsPage() {
           ) : error ? (
             <div className="p-6 sm:p-8">
               <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-                <p className="font-bold">Classroom insights could not be loaded</p>
+                <p className="font-bold">Classroom intelligence could not be loaded</p>
                 <p className="mt-1">{error}</p>
                 <button
                   type="button"
@@ -465,7 +465,7 @@ export default function ClassroomInsightsPage() {
               </p>
             </div>
           ) : (
-            <div className="p-6 sm:p-8">
+            <div className="min-w-0 p-6 sm:p-8">
               <div className="grid gap-4 sm:grid-cols-3">
                 <article className="rounded-2xl bg-slate-50 p-5">
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -511,8 +511,8 @@ export default function ClassroomInsightsPage() {
                 </article>
               </div>
 
-              <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,0.75fr)]">
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="mt-6 grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,0.75fr)]">
+                <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">
@@ -610,8 +610,8 @@ export default function ClassroomInsightsPage() {
                   )}
                 </section>
 
-                <div className="space-y-6">
-                  <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="min-w-0 space-y-6">
+                  <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <p className="text-sm font-semibold text-cyan-700">
                       Hold lightly
                     </p>
@@ -624,7 +624,7 @@ export default function ClassroomInsightsPage() {
 
                     <div className="mt-5 space-y-3">
                       {thinnestArea && thinnestArea.learnersWithoutEvidence.length > 0 && (
-                        <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                        <article className="min-w-0 break-words rounded-2xl border border-amber-200 bg-amber-50 p-4">
                           <h3 className="font-bold text-slate-900">
                             Keep {thinnestArea.area} in view
                           </h3>
@@ -635,7 +635,7 @@ export default function ClassroomInsightsPage() {
                       )}
 
                       {unobservedThisWeek.length > 0 && (
-                        <article className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+                        <article className="min-w-0 break-words rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
                           <h3 className="font-bold text-slate-900">
                             Learners not yet seen this week
                           </h3>
@@ -654,7 +654,7 @@ export default function ClassroomInsightsPage() {
                     </div>
                   </section>
 
-                  <section className="rounded-3xl border border-indigo-200 bg-indigo-50/70 p-5 sm:p-6">
+                  <section className="min-w-0 break-words rounded-3xl border border-indigo-200 bg-indigo-50/70 p-5 sm:p-6">
                     <h2 className="font-bold text-slate-900">
                       Context confidence
                     </h2>

@@ -102,7 +102,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error:
-            "You must be signed in and linked to a school to view learner intelligence.",
+            "You must be signed in and linked to a school to view learner insight.",
         },
         { status: 401 }
       );

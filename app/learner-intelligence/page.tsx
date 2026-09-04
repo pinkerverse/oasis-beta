@@ -1107,7 +1107,7 @@ export default function LearnerIntelligencePage() {
                   Evidence-backed understanding
                 </p>
                 <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-                  Learner Intelligence
+                  Learner Insight
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
                   Explore what the evidence says, where the picture is still developing, and what may be worth noticing next.

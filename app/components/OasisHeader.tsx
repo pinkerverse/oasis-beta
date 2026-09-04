@@ -183,9 +183,9 @@ export default function OasisHeader({
 
           <Link
             href="/learner-intelligence"
-            aria-label="Learner Intelligence"
+            aria-label="Learner Insight"
             aria-current={learnerIntelligenceActive ? "page" : undefined}
-            title="Learner Intelligence"
+            title="Learner Insight"
             className={actionButtonClasses(learnerIntelligenceActive)}
           >
             <Image
@@ -196,14 +196,14 @@ export default function OasisHeader({
               className={iconClasses(learnerIntelligenceActive)}
               aria-hidden="true"
             />
-            <span className="hidden min-[1320px]:inline">Learner Intelligence</span>
+            <span className="hidden min-[1320px]:inline">Learner Insight</span>
           </Link>
 
           <Link
             href="/classroom-insights"
-            aria-label="Classroom Insights"
+            aria-label="Classroom Intelligence"
             aria-current={classroomInsightsActive ? "page" : undefined}
-            title="Classroom Insights"
+            title="Classroom Intelligence"
             className={actionButtonClasses(classroomInsightsActive)}
           >
             <Image
@@ -214,7 +214,7 @@ export default function OasisHeader({
               className={iconClasses(classroomInsightsActive)}
               aria-hidden="true"
             />
-            <span className="hidden min-[1320px]:inline">Classroom Insights</span>
+            <span className="hidden min-[1320px]:inline">Classroom Intelligence</span>
           </Link>
 
           <Link
