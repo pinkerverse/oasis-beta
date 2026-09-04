@@ -2779,7 +2779,7 @@ const buildFocusItems = (
             ? `It is week ${academicYearReadiness.week ?? "early"} of the academic year, so OASIS has chosen a foundation step in ${focusArea?.name ?? "this learning area"} before the fuller objective.`
             : focusAreaLastSeen
               ? `This is ${learnerName.split(" ")[0]}’s least recently evidenced learning area, and the suggested step is based on what has already been seen.`
-              : `No evidence has yet been recorded for ${focusArea?.name ?? "this learning area"}, so OASIS has selected an accessible starting point.`,
+              : `The current records do not yet show how ${learnerName.split(" ")[0]} approaches ${focusArea?.name ?? "this learning area"}. OASIS has selected a neutral opportunity to learn more, not identified a learning deficit.`,
         frameworkStatement:
           frameworkFocus?.statement.text ||
           focusArea?.name ||
@@ -2894,7 +2894,13 @@ const buildFocusItems = (
             })
           : null;
 
-      return { observe, support, stretch };
+      return {
+        observe,
+        support,
+        stretch,
+        weeklyObservationCount,
+        hasImportantFollowUp: Boolean(nextStep),
+      };
     }
   );
 
@@ -2921,6 +2927,11 @@ const buildFocusItems = (
 
   addItem(
     learnerCandidates
+      .filter(
+        (candidate) =>
+          candidate.weeklyObservationCount < weeklyObservationTarget ||
+          candidate.hasImportantFollowUp
+      )
       .map(({ support }) => support)
       .filter(
         (item): item is NonNullable<typeof item> =>
@@ -2932,6 +2943,11 @@ const buildFocusItems = (
 
   addItem(
     learnerCandidates
+      .filter(
+        (candidate) =>
+          candidate.weeklyObservationCount < weeklyObservationTarget ||
+          candidate.hasImportantFollowUp
+      )
       .map(({ stretch }) => stretch)
       .filter(
         (item): item is NonNullable<typeof item> =>
@@ -2942,6 +2958,10 @@ const buildFocusItems = (
   );
 
   const observeCandidates = learnerCandidates
+    .filter(
+      ({ weeklyObservationCount }) =>
+        weeklyObservationCount < weeklyObservationTarget
+    )
     .map(({ observe }) => observe)
     .sort(byLowestScore);
   const selectedFocusContexts = new Set(
@@ -2968,7 +2988,7 @@ const buildFocusItems = (
 
   observeCandidates.forEach(addItem);
 
-  return selected;
+  return { items: selected, learnerCandidates };
 };
 
 const focusNow = focusScheduleNow;
@@ -2977,23 +2997,123 @@ focusToday.setHours(0, 0, 0, 0);
 const focusTomorrow = new Date(focusToday);
 focusTomorrow.setDate(focusTomorrow.getDate() + 1);
 const todaysEvidenceCutoff = new Date(focusToday);
-todaysEvidenceCutoff.setDate(todaysEvidenceCutoff.getDate() - 1);
-todaysEvidenceCutoff.setHours(15, 0, 0, 0);
+todaysEvidenceCutoff.setTime(focusNow.getTime());
 const tomorrowsEvidenceCutoff = new Date(focusToday);
 tomorrowsEvidenceCutoff.setHours(15, 0, 0, 0);
 const tomorrowFocusAvailable =
   focusNow.getTime() >= tomorrowsEvidenceCutoff.getTime();
-const todaysFocusItems = buildFocusItems(
+const todaysFocusPlan = buildFocusItems(
   focusToday,
   todaysEvidenceCutoff
 );
-const tomorrowsFocusItems = tomorrowFocusAvailable
+const tomorrowsFocusPlan = tomorrowFocusAvailable
   ? buildFocusItems(focusTomorrow, tomorrowsEvidenceCutoff)
-  : [];
-const displayedFocusItems =
+  : null;
+const displayedFocusPlan =
   focusDay === "tomorrow" && tomorrowFocusAvailable
-    ? tomorrowsFocusItems
-    : todaysFocusItems;
+    ? tomorrowsFocusPlan ?? todaysFocusPlan
+    : todaysFocusPlan;
+const displayedFocusItems = displayedFocusPlan.items;
+const focusTargetTotal =
+  displayedFocusPlan.learnerCandidates.length * weeklyObservationTarget;
+const focusTargetProgress = displayedFocusPlan.learnerCandidates.reduce(
+  (total, candidate) =>
+    total +
+    Math.min(candidate.weeklyObservationCount, weeklyObservationTarget),
+  0
+);
+const focusTargetMet = displayedFocusPlan.learnerCandidates.filter(
+  (candidate) =>
+    candidate.weeklyObservationCount >= weeklyObservationTarget
+).length;
+const focusProgressPercentage = focusTargetTotal
+  ? Math.round((focusTargetProgress / focusTargetTotal) * 100)
+  : 0;
+const focusCoverageComplete =
+  displayedFocusPlan.learnerCandidates.length > 0 &&
+  focusTargetMet === displayedFocusPlan.learnerCandidates.length;
+const focusProgressMessage = focusCoverageComplete
+  ? "Wonderful work—every learner has reached this week’s observation target."
+  : focusProgressPercentage >= 75
+    ? "Almost there—you’ve got this."
+    : focusProgressPercentage >= 50
+      ? "Halfway there—you’re building a clearer picture of the class."
+      : focusProgressPercentage >= 25
+        ? "A strong start—keep noticing the moments already happening."
+        : "The week’s evidence picture is beginning to form.";
+
+const sharedFocus = (() => {
+  if (!focusCoverageComplete) return null;
+
+  const evidenceLedItems = displayedFocusPlan.learnerCandidates.flatMap(
+    (candidate) =>
+      [candidate.support, candidate.stretch].filter(
+        (item): item is NonNullable<typeof item> => item !== null
+      )
+  );
+  const candidateItems = evidenceLedItems.length
+    ? evidenceLedItems
+    : displayedFocusPlan.learnerCandidates.map(
+        (candidate) => candidate.observe
+      );
+  const groups = new Map<string, TodaysFocusItem[]>();
+
+  for (const item of candidateItems) {
+    const key = `${item.area}|${item.frameworkStatement}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+
+  const group = [...groups.values()].sort(
+    (first, second) =>
+      second.length - first.length ||
+      first[0].guidanceId.localeCompare(second[0].guidanceId)
+  )[0];
+  const representative = group?.[0];
+
+  if (!representative) return null;
+
+  const relatedLearners = displayedFocusPlan.learnerCandidates
+    .filter(
+      (candidate) =>
+        candidate.observe.area === representative.area ||
+        candidate.support?.area === representative.area ||
+        candidate.stretch?.area === representative.area
+    )
+    .map((candidate) => ({
+      id: candidate.observe.learnerId,
+      name: candidate.observe.learnerName,
+    }))
+    .filter(
+      (learner, index, all) =>
+        all.findIndex((candidate) => candidate.id === learner.id) === index
+    )
+    .slice(0, 3);
+
+  return {
+    representative,
+    support:
+      displayedFocusPlan.learnerCandidates
+        .map((candidate) => candidate.support)
+        .find((item) => item?.area === representative.area) ?? null,
+    stretch:
+      displayedFocusPlan.learnerCandidates
+        .map((candidate) => candidate.stretch)
+        .find((item) => item?.area === representative.area) ?? null,
+    relatedLearners,
+    evidenceLed: evidenceLedItems.length > 0,
+  };
+})();
+const sharedFocusGuidance = sharedFocus
+  ? createFallbackFocusGuidance({
+      id: `shared:${sharedFocus.representative.guidanceId}`,
+      kind: "Observe",
+      area: sharedFocus.representative.area,
+      frameworkStatement: sharedFocus.representative.frameworkStatement,
+      progressionLabel: sharedFocus.representative.progressionLabel,
+      descriptor: sharedFocus.representative.lookFor,
+      savedNextStep: sharedFocus.representative.prompt,
+    })
+  : null;
 const focusGuidanceRequestById = new Map(
   displayedFocusItems.map(
     (item): [string, FocusGuidanceRequest] => [
@@ -5233,6 +5353,7 @@ async function refreshClassObservations() {
         ? result.entries
         : []
     );
+    setFocusScheduleNow(new Date());
   } catch (error) {
     console.error(
       "Failed to load class observations:",
@@ -11982,10 +12103,13 @@ onClick={() => {
           </h2>
 
           <p className="mt-1 text-slate-500">
-            Two short, purposeful teaching episodes for each priority
-            {focusDay === "tomorrow" && tomorrowFocusAvailable
-              ? " tomorrow."
-              : " today."}
+            {focusCoverageComplete
+              ? "Weekly coverage is complete, so the emphasis shifts to one shared learning opportunity."
+              : `Purposeful teaching and noticing for the learners still building this week’s evidence picture${
+                  focusDay === "tomorrow" && tomorrowFocusAvailable
+                    ? " tomorrow."
+                    : " today."
+                }`}
           </p>
         </div>
 
@@ -12032,11 +12156,164 @@ onClick={() => {
         </p>
       </div>
 
+      {pupils.length > 0 && (
+        <section
+          className={`mt-5 rounded-2xl border px-5 py-4 ${
+            focusCoverageComplete
+              ? "border-emerald-200 bg-emerald-50"
+              : "border-cyan-200 bg-cyan-50"
+          }`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p
+                className={`text-sm font-bold ${
+                  focusCoverageComplete
+                    ? "text-emerald-900"
+                    : "text-cyan-900"
+                }`}
+              >
+                {focusProgressMessage}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                {focusTargetMet} of {pupils.length} learners have reached the
+                weekly target of {weeklyObservationTarget} observation
+                {weeklyObservationTarget === 1 ? "" : "s"}.
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-bold ${
+                focusCoverageComplete
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-white text-cyan-800"
+              }`}
+            >
+              {focusProgressPercentage}%
+            </span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+            <div
+              className={`h-full rounded-full transition-all ${
+                focusCoverageComplete ? "bg-emerald-500" : "bg-cyan-600"
+              }`}
+              style={{ width: `${Math.min(focusProgressPercentage, 100)}%` }}
+            />
+          </div>
+        </section>
+      )}
+
+      {sharedFocus && sharedFocusGuidance && (
+        <section className="mt-5 overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
+                Shared daily focus
+              </span>
+              <span className="text-xs font-semibold text-slate-500">
+                {sharedFocus.representative.area}
+              </span>
+            </div>
+
+            <h3 className="mt-3 text-xl font-bold text-slate-900">
+              {sharedFocus.representative.frameworkStatement}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {sharedFocus.evidenceLed
+                ? "Recent class evidence makes this a useful shared opportunity. It is not being shown because missing evidence is treated as a learning need."
+                : "With weekly coverage complete, OASIS has selected a broad framework opportunity for the class. This is an invitation to explore, not a judgement about what learners cannot do."}
+            </p>
+
+            <div className="mt-4 rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
+                A brief way to explore it
+              </p>
+              <h4 className="mt-1 font-bold text-slate-900">
+                {sharedFocusGuidance.suggestions[0].title}
+              </h4>
+              <p className="mt-1 text-sm leading-6 text-slate-700">
+                {sharedFocusGuidance.suggestions[0].setup}
+              </p>
+              <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Notice
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">
+                {sharedFocusGuidance.suggestions[0].notice}
+              </p>
+            </div>
+
+            {sharedFocus.relatedLearners.length > 0 && (
+              <div className="mt-4 rounded-2xl bg-cyan-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-cyan-800">
+                  Pay additional attention to
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {sharedFocus.relatedLearners
+                    .map((learner) => learner.name)
+                    .join(", ")}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Their responses may add useful context to the current
+                  evidence picture; this does not imply a deficit.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+                  Support
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-700">
+                  {sharedFocus.support?.prompt ||
+                    "Model the first step, offer a clear visual or verbal cue, then pause so learners can take over independently."}
+                </p>
+                {sharedFocus.support && (
+                  <p className="mt-2 text-xs font-semibold text-amber-900">
+                    Notice particularly: {sharedFocus.support.learnerName}
+                  </p>
+                )}
+              </div>
+              <div className="rounded-2xl border border-purple-200 bg-purple-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-purple-800">
+                  Stretch
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-700">
+                  {sharedFocus.stretch?.prompt ||
+                    "Invite learners to explain their reasoning, vary one condition, or apply the same learning in a new context."}
+                </p>
+                {sharedFocus.stretch && (
+                  <p className="mt-2 text-xs font-semibold text-purple-900">
+                    Notice particularly: {sharedFocus.stretch.learnerName}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {sharedFocus.relatedLearners.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedChildren(
+                    sharedFocus.relatedLearners.map((learner) => learner.id)
+                  );
+                  setShowTodaysFocus(false);
+                  openObservationComposer();
+                }}
+                className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              >
+                Select learners to notice
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
       {displayedFocusItems.length > 0 ? (
         <>
           <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
             <span className="mr-1 text-sm font-semibold text-slate-700">
-              {displayedFocusItems.length} priorities
+              {displayedFocusItems.length}{" "}
+              {focusCoverageComplete ? "important follow-ups" : "priorities"}
             </span>
 
             {(["Observe", "Support", "Stretch"] as const).map(
@@ -12223,7 +12500,11 @@ onClick={() => {
         </>
       ) : (
         <div className="mt-8 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">
-          Add learners to create this focus.
+          {pupils.length === 0
+            ? "Add learners to create this focus."
+            : focusCoverageComplete
+              ? "There are no additional individual follow-ups today."
+              : "No routine priorities are needed right now."}
         </div>
       )}
 
@@ -12241,7 +12522,7 @@ onClick={() => {
         </p>
 
         <p className="mt-2 border-t border-emerald-200 pt-2 text-xs font-medium text-emerald-800">
-          Focus priorities are fixed for the day. A preview for the next day is prepared at 3:00 pm local time so there is time to plan without turning these suggestions into a checklist.
+          Today’s individual priorities reduce as learners reach their weekly target. A preview for the next day is prepared at 3:00 pm local time so there is time to plan without turning these suggestions into a checklist.
         </p>
       </div>
     </div>
