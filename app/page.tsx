@@ -1654,6 +1654,9 @@ const [customLevels, setCustomLevels] = useState([
 ]);
 const [showTodaysFocus, setShowTodaysFocus] = useState(false);
 const [focusDay, setFocusDay] = useState<"today" | "tomorrow">("today");
+const [focusOptionById, setFocusOptionById] = useState<
+  Record<string, 0 | 1>
+>({});
 const [focusScheduleNow, setFocusScheduleNow] = useState(() => new Date());
 const [showSettings, setShowSettings] = useState(false);
 const [settingsStatusLabels, setSettingsStatusLabels] =
@@ -12357,8 +12360,12 @@ onClick={() => {
                 progressionLabel: item.progressionLabel,
                 descriptor: item.lookFor,
                 savedNextStep: item.prompt,
-              };
+            };
             const guidance = createFallbackFocusGuidance(guidanceRequest);
+            const selectedSuggestionIndex =
+              focusOptionById[item.guidanceId] ?? 0;
+            const selectedSuggestion =
+              guidance.suggestions[selectedSuggestionIndex];
 
             return (
               <article
@@ -12390,7 +12397,7 @@ onClick={() => {
                     <div className="mt-3 rounded-xl bg-slate-50 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Try one of these today
+                          Choose an option for today
                         </p>
                         <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
                           {item.readinessLabel}
@@ -12401,44 +12408,65 @@ onClick={() => {
                         {guidance.friendlyGoal}
                       </p>
 
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {guidance.suggestions.map((suggestion, suggestionIndex) => (
-                          <section
-                            key={`${item.guidanceId}-${suggestionIndex}`}
-                            className="rounded-xl border border-slate-200 bg-white p-3"
-                          >
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
+                      <div className="mt-3 flex rounded-xl bg-slate-200/70 p-1">
+                        {guidance.suggestions.map((_, suggestionIndex) => {
+                          const isSelected =
+                            selectedSuggestionIndex === suggestionIndex;
+
+                          return (
+                            <button
+                              key={`${item.guidanceId}-option-${suggestionIndex}`}
+                              type="button"
+                              onClick={() =>
+                                setFocusOptionById((current) => ({
+                                  ...current,
+                                  [item.guidanceId]: suggestionIndex as 0 | 1,
+                                }))
+                              }
+                              aria-pressed={isSelected}
+                              className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                                isSelected
+                                  ? "bg-white text-blue-700 shadow-sm"
+                                  : "text-slate-500 hover:text-slate-800"
+                              }`}
+                            >
                               Option {suggestionIndex + 1}
-                            </p>
-                            <h4 className="mt-1 text-sm font-bold text-slate-900">
-                              {suggestion.title}
-                            </h4>
-                            <p className="mt-1 text-sm leading-5 text-slate-700">
-                              {suggestion.setup}
-                            </p>
-
-                            <div className="mt-2 rounded-lg bg-blue-50 px-2.5 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                                Notice
-                              </p>
-                              <p className="mt-0.5 text-xs leading-5 text-slate-700">
-                                {suggestion.notice}
-                              </p>
-                            </div>
-
-                            <div className="mt-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                You could ask
-                              </p>
-                              <ul className="mt-1 space-y-1 text-xs leading-5 text-slate-700">
-                                {suggestion.questions.map((question) => (
-                                  <li key={question}>“{question}”</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </section>
-                        ))}
+                            </button>
+                          );
+                        })}
                       </div>
+
+                      <section
+                        key={`${item.guidanceId}-${selectedSuggestionIndex}`}
+                        className="mt-3 rounded-xl border border-slate-200 bg-white p-3"
+                      >
+                        <h4 className="text-sm font-bold text-slate-900">
+                          {selectedSuggestion.title}
+                        </h4>
+                        <p className="mt-1 text-sm leading-5 text-slate-700">
+                          {selectedSuggestion.setup}
+                        </p>
+
+                        <div className="mt-2 rounded-lg bg-blue-50 px-2.5 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                            Notice
+                          </p>
+                          <p className="mt-0.5 text-xs leading-5 text-slate-700">
+                            {selectedSuggestion.notice}
+                          </p>
+                        </div>
+
+                        <div className="mt-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            You could ask
+                          </p>
+                          <ul className="mt-1 space-y-1 text-xs leading-5 text-slate-700">
+                            {selectedSuggestion.questions.map((question) => (
+                              <li key={question}>“{question}”</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </section>
                     </div>
 
                     <details className="mt-2 text-sm text-slate-600">
@@ -12490,7 +12518,7 @@ onClick={() => {
                     }}
                     className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
                   >
-                    Select learner
+                    Add observation
                   </button>
                 </div>
               </article>
