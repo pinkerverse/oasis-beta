@@ -3073,15 +3073,18 @@ const sharedFocus = (() => {
   const strongestGroups = orderedGroups.filter(
     (candidateGroup) => candidateGroup.length === strongestGroupSize
   );
-  const sharedFocusDayNumber = Math.floor(
-    new Date(
-      focusDay === "tomorrow" && tomorrowFocusAvailable
-        ? focusTomorrow
-        : focusToday
-    ).setHours(0, 0, 0, 0) / 86400000
+  const sharedFocusDate = new Date(
+    focusDay === "tomorrow" && tomorrowFocusAvailable
+      ? focusTomorrow
+      : focusToday
+  );
+  const daysSinceMonday = (sharedFocusDate.getDay() + 6) % 7;
+  sharedFocusDate.setDate(sharedFocusDate.getDate() - daysSinceMonday);
+  const sharedFocusWeekNumber = Math.floor(
+    sharedFocusDate.setHours(0, 0, 0, 0) / 86400000
   );
   const group = strongestGroups.length
-    ? strongestGroups[sharedFocusDayNumber % strongestGroups.length]
+    ? strongestGroups[sharedFocusWeekNumber % strongestGroups.length]
     : undefined;
   const representative = group?.[0];
 
@@ -3129,6 +3132,111 @@ const sharedFocusGuidance = sharedFocus
       savedNextStep: sharedFocus.representative.prompt,
     })
   : null;
+const sharedFocusMoment = (() => {
+  if (!sharedFocus || !sharedFocusGuidance) return null;
+
+  const selectedFocusDate =
+    focusDay === "tomorrow" && tomorrowFocusAvailable
+      ? focusTomorrow
+      : focusToday;
+  const dayNumber = Math.floor(
+    new Date(selectedFocusDate).setHours(0, 0, 0, 0) / 86400000
+  );
+  const context = `${sharedFocus.representative.area} ${sharedFocus.representative.frameworkStatement}`.toLowerCase();
+
+  if (/research|information literacy|source|data/.test(context)) {
+    const researchMoments = [
+      {
+        title: "Which picture gives us the better clue?",
+        steps: [
+          "Show two pictures of the same familiar animal: one whole-body view and one close-up detail.",
+          "Ask which picture would best answer, ‘How does this animal move?’",
+          "Invite two reasons, then agree which visual clue was most useful.",
+        ],
+        questions: [
+          "Which picture helps us answer the question?",
+          "What can you see that makes you think that?",
+        ],
+        notice:
+          "Whether children choose information that is relevant to the question and explain why it helps.",
+      },
+      {
+        title: "Which source should we use?",
+        steps: [
+          "Place a familiar object beside a photograph or short factual book that shows the same subject.",
+          "Ask one simple question that only one source answers clearly.",
+          "Let children choose the source, find the clue and explain their choice.",
+        ],
+        questions: [
+          "Where should we look for the answer?",
+          "What did that source help us discover?",
+        ],
+        notice:
+          "Whether children connect the question to a useful source rather than choosing by preference.",
+      },
+      {
+        title: "Do both clues tell us the same thing?",
+        steps: [
+          "Show two clear clues about a current class interest, such as an object and a picture.",
+          "Name what each clue appears to tell us.",
+          "Ask the class to decide whether the clues agree or add different information.",
+        ],
+        questions: [
+          "What does this clue tell us?",
+          "Does the other clue agree or add something new?",
+        ],
+        notice:
+          "Whether children compare information and keep track of which source contributed each idea.",
+      },
+      {
+        title: "Ask, look, then answer",
+        steps: [
+          "Choose one genuine question from recent class play or conversation.",
+          "Look together at one accessible picture, object or page for a useful clue.",
+          "Build a one-sentence class answer using only what the clue supports.",
+        ],
+        questions: [
+          "What are we trying to find out?",
+          "Which clue belongs in our answer?",
+        ],
+        notice:
+          "Whether children stay with the question and use visible information to shape an answer.",
+      },
+      {
+        title: "Which clue can we trust for this question?",
+        steps: [
+          "Offer two familiar sources where one is clearly more useful for a simple factual question.",
+          "Invite children to inspect both before choosing.",
+          "Compare reasons and name what made the chosen source useful.",
+        ],
+        questions: [
+          "Which clue is useful for this question?",
+          "Why is the other one less helpful today?",
+        ],
+        notice:
+          "Whether children judge usefulness in relation to the question without labelling a source as always good or bad.",
+      },
+    ];
+
+    return researchMoments[dayNumber % researchMoments.length];
+  }
+
+  const suggestion =
+    sharedFocusGuidance.suggestions[
+      dayNumber % sharedFocusGuidance.suggestions.length
+    ];
+
+  return {
+    title: suggestion.title,
+    steps: [
+      `Gather the familiar materials or example needed for: ${suggestion.title.toLowerCase()}.`,
+      suggestion.setup,
+      "Invite two or three responses, briefly name the learning you noticed, then return to the day’s routine.",
+    ],
+    questions: suggestion.questions.slice(0, 2),
+    notice: suggestion.notice,
+  };
+})();
 const focusGuidanceRequestById = new Map(
   displayedFocusItems.map(
     (item): [string, FocusGuidanceRequest] => [
@@ -12217,92 +12325,118 @@ onClick={() => {
         </section>
       )}
 
-      {sharedFocus && sharedFocusGuidance && (
+      {sharedFocus && sharedFocusMoment && (
         <section className="mt-5 overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
-          <div className="p-5 sm:p-6">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
                 Whole-class daily focus
               </span>
-              <span className="text-xs font-semibold text-slate-500">
-                {sharedFocus.representative.area}
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                5–10 minutes
               </span>
             </div>
 
-            <h3 className="mt-3 text-xl font-bold text-slate-900">
-              {sharedFocus.representative.frameworkStatement}
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {sharedFocus.evidenceLed
-                ? "Recent class evidence makes this a useful shared opportunity. It is not being shown because missing evidence is treated as a learning need."
-                : "With weekly coverage complete, OASIS has selected a broad framework opportunity for the class. This is an invitation to explore, not a judgement about what learners cannot do."}
-            </p>
+            <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                This week’s learning thread
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">
+                {sharedFocus.representative.area}
+                <span className="font-normal text-slate-500"> · </span>
+                {sharedFocus.representative.frameworkStatement}
+              </p>
+            </div>
 
-            <div className="mt-4 rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
+            <div className="mt-3 rounded-2xl border border-white bg-white p-4 shadow-sm sm:p-5">
               <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
-                A brief way to explore it
+                Today’s short input
               </p>
-              <h4 className="mt-1 font-bold text-slate-900">
-                {sharedFocusGuidance.suggestions[0].title}
-              </h4>
-              <p className="mt-1 text-sm leading-6 text-slate-700">
-                {sharedFocusGuidance.suggestions[0].setup}
+              <h3 className="mt-1 text-lg font-bold text-slate-900">
+                {sharedFocusMoment.title}
+              </h3>
+
+              <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
+                What to do
               </p>
-              <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-                Notice
-              </p>
-              <p className="mt-1 text-sm leading-6 text-slate-700">
-                {sharedFocusGuidance.suggestions[0].notice}
-              </p>
+              <ol className="mt-2 space-y-2">
+                {sharedFocusMoment.steps.map((step, index) => (
+                  <li key={step} className="flex gap-3 text-sm leading-5 text-slate-700">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    You could ask
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {sharedFocusMoment.questions.map((question) => (
+                      <p key={question} className="text-sm font-medium leading-5 text-slate-800">
+                        “{question}”
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                    What to notice
+                  </p>
+                  <p className="mt-1 text-sm leading-5 text-slate-700">
+                    {sharedFocusMoment.notice}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {sharedFocus.relatedLearners.length > 0 && (
-              <div className="mt-4 rounded-2xl bg-cyan-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-cyan-800">
-                  Pay additional attention to
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {sharedFocus.relatedLearners
-                    .map((learner) => learner.name)
-                    .join(", ")}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Their responses may add useful context to the current
-                  evidence picture; this does not imply a deficit.
-                </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-cyan-50 px-4 py-3">
+                <span className="text-xs font-bold uppercase tracking-wide text-cyan-800">
+                  Notice particularly
+                </span>
+                {sharedFocus.relatedLearners.map((learner) => (
+                  <span key={learner.id} className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-800">
+                    {learner.name}
+                  </span>
+                ))}
               </div>
             )}
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
-                  Support
-                </p>
-                <p className="mt-1 text-sm leading-6 text-slate-700">
-                  {sharedFocus.support?.prompt ||
-                    "Model the first step, offer a clear visual or verbal cue, then pause so learners can take over independently."}
-                </p>
-                {sharedFocus.support && (
-                  <p className="mt-2 text-xs font-semibold text-amber-900">
-                    Notice particularly: {sharedFocus.support.learnerName}
+            <details className="mt-3 rounded-2xl border border-slate-200 bg-white/70 px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                Support and stretch
+              </summary>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl bg-amber-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Support</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-700">
+                    {sharedFocus.support?.prompt || "Model the first step, offer a clear visual or verbal cue, then pause so learners can take over."}
                   </p>
-                )}
-              </div>
-              <div className="rounded-2xl border border-purple-200 bg-purple-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-purple-800">
-                  Stretch
-                </p>
-                <p className="mt-1 text-sm leading-6 text-slate-700">
-                  {sharedFocus.stretch?.prompt ||
-                    "Invite learners to explain their reasoning, vary one condition, or apply the same learning in a new context."}
-                </p>
-                {sharedFocus.stretch && (
-                  <p className="mt-2 text-xs font-semibold text-purple-900">
-                    Notice particularly: {sharedFocus.stretch.learnerName}
+                </div>
+                <div className="rounded-xl bg-purple-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-purple-800">Stretch</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-700">
+                    {sharedFocus.stretch?.prompt || "Invite learners to explain their reasoning or apply the same learning in a new context."}
                   </p>
-                )}
+                </div>
               </div>
-            </div>
+            </details>
+
+            <details className="mt-2 px-1 py-2">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-500">
+                Why OASIS chose this
+              </summary>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                {sharedFocus.evidenceLed
+                  ? "Recent observations connect several learners to this learning thread, making it useful to explore together. Missing evidence is not being treated as a learning deficit."
+                  : "This is a broad, age-appropriate framework opportunity for shared exploration, not a judgement about what learners cannot do."}
+              </p>
+            </details>
 
             {sharedFocus.relatedLearners.length > 0 && (
               <button
@@ -12314,9 +12448,9 @@ onClick={() => {
                   setShowTodaysFocus(false);
                   openObservationComposer();
                 }}
-                className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                className="mt-2 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto"
               >
-                Select learners to notice
+                Add group observation
               </button>
             )}
           </div>
