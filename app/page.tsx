@@ -3147,11 +3147,13 @@ const sharedFocusMoment = (() => {
   if (/research|information literacy|source|data/.test(context)) {
     const researchMoments = [
       {
-        title: "Which picture gives us the better clue?",
+        title: "How does a duck move? Choose the picture that helps",
+        materials:
+          "A photo of a whole duck walking or swimming, plus a close-up photo of duck feathers.",
         steps: [
-          "Show two pictures of the same familiar animal: one whole-body view and one close-up detail.",
-          "Ask which picture would best answer, ‘How does this animal move?’",
-          "Invite two reasons, then agree which visual clue was most useful.",
+          "Place both duck photos where everyone can see them and ask, ‘How does a duck move?’",
+          "Let children point to the picture they would use to find the answer.",
+          "Ask two children to explain their choice, then name the useful clue: ‘We can see the duck’s whole body moving here.’",
         ],
         questions: [
           "Which picture helps us answer the question?",
@@ -3159,13 +3161,17 @@ const sharedFocusMoment = (() => {
         ],
         notice:
           "Whether children choose information that is relevant to the question and explain why it helps.",
+        whyItMatters:
+          "At ages 3–4, children are beginning to understand that we look in different places for different answers. Choosing a useful picture helps them connect a question with evidence—an early foundation for research, comprehension and explaining their thinking.",
       },
       {
-        title: "Which source should we use?",
+        title: "What is inside an apple? Choose how to find out",
+        materials:
+          "A whole apple and a picture book page showing the inside of an apple.",
         steps: [
-          "Place a familiar object beside a photograph or short factual book that shows the same subject.",
-          "Ask one simple question that only one source answers clearly.",
-          "Let children choose the source, find the clue and explain their choice.",
+          "Show the whole apple and the book page. Ask, ‘What is inside an apple?’",
+          "Invite children to choose which one could help us answer without cutting the apple.",
+          "Open the page together, find the seeds and say, ‘This picture lets us see something the whole apple hides.’",
         ],
         questions: [
           "Where should we look for the answer?",
@@ -3173,13 +3179,17 @@ const sharedFocusMoment = (() => {
         ],
         notice:
           "Whether children connect the question to a useful source rather than choosing by preference.",
+        whyItMatters:
+          "Pre-K children often choose what looks most interesting. Learning to choose what is useful for a particular question builds purposeful attention and helps them understand that books, pictures and real objects can each give different kinds of information.",
       },
       {
-        title: "Do both clues tell us the same thing?",
+        title: "Is the leaf smooth or bumpy? Check two clues",
+        materials:
+          "One large leaf children can touch and a clear photograph of the same kind of leaf.",
         steps: [
-          "Show two clear clues about a current class interest, such as an object and a picture.",
-          "Name what each clue appears to tell us.",
-          "Ask the class to decide whether the clues agree or add different information.",
+          "Pass around the real leaf and ask children to feel whether it is smooth or bumpy.",
+          "Look closely at the photograph and ask what it lets us see.",
+          "Compare the clues: the real leaf tells us how it feels; the photo helps everyone see its lines and edges.",
         ],
         questions: [
           "What does this clue tell us?",
@@ -3187,13 +3197,17 @@ const sharedFocusMoment = (() => {
         ],
         notice:
           "Whether children compare information and keep track of which source contributed each idea.",
+        whyItMatters:
+          "Comparing a real object with a picture helps 3- and 4-year-olds notice that one source rarely tells us everything. This supports careful observation, descriptive language and the ability to combine information instead of relying on the first clue they see.",
       },
       {
-        title: "Ask, look, then answer",
+        title: "Which tower is taller? Look, compare, answer",
+        materials:
+          "Two small block towers with an obvious but not extreme height difference.",
         steps: [
-          "Choose one genuine question from recent class play or conversation.",
-          "Look together at one accessible picture, object or page for a useful clue.",
-          "Build a one-sentence class answer using only what the clue supports.",
+          "Place the towers side by side and ask, ‘Which tower is taller?’",
+          "Invite children to look from the bottom to the top, then point to the tower they choose.",
+          "Build the answer together: ‘The blue tower is taller because it reaches higher.’",
         ],
         questions: [
           "What are we trying to find out?",
@@ -3201,20 +3215,26 @@ const sharedFocusMoment = (() => {
         ],
         notice:
           "Whether children stay with the question and use visible information to shape an answer.",
+        whyItMatters:
+          "Young children need repeated practice holding a question in mind while they look for an answer. This simple routine strengthens attention, comparison language and the habit of saying how they know—not just giving a quick guess.",
       },
       {
-        title: "Which clue can we trust for this question?",
+        title: "Can a penguin fly? Choose the clue that helps",
+        materials:
+          "A toy penguin and a clear photo of a penguin swimming, ideally from a familiar factual book.",
         steps: [
-          "Offer two familiar sources where one is clearly more useful for a simple factual question.",
-          "Invite children to inspect both before choosing.",
-          "Compare reasons and name what made the chosen source useful.",
+          "Show the toy and the swimming photo. Ask, ‘Can this penguin fly like a bird?’",
+          "Invite children to inspect both and choose which gives a better clue about how a real penguin moves.",
+          "Explain: ‘The toy helps us pretend, but the real photo gives us information. It shows a penguin using its wings to swim.’",
         ],
         questions: [
-          "Which clue is useful for this question?",
-          "Why is the other one less helpful today?",
+          "Which one shows us a real penguin?",
+          "What can you see the penguin doing?",
         ],
         notice:
-          "Whether children judge usefulness in relation to the question without labelling a source as always good or bad.",
+          "Whether children distinguish a pretend representation from evidence about a real animal and use the photo to answer.",
+        whyItMatters:
+          "At ages 3–4, children move fluidly between pretend and real worlds. Helping them notice which source gives real-world information develops early media literacy and reasoning while still valuing imaginative play.",
       },
     ];
 
@@ -3228,6 +3248,7 @@ const sharedFocusMoment = (() => {
 
   return {
     title: suggestion.title,
+    materials: "One familiar object, picture or example connected to the learning thread.",
     steps: [
       `Gather the familiar materials or example needed for: ${suggestion.title.toLowerCase()}.`,
       suggestion.setup,
@@ -3235,6 +3256,7 @@ const sharedFocusMoment = (() => {
     ],
     questions: suggestion.questions.slice(0, 2),
     notice: suggestion.notice,
+    whyItMatters: `For children aged 3–4, brief shared experiences make the broad skill “${sharedFocus.representative.frameworkStatement}” concrete. Repeated opportunities to try it, talk about it and see it modelled help children use the skill more independently during play and everyday routines.`,
   };
 })();
 const focusGuidanceRequestById = new Map(
@@ -12350,11 +12372,20 @@ onClick={() => {
 
             <div className="mt-3 rounded-2xl border border-white bg-white p-4 shadow-sm sm:p-5">
               <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
-                Today’s short input
+                Today’s Pre-K 3/4 mini-plan
               </p>
               <h3 className="mt-1 text-lg font-bold text-slate-900">
                 {sharedFocusMoment.title}
               </h3>
+
+              <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2.5">
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
+                  Have ready
+                </p>
+                <p className="mt-1 text-sm leading-5 text-slate-700">
+                  {sharedFocusMoment.materials}
+                </p>
+              </div>
 
               <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
                 What to do
@@ -12431,11 +12462,22 @@ onClick={() => {
               <summary className="cursor-pointer text-xs font-semibold text-slate-500">
                 Why OASIS chose this
               </summary>
-              <p className="mt-2 text-xs leading-5 text-slate-600">
-                {sharedFocus.evidenceLed
-                  ? "Recent observations connect several learners to this learning thread, making it useful to explore together. Missing evidence is not being treated as a learning deficit."
-                  : "This is a broad, age-appropriate framework opportunity for shared exploration, not a judgement about what learners cannot do."}
-              </p>
+              <div className="mt-2 space-y-2 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600">
+                <p>
+                  <span className="font-bold text-slate-700">
+                    Why this skill matters: {" "}
+                  </span>
+                  {sharedFocusMoment.whyItMatters}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-700">
+                    Why today: {" "}
+                  </span>
+                  {sharedFocus.evidenceLed
+                    ? "Recent observations connect several learners to this learning thread, so a short shared experience can extend learning already appearing in the class. The named learners are invitations to look more closely, not children OASIS has labelled as behind."
+                    : "OASIS selected this as a useful whole-class opportunity from the active framework. It is an invitation to practise together, not a judgement about missing evidence or what children cannot do."}
+                </p>
+              </div>
             </details>
 
             {sharedFocus.relatedLearners.length > 0 && (
