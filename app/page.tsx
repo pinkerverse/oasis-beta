@@ -11873,69 +11873,101 @@ onClick={() => {
         </button>
       </div>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-bold text-slate-900">
-              Setup and data
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Your learner tools stay here. School administration remains
-              separate from your everyday OASIS.
-            </p>
-          </div>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-cyan-50/40 p-5">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-cyan-700">
+            School and learner setup
+          </p>
+          <h3 className="mt-1 text-lg font-bold text-slate-900">
+            Manage the foundations of OASIS
+          </h3>
+          <p className="mt-1 text-sm leading-5 text-slate-500">
+            Update the structure, people and starting evidence that shape your workspace.
+          </p>
+        </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(accountRole === "admin" ||
-              accountRole === "school_admin") && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSettings(false);
-                    router.push("/settings/academic-year");
-                  }}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Academic year & terms
-                </button>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {(accountRole === "admin" ||
+            accountRole === "school_admin") && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSettings(false);
+                  router.push("/settings/academic-year");
+                }}
+                className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+              >
+                <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+                  Academic year
+                </span>
+                <span className="mt-1 text-xs leading-5 text-slate-500">
+                  Terms, holidays and school dates
+                </span>
+                <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
+                  →
+                </span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSettings(false);
-                    setShowFrameworkModal(true);
-                    void loadSavedFrameworks();
-                  }}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSettings(false);
+                  setShowFrameworkModal(true);
+                  void loadSavedFrameworks();
+                }}
+                className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+              >
+                <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
                   Frameworks
-                </button>
+                </span>
+                <span className="mt-1 text-xs leading-5 text-slate-500">
+                  Learning areas and expectations
+                </span>
+                <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
+                  →
+                </span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSettings(false);
-                    router.push("/settings/team");
-                  }}
-                  className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-900 hover:bg-cyan-100"
-                >
-                  Invite colleagues
-                </button>
-              </>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSettings(false);
+                  router.push("/settings/team");
+                }}
+                className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+              >
+                <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+                  Team access
+                </span>
+                <span className="mt-1 text-xs leading-5 text-slate-500">
+                  Invite and manage colleagues
+                </span>
+                <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
+                  →
+                </span>
+              </button>
+            </>
+          )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setShowSettings(false);
-                setShowBaselineModal(true);
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Add baseline
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSettings(false);
+              setShowBaselineModal(true);
+            }}
+            className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+          >
+            <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+              Learner baselines
+            </span>
+            <span className="mt-1 text-xs leading-5 text-slate-500">
+              Add starting evidence for learners
+            </span>
+            <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
+              →
+            </span>
+          </button>
         </div>
       </section>
 
