@@ -40,6 +40,97 @@ type AreaPeriod = "week" | "all";
 
 const DEFAULT_WEEKLY_TARGET = 2;
 
+type EnvironmentDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  pattern: RegExp;
+  enhancement: string;
+};
+
+const PREK_ENVIRONMENTS: EnvironmentDefinition[] = [
+  {
+    id: "construction",
+    label: "Construction & blocks",
+    description: "Building, joining, designing and testing ideas",
+    pattern: /\b(blocks?|building|built|build|construction|tower|lego|duplo|bricks?)\b/i,
+    enhancement:
+      "Add photographs of previous structures, clipboards, pencils and a simple tape measure beside varied blocks and loose parts.",
+  },
+  {
+    id: "creative",
+    label: "Creative studio",
+    description: "Drawing, painting, modelling and making",
+    pattern: /\b(art|creative|paint|painting|draw|drawing|collage|clay|dough|scissors|glue|making|mark[- ]making)\b/i,
+    enhancement:
+      "Offer two contrasting materials, child-safe joining tools and a display photograph that invites children to revisit or adapt an idea.",
+  },
+  {
+    id: "role-play",
+    label: "Role play & small world",
+    description: "Pretending, storytelling and social negotiation",
+    pattern: /\b(role[- ]?play|pretend|imaginary|imaginative|home corner|kitchen|shop|cafe|restaurant|doctor|dolls?|small world|dress(?:ing)? up)\b/i,
+    enhancement:
+      "Add a small set of purposeful print—menus, appointment cards, labels or order pads—linked to the children’s current play.",
+  },
+  {
+    id: "books",
+    label: "Books & storytelling",
+    description: "Stories, information books, songs and retelling",
+    pattern: /\b(book|books|story|stories|read|reading|library|rhyme|poem|puppet|retell|storytelling)\b/i,
+    enhancement:
+      "Pair one familiar story with simple props or puppets and one related information book for children to revisit independently.",
+  },
+  {
+    id: "maths",
+    label: "Maths & manipulatives",
+    description: "Counting, sorting, pattern, shape and measurement",
+    pattern: /\b(count|counting|number|numeral|sort|sorting|pattern|puzzle|shape|measur|quantity|more|fewer|longer|shorter|taller)\b/i,
+    enhancement:
+      "Set out sortable loose parts, small trays, numeral cards and a real reason to compare or count, such as preparing materials for a group.",
+  },
+  {
+    id: "sensory",
+    label: "Sensory & discovery",
+    description: "Water, sand, investigation and material exploration",
+    pattern: /\b(sand|water|sensory|messy|mud|investigat|experiment|magnif|discover|pour|scoop|funnel|floating|sinking)\b/i,
+    enhancement:
+      "Introduce scoops, transparent containers, funnels and two picture prompts: “What do you notice?” and “What could we try?”",
+  },
+  {
+    id: "outdoors",
+    label: "Outdoors & nature",
+    description: "Large-scale exploration and the natural world",
+    pattern: /\b(outside|outdoor|garden|playground|nature|leaf|leaves|plant|tree|insect|bug|soil|forest)\b/i,
+    enhancement:
+      "Place collection baskets, magnifiers, weatherproof mark-making materials and a simple map near the outdoor entrance.",
+  },
+  {
+    id: "movement",
+    label: "Movement & physical play",
+    description: "Climbing, balancing, travelling and coordination",
+    pattern: /\b(run|running|jump|jumping|climb|climbing|balance|balancing|dance|movement|physical|ball|throw|catch|bike|bicycle|scooter)\b/i,
+    enhancement:
+      "Add route arrows, start-and-stop cards, chalk marks and simple tools for children to compare distance, speed or repetitions.",
+  },
+  {
+    id: "gathering",
+    label: "Circle & small group",
+    description: "Shared talk, demonstrations and collaborative thinking",
+    pattern: /\b(circle time|carpet|morning meeting|small group|whole group|group time|shared discussion)\b/i,
+    enhancement:
+      "Use one real object or photograph, a talking prop and one open question that children can revisit later in provision.",
+  },
+  {
+    id: "routines",
+    label: "Routines & transitions",
+    description: "Everyday independence, responsibility and belonging",
+    pattern: /\b(snack|lunch|arrival|tidy|tidying|transition|washing hands|bathroom|toilet|line up|self[- ]registration|routine)\b/i,
+    enhancement:
+      "Add a short visual sequence and meaningful helper roles so children can anticipate, manage and explain the routine independently.",
+  },
+];
+
 function EyeIcon({
   className = "h-5 w-5",
   inverted = false,
@@ -86,10 +177,6 @@ function learnerName(learner: Learner) {
   return `${learner.firstName} ${learner.lastName}`.trim();
 }
 
-function learnerInitials(learner: Learner) {
-  return `${learner.firstName?.[0] ?? ""}${learner.lastName?.[0] ?? ""}`.toUpperCase();
-}
-
 function formatShortDate(value: Date | null) {
   return value
     ? value.toLocaleDateString("en-GB", {
@@ -109,7 +196,6 @@ export default function ClassroomInsightsPage() {
   const [frameworkName, setFrameworkName] = useState("");
   const [weeklyTarget, setWeeklyTarget] = useState(DEFAULT_WEEKLY_TARGET);
   const [areaPeriod, setAreaPeriod] = useState<AreaPeriod>("week");
-  const [showAllLearners, setShowAllLearners] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [headerOverlay, setHeaderOverlay] =
@@ -404,9 +490,85 @@ export default function ClassroomInsightsPage() {
     weeklyTarget,
   ]);
 
-  const visibleLearners = showAllLearners
-    ? insight.learnerCoverage
-    : insight.learnerCoverage.slice(0, 8);
+  const environmentInsight = useMemo(() => {
+    const activeLearnerIds = new Set(learners.map((learner) => learner.id));
+    const resolveArea = createFrameworkAreaResolver(
+      frameworkAreaReferences.length
+        ? frameworkAreaReferences
+        : frameworkAreas.map((name) => ({ name }))
+    );
+    const observationsWithRecognisedEnvironment = new Set<string>();
+
+    const environments = PREK_ENVIRONMENTS.map((environment) => {
+      const learnerIds = new Set<string>();
+      const areaCounts = new Map<string, number>();
+      let evidenceRecords = 0;
+
+      for (const entry of observations) {
+        const text = entry.observation?.trim() ?? "";
+        if (!text || !environment.pattern.test(text)) continue;
+
+        observationsWithRecognisedEnvironment.add(entry.id);
+        evidenceRecords += 1;
+
+        for (const learnerId of entry.learner_ids ?? []) {
+          if (activeLearnerIds.has(learnerId)) learnerIds.add(learnerId);
+        }
+
+        for (const match of entry.framework_matches ?? []) {
+          const rawArea = match.strand?.trim();
+          if (!rawArea) continue;
+          const area = resolveArea(match) || rawArea;
+          areaCounts.set(area, (areaCounts.get(area) ?? 0) + 1);
+        }
+      }
+
+      return {
+        ...environment,
+        evidenceRecords,
+        learnersObserved: learnerIds.size,
+        learningAreas: [...areaCounts.entries()]
+          .sort(
+            (first, second) =>
+              second[1] - first[1] || first[0].localeCompare(second[0])
+          )
+          .slice(0, 2)
+          .map(([area]) => area),
+      };
+    });
+
+    const maximumEvidence = Math.max(
+      1,
+      ...environments.map((environment) => environment.evidenceRecords)
+    );
+    const withIntensity = environments.map((environment) => ({
+      ...environment,
+      intensity:
+        environment.evidenceRecords === 0
+          ? 0
+          : environment.evidenceRecords / maximumEvidence <= 0.34
+            ? 1
+            : environment.evidenceRecords / maximumEvidence <= 0.67
+              ? 2
+              : 3,
+    }));
+
+    return {
+      environments: withIntensity,
+      unidentifiedObservations: Math.max(
+        0,
+        observations.length - observationsWithRecognisedEnvironment.size
+      ),
+      suggestedEnhancements: [...withIntensity]
+        .sort(
+          (first, second) =>
+            first.evidenceRecords - second.evidenceRecords ||
+            first.label.localeCompare(second.label)
+        )
+        .slice(0, 2),
+    };
+  }, [frameworkAreaReferences, frameworkAreas, learners, observations]);
+
   const thinnestArea = insight.areaCoverage[0];
   const unobservedThisWeek = insight.learnerCoverage.filter(
     (item) => item.count === 0
@@ -679,86 +841,143 @@ export default function ClassroomInsightsPage() {
 
                   <section className="min-w-0 break-words rounded-3xl border border-indigo-200 bg-indigo-50/70 p-5 sm:p-6">
                     <h2 className="font-bold text-slate-900">
-                      Context confidence
+                      How environment evidence works
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Classroom zones and social relationships are not yet captured as structured evidence. OASIS will not infer favourite areas, friendships or group dynamics from names or observation wording.
+                      OASIS only connects learning to an environment when the observation names a recognisable place, resource or experience. It will not infer favourite areas, friendships or group dynamics.
                     </p>
                     <p className="mt-3 text-xs font-semibold text-indigo-700">
-                      Context intelligence will grow only when the evidence supports it.
+                      The map below becomes more useful as contextual detail appears naturally in observations.
                     </p>
                   </section>
                 </div>
               </div>
 
-              <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">
-                      This week’s learner coverage
-                    </h2>
-                    <p className="mt-1 text-sm leading-6 text-slate-500">
-                      Learners with the least weekly evidence appear first. The target is {weeklyTarget} observations per learner.
+              <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-white to-cyan-50 p-5 sm:p-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-700">
+                        The learning environment
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold text-slate-900">
+                        Environment Effectiveness
+                      </h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                        Where observation wording shows learning taking place across a provisional Pre-K 3/4 environment. More colour means the environment appears more often in the evidence—not that another area is ineffective.
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-bold text-emerald-800 shadow-sm">
+                      Pre-K 3/4 test map
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-5 sm:p-6">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-semibold text-slate-500 sm:text-xs">
+                    <span>Evidence mentions:</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded bg-slate-100 ring-1 ring-slate-200" /> None yet
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded bg-cyan-50 ring-1 ring-cyan-200" /> Some
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded bg-cyan-200 ring-1 ring-cyan-300" /> Repeated
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded bg-emerald-300 ring-1 ring-emerald-400" /> Frequent
+                    </span>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {environmentInsight.environments.map((environment) => {
+                      const heatClasses =
+                        environment.intensity === 3
+                          ? "border-emerald-300 bg-emerald-200/80"
+                          : environment.intensity === 2
+                            ? "border-cyan-300 bg-cyan-100"
+                            : environment.intensity === 1
+                              ? "border-cyan-200 bg-cyan-50"
+                              : "border-slate-200 bg-slate-50";
+
+                      return (
+                        <article
+                          key={environment.id}
+                          className={`min-w-0 rounded-2xl border p-4 transition ${heatClasses}`}
+                        >
+                          <h3 className="text-sm font-bold text-slate-900">
+                            {environment.label}
+                          </h3>
+                          <p className="mt-1 text-xs leading-5 text-slate-600">
+                            {environment.description}
+                          </p>
+                          <div className="mt-4 border-t border-black/5 pt-3">
+                            <p className="text-2xl font-bold text-slate-900">
+                              {environment.evidenceRecords}
+                            </p>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              evidence mention{environment.evidenceRecords === 1 ? "" : "s"} · {environment.learnersObserved} learner{environment.learnersObserved === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          {environment.learningAreas.length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {environment.learningAreas.map((area) => (
+                                <span
+                                  key={area}
+                                  className="max-w-full truncate rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-700"
+                                  title={area}
+                                >
+                                  {area}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-[11px] italic text-slate-500">
+                              Not yet identifiable in observation wording
+                            </p>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-indigo-900">
+                      Help OASIS understand the environment
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-indigo-700">
+                      {environmentInsight.unidentifiedObservations} observation{environmentInsight.unidentifiedObservations === 1 ? " does" : "s do"} not yet name a recognisable environment. When it matters, briefly include where learning happened—for example, “at the water table” or “during outdoor construction.” No extra form is needed.
                     </p>
                   </div>
-                  <span className="text-xs font-semibold text-slate-500">
-                    Red &lt;50% · Yellow 50–99% · Green 100%+
-                  </span>
-                </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {visibleLearners.map((item) => (
-                    <Link
-                      key={item.learner.id}
-                      href={`/learner-intelligence?learner=${encodeURIComponent(item.learner.id)}`}
-                      aria-label={`View intelligence for ${learnerName(item.learner)}`}
-                      className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-sm"
-                    >
-                      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-600 shadow-sm">
-                        {learnerInitials(item.learner)}
-                        <span
-                          className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white ${
-                            item.colour === "green"
-                              ? "bg-emerald-500"
-                              : item.colour === "yellow"
-                                ? "bg-amber-400"
-                                : "bg-rose-500"
-                          }`}
-                          aria-hidden="true"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-sm font-bold text-slate-900 transition group-hover:text-cyan-800">
-                          {learnerName(item.learner)}
-                        </h3>
-                        <p className="mt-0.5 text-xs text-slate-600">
-                          {item.count} of {weeklyTarget} observations · {item.areas} area{item.areas === 1 ? "" : "s"}
-                        </p>
-                        <p className="mt-1 truncate text-[11px] text-slate-400">
-                          Last: {formatShortDate(item.lastObservation)}
-                        </p>
-                      </div>
-                      <span
-                        className="text-sm text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-cyan-600"
-                        aria-hidden="true"
-                      >
-                        →
-                      </span>
-                    </Link>
-                  ))}
+                  <div className="mt-6">
+                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                      Possible enhancements to test
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      Low-preparation ideas for environments that are not yet strongly represented. These are invitations to test, not conclusions that the provision is missing or ineffective.
+                    </p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      {environmentInsight.suggestedEnhancements.map((environment) => (
+                        <article
+                          key={environment.id}
+                          className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4"
+                        >
+                          <h3 className="text-sm font-bold text-slate-900">
+                            {environment.label}
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {environment.enhancement}
+                          </p>
+                          <p className="mt-2 text-xs font-semibold text-emerald-800">
+                            Look for whether children return to it, extend an idea or use the resources independently.
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-
-                {insight.learnerCoverage.length > 8 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllLearners((current) => !current)}
-                    className="mt-5 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    {showAllLearners
-                      ? "Show the priority view"
-                      : `Show all ${insight.learnerCoverage.length} learners`}
-                  </button>
-                )}
               </section>
             </div>
           )}
