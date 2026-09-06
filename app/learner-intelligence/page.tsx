@@ -1398,15 +1398,73 @@ export default function LearnerIntelligencePage() {
                     </div>
 
                     {intelligenceLoading && (
-                      <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4">
-                        <p className="text-sm font-bold text-cyan-900">
-                          Reading across this learner&apos;s observations…
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-cyan-800">
-                          Looking for repeated actions, learning conditions,
-                          independence and meaningful change—not simply counting
-                          framework areas.
-                        </p>
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        aria-label="OASIS is analysing this learner's observations"
+                        className="mt-6 overflow-hidden rounded-2xl border border-cyan-200 bg-gradient-to-r from-cyan-50 via-white to-indigo-50"
+                      >
+                        <div className="flex items-start gap-4 px-5 py-5 sm:px-6">
+                          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-cyan-100">
+                            <svg
+                              className="h-8 w-8 animate-spin text-cyan-600"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              aria-hidden="true"
+                            >
+                              <circle
+                                className="opacity-20"
+                                cx="12"
+                                cy="12"
+                                r="9"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                              />
+                              <path
+                                d="M12 3a9 9 0 0 1 9 9"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                            <span className="absolute h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-bold text-cyan-950 sm:text-base">
+                                Building this learner&apos;s evidence picture
+                              </p>
+                              <span className="flex gap-1" aria-hidden="true">
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-500 [animation-delay:-300ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-500 [animation-delay:-150ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-500" />
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-slate-600 sm:text-sm">
+                              OASIS is reading across separate observations to find patterns that are genuinely supported by evidence.
+                            </p>
+
+                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] font-semibold text-slate-500 sm:text-xs">
+                              <span className="flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500" />
+                                Repeated actions
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400 [animation-delay:200ms]" />
+                                Learning conditions
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400 [animation-delay:400ms]" />
+                                Independence and change
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="h-1.5 overflow-hidden bg-white/80">
+                          <div className="h-full w-2/3 animate-pulse rounded-r-full bg-gradient-to-r from-cyan-500 to-indigo-500" />
+                        </div>
                       </div>
                     )}
 
