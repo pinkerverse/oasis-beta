@@ -11896,16 +11896,23 @@ onClick={() => {
                   setShowSettings(false);
                   router.push("/settings/academic-year");
                 }}
-                className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+                className="group flex min-h-36 flex-col rounded-2xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50/70 p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg"
               >
-                <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+                <span className="flex items-start justify-between gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 transition group-hover:bg-indigo-600 group-hover:text-white">
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M7 3v3M17 3v3M4.5 9h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-indigo-600 shadow-sm transition group-hover:translate-x-0.5 group-hover:bg-indigo-600 group-hover:text-white" aria-hidden="true">
+                    →
+                  </span>
+                </span>
+                <span className="mt-3 text-sm font-bold text-slate-900 group-hover:text-indigo-900">
                   Academic year
                 </span>
                 <span className="mt-1 text-xs leading-5 text-slate-500">
                   Terms, holidays and school dates
-                </span>
-                <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
-                  →
                 </span>
               </button>
 
@@ -11916,16 +11923,24 @@ onClick={() => {
                   setShowFrameworkModal(true);
                   void loadSavedFrameworks();
                 }}
-                className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+                className="group flex min-h-36 flex-col rounded-2xl border border-purple-100 bg-gradient-to-br from-white to-purple-50/70 p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-lg"
               >
-                <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+                <span className="flex items-start justify-between gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-700 transition group-hover:bg-purple-600 group-hover:text-white">
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V4Z" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M8 8h7M8 12h7M7 20V6a2 2 0 0 0-2-2" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-purple-600 shadow-sm transition group-hover:translate-x-0.5 group-hover:bg-purple-600 group-hover:text-white" aria-hidden="true">
+                    →
+                  </span>
+                </span>
+                <span className="mt-3 text-sm font-bold text-slate-900 group-hover:text-purple-900">
                   Frameworks
                 </span>
                 <span className="mt-1 text-xs leading-5 text-slate-500">
                   Learning areas and expectations
-                </span>
-                <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
-                  →
                 </span>
               </button>
 
@@ -11935,16 +11950,24 @@ onClick={() => {
                   setShowSettings(false);
                   router.push("/settings/team");
                 }}
-                className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+                className="group flex min-h-36 flex-col rounded-2xl border border-cyan-100 bg-gradient-to-br from-white to-cyan-50/80 p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-lg"
               >
-                <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+                <span className="flex items-start justify-between gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 transition group-hover:bg-cyan-600 group-hover:text-white">
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M8.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM15.5 10a2.5 2.5 0 1 0 0-5" strokeLinecap="round" />
+                      <path d="M3 19a5.5 5.5 0 0 1 11 0M14 13.5a4.5 4.5 0 0 1 7 3.75V19" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-cyan-600 shadow-sm transition group-hover:translate-x-0.5 group-hover:bg-cyan-600 group-hover:text-white" aria-hidden="true">
+                    →
+                  </span>
+                </span>
+                <span className="mt-3 text-sm font-bold text-slate-900 group-hover:text-cyan-900">
                   Team access
                 </span>
                 <span className="mt-1 text-xs leading-5 text-slate-500">
                   Invite and manage colleagues
-                </span>
-                <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
-                  →
                 </span>
               </button>
             </>
@@ -11956,16 +11979,24 @@ onClick={() => {
               setShowSettings(false);
               setShowBaselineModal(true);
             }}
-            className="group flex min-h-24 flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/70 hover:shadow-md"
+            className="group flex min-h-36 flex-col rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/70 p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg"
           >
-            <span className="text-sm font-bold text-slate-900 group-hover:text-cyan-900">
+            <span className="flex items-start justify-between gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white">
+                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M5 20V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v13M8 10h8M8 14h5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M15.5 16v5M13 18.5h5" strokeLinecap="round" />
+                </svg>
+              </span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm transition group-hover:translate-x-0.5 group-hover:bg-emerald-600 group-hover:text-white" aria-hidden="true">
+                →
+              </span>
+            </span>
+            <span className="mt-3 text-sm font-bold text-slate-900 group-hover:text-emerald-900">
               Learner baselines
             </span>
             <span className="mt-1 text-xs leading-5 text-slate-500">
               Add starting evidence for learners
-            </span>
-            <span className="mt-auto pt-2 text-sm text-cyan-600" aria-hidden="true">
-              →
             </span>
           </button>
         </div>
