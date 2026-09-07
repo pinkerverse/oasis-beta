@@ -48,10 +48,18 @@ function iconClasses(active: boolean) {
 }
 
 function actionButtonClasses(active: boolean) {
-  return `group flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2.5 text-sm font-medium shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white ${
+  return `group flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-3 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white ${
     active
       ? "border-slate-900 bg-slate-900 text-white"
-      : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
+      : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+  }`;
+}
+
+function learnerToolButtonClasses(active: boolean) {
+  return `hidden h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-xl border px-3 text-sm font-semibold shadow-sm transition lg:flex disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 disabled:shadow-none ${
+    active
+      ? "border-slate-900 bg-slate-900 text-white"
+      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
   }`;
 }
 
@@ -146,13 +154,13 @@ export default function OasisHeader({
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-2 shadow-sm backdrop-blur sm:px-8 ${className}`}
+      className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-2 shadow-sm backdrop-blur sm:px-4 ${className}`}
     >
-      <div className="mx-auto flex min-h-24 max-w-7xl items-center gap-2 sm:gap-5">
+      <div className="mx-auto flex min-h-24 max-w-[1600px] items-center gap-2 sm:gap-4">
         <Link
           href={hasClass ? "/" : "/school-overview"}
           aria-label="Back to OASIS dashboard"
-          className="relative h-16 w-24 shrink-0 sm:h-20 sm:w-28"
+          className="relative h-14 w-20 shrink-0 sm:h-20 sm:w-28"
         >
           <Image
             src="/oasis-logo.png"
@@ -166,174 +174,156 @@ export default function OasisHeader({
 
         <div className="hidden h-11 w-px bg-slate-200 lg:block" />
 
-        {schoolAdmin && (
-          <nav className="hidden items-center rounded-xl bg-slate-100 p-1 md:flex">
-            <Link
-              href="/school-overview"
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                schoolOverviewActive
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              School Overview
-            </Link>
-            {hasClass && (
-              <Link
-                href="/"
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                  !schoolOverviewActive
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                My Class
-              </Link>
-            )}
-          </nav>
-        )}
-
         <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
           {hasClass && (
             <>
-          <button
-            type="button"
-            onClick={() => runPanelAction("ptc", onPTCNotes)}
-            disabled={!hasLearnerSelection}
-            className={`hidden whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 lg:block ${
-              ptcNotesActive
-                ? "bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
-          >
-            PTC Notes
-          </button>
+              <button
+                type="button"
+                onClick={() => runPanelAction("ptc", onPTCNotes)}
+                disabled={!hasLearnerSelection}
+                aria-label="PTC Notes"
+                title={
+                  hasLearnerSelection
+                    ? "PTC Notes"
+                    : "Select a learner to open PTC Notes"
+                }
+                className={learnerToolButtonClasses(ptcNotesActive)}
+              >
+                PTC Notes
+              </button>
 
-          <button
-            type="button"
-            onClick={() => runPanelAction("report", onReportHelper)}
-            disabled={!hasLearnerSelection}
-            className={`hidden whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 lg:block ${
-              reportHelperActive
-                ? "bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
-          >
-            Report Helper
-          </button>
+              <button
+                type="button"
+                onClick={() => runPanelAction("report", onReportHelper)}
+                disabled={!hasLearnerSelection}
+                aria-label="Report Helper"
+                title={
+                  hasLearnerSelection
+                    ? "Report Helper"
+                    : "Select a learner to open Report Helper"
+                }
+                className={learnerToolButtonClasses(reportHelperActive)}
+              >
+                Report Helper
+              </button>
 
-          <Link
-            href="/learner-intelligence"
-            aria-label="Learner Insight"
-            aria-current={learnerIntelligenceActive ? "page" : undefined}
-            title="Learner Insight"
-            className={actionButtonClasses(learnerIntelligenceActive)}
-          >
-            <Image
-              src="/learner-intelligence-brain.png"
-              alt=""
-              width={128}
-              height={128}
-              className={iconClasses(learnerIntelligenceActive)}
-              aria-hidden="true"
-            />
-            <span className="hidden min-[1320px]:inline">Learner Insight</span>
-          </Link>
+              <Link
+                href="/learner-intelligence"
+                aria-label="Learner Insight"
+                aria-current={learnerIntelligenceActive ? "page" : undefined}
+                title="Learner Insight"
+                className={`${actionButtonClasses(learnerIntelligenceActive)} hidden min-[520px]:flex`}
+              >
+                <Image
+                  src="/learner-intelligence-brain.png"
+                  alt=""
+                  width={128}
+                  height={128}
+                  className={iconClasses(learnerIntelligenceActive)}
+                  aria-hidden="true"
+                />
+                <span className="hidden min-[1540px]:inline">
+                  Learner Insight
+                </span>
+              </Link>
 
-          <Link
-            href="/classroom-insights"
-            aria-label="Classroom Intelligence"
-            aria-current={classroomInsightsActive ? "page" : undefined}
-            title="Classroom Intelligence"
-            className={actionButtonClasses(classroomInsightsActive)}
-          >
-            <Image
-              src="/classroom-insights-eye.png"
-              alt=""
-              width={128}
-              height={128}
-              className={iconClasses(classroomInsightsActive)}
-              aria-hidden="true"
-            />
-            <span className="hidden min-[1320px]:inline">Classroom Intelligence</span>
-          </Link>
+              <Link
+                href="/classroom-insights"
+                aria-label="Classroom Intelligence"
+                aria-current={classroomInsightsActive ? "page" : undefined}
+                title="Classroom Intelligence"
+                className={`${actionButtonClasses(classroomInsightsActive)} hidden min-[520px]:flex`}
+              >
+                <Image
+                  src="/classroom-insights-eye.png"
+                  alt=""
+                  width={128}
+                  height={128}
+                  className={iconClasses(classroomInsightsActive)}
+                  aria-hidden="true"
+                />
+                <span className="hidden min-[1540px]:inline">
+                  Classroom Intelligence
+                </span>
+              </Link>
 
-          <Link
-            href="/class-attainment"
-            aria-label="Class Attainment"
-            aria-current={classAttainmentActive ? "page" : undefined}
-            title="Class Attainment"
-            className={actionButtonClasses(classAttainmentActive)}
-          >
-            <Image
-              src="/class-attainment-icon.png"
-              alt=""
-              width={128}
-              height={128}
-              className={iconClasses(classAttainmentActive)}
-              aria-hidden="true"
-            />
-            <span className="hidden min-[1320px]:inline">Class Attainment</span>
-          </Link>
+              <Link
+                href="/class-attainment"
+                aria-label="Class Attainment"
+                aria-current={classAttainmentActive ? "page" : undefined}
+                title="Class Attainment"
+                className={`${actionButtonClasses(classAttainmentActive)} hidden min-[520px]:flex`}
+              >
+                <Image
+                  src="/class-attainment-icon.png"
+                  alt=""
+                  width={128}
+                  height={128}
+                  className={iconClasses(classAttainmentActive)}
+                  aria-hidden="true"
+                />
+                <span className="hidden min-[1540px]:inline">
+                  Class Attainment
+                </span>
+              </Link>
 
-          <button
-            type="button"
-            onClick={() => runPanelAction("observation", onAddObservation)}
-            aria-label="Add Observation"
-            title="Add Observation"
-            className={actionButtonClasses(addObservationActive)}
-          >
-            <span className="text-lg leading-none" aria-hidden="true">
-              +
-            </span>
-            <span className="hidden sm:inline">Add Observation</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => runPanelAction("observation", onAddObservation)}
+                aria-label="Add Observation"
+                title="Add Observation"
+                className={actionButtonClasses(addObservationActive)}
+              >
+                <span className="text-lg leading-none" aria-hidden="true">
+                  +
+                </span>
+                <span className="hidden md:inline">Add Observation</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => runPanelAction("focus", onTodaysFocus)}
-            aria-label="Today's Focus"
-            title="Today's Focus"
-            className={`group flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2.5 text-sm font-medium shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white ${
-              todaysFocusActive
-                ? "border-slate-900 bg-slate-900 text-white"
-                : "border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-100 text-slate-900 hover:from-cyan-100 hover:to-indigo-100"
-            }`}
-          >
-            <span aria-hidden="true">◎</span>
-            <span className="hidden sm:inline">Today&apos;s Focus</span>
-          </button>
-
+              <button
+                type="button"
+                onClick={() => runPanelAction("focus", onTodaysFocus)}
+                aria-label="Today’s Focus"
+                title="Today’s Focus"
+                className={`group flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-3 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white ${
+                  todaysFocusActive
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-100 text-slate-900 hover:border-indigo-300 hover:from-cyan-100 hover:to-indigo-100"
+                }`}
+              >
+                <span aria-hidden="true">◎</span>
+                <span className="hidden md:inline">Today’s Focus</span>
+              </button>
             </>
           )}
 
           {hasClass && (
             <button
-            type="button"
-            onClick={() => runPanelAction("settings", onSettings)}
-            aria-label="Settings"
-            title="Settings"
-            className={`flex h-9 w-9 items-center justify-center rounded-full transition ${
-              settingsActive
-                ? "bg-slate-900 text-white"
-                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-900 active:text-white"
-            }`}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="h-5 w-5"
-              aria-hidden="true"
+              type="button"
+              onClick={() => runPanelAction("settings", onSettings)}
+              aria-label="Settings"
+              title="Settings"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
+                settingsActive
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-900 active:text-white"
+              }`}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.6 3.8 10.2 2h3.6l.6 1.8 1.7 1 1.9-.4 1.8 3.1-1.3 1.4v2l1.3 1.4-1.8 3.1-1.9-.4-1.7 1-.6 1.8h-3.6L9.6 16l-1.7-1-1.9.4-1.8-3.1 1.3-1.4v-2L4.2 7.5 6 4.4l1.9.4 1.7-1Z"
-              />
-              <circle cx="12" cy="10" r="2.5" />
-            </svg>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9.6 3.8 10.2 2h3.6l.6 1.8 1.7 1 1.9-.4 1.8 3.1-1.3 1.4v2l1.3 1.4-1.8 3.1-1.9-.4-1.7 1-.6 1.8h-3.6L9.6 16l-1.7-1-1.9.4-1.8-3.1 1.3-1.4v-2L4.2 7.5 6 4.4l1.9.4 1.7-1Z"
+                />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
             </button>
           )}
 
@@ -344,7 +334,7 @@ export default function OasisHeader({
               aria-expanded={showProfileMenu}
               aria-haspopup="menu"
               aria-label="Profile menu"
-              className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-medium transition ${
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition ${
                 showProfileMenu
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -367,7 +357,7 @@ export default function OasisHeader({
                     <Link
                       href="/school-overview"
                       role="menuitem"
-                      className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 md:hidden"
+                      className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 xl:hidden"
                     >
                       School Overview
                     </Link>
@@ -375,12 +365,38 @@ export default function OasisHeader({
                       <Link
                         href="/"
                         role="menuitem"
-                        className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 md:hidden"
+                        className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 xl:hidden"
                       >
                         My Class
                       </Link>
                     )}
                   </>
+                )}
+
+                {hasClass && (
+                  <div className="border-b border-slate-100 pb-1 min-[520px]:hidden">
+                    <Link
+                      href="/learner-intelligence"
+                      role="menuitem"
+                      className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Learner Insight
+                    </Link>
+                    <Link
+                      href="/classroom-insights"
+                      role="menuitem"
+                      className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Classroom Intelligence
+                    </Link>
+                    <Link
+                      href="/class-attainment"
+                      role="menuitem"
+                      className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Class Attainment
+                    </Link>
+                  </div>
                 )}
 
                 {hasClass ? (
@@ -417,6 +433,39 @@ export default function OasisHeader({
               </div>
             )}
           </div>
+
+          {schoolAdmin && (
+            <>
+              <div className="mx-1 hidden h-8 w-px bg-slate-200 xl:block" />
+              <nav
+                aria-label="Workspace view"
+                className="hidden shrink-0 items-center whitespace-nowrap rounded-xl bg-slate-100 p-1 xl:flex"
+              >
+                <Link
+                  href="/school-overview"
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    schoolOverviewActive
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  School Overview
+                </Link>
+                {hasClass && (
+                  <Link
+                    href="/"
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                      !schoolOverviewActive
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    My Class
+                  </Link>
+                )}
+              </nav>
+            </>
+          )}
         </div>
       </div>
     </header>
