@@ -7,6 +7,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
 type Learner = {
@@ -134,6 +135,7 @@ function assessmentColours(levelLabel: string, statusLabels: string[]) {
 }
 
 export default function ClassAttainmentPage() {
+  useClassAccessRedirect();
   const [learners, setLearners] = useState<Learner[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [frameworkAreas, setFrameworkAreas] = useState<string[]>([]);

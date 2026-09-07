@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import LearnersStep from "./LearnersStep";
@@ -8,13 +8,31 @@ import FrameworkStep from "./FrameworkStep";
 import BaselineStep from "./BaselineStep";
 import AssessmentSetupStep from "./AssessmentSetupStep";
 
-const onboardingSteps = [
-  "School",
-  "Academic Year",
-  "Learners",
-  "Framework",
-  "Baseline",
-  "Assessment Setup",
+type AccountMode = "teacher" | "school_admin" | "both";
+
+const ACCOUNT_MODE_OPTIONS: Array<{
+  value: AccountMode;
+  title: string;
+  description: string;
+}> = [
+  {
+    value: "teacher",
+    title: "I teach a class",
+    description:
+      "Set up your class now. You can invite a school head later and hand over school ownership safely.",
+  },
+  {
+    value: "school_admin",
+    title: "I lead or administer the school",
+    description:
+      "Set up the school without creating a class or seeing observation tools.",
+  },
+  {
+    value: "both",
+    title: "I do both",
+    description:
+      "Use School Overview and a teaching class from the same account.",
+  },
 ];
 
 type Term = {
@@ -30,7 +48,9 @@ export default function OnboardingPage() {
   const [checkingCompletion, setCheckingCompletion] =
     useState(true);
 
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(-1);
+  const [accountMode, setAccountMode] = useState<AccountMode | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState("");
 
   const [schoolName, setSchoolName] = useState("");
   const [country, setCountry] = useState("");
@@ -49,50 +69,7 @@ export default function OnboardingPage() {
   const [savedMessage, setSavedMessage] =
     useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function initialiseOnboarding() {
-      try {
-        const response = await fetch(
-          "/api/onboarding/status",
-          {
-            cache: "no-store",
-          }
-        );
-
-        const result = await response
-          .json()
-          .catch(() => ({}));
-
-        if (response.ok && result.completed) {
-          router.replace("/");
-          return;
-        }
-
-        await loadSchool();
-      } catch (error) {
-        console.error(
-          "Onboarding completion check failed:",
-          error
-        );
-
-        await loadSchool();
-      } finally {
-        if (!cancelled) {
-          setCheckingCompletion(false);
-        }
-      }
-    }
-
-    initialiseOnboarding();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
-
-  async function loadSchool() {
+  const loadSchool = useCallback(async () => {
     try {
       setIsLoading(true);
       setError("");
@@ -121,6 +98,15 @@ export default function OnboardingPage() {
         setCountry(
           result.school.country ?? ""
         );
+
+        if (
+          result.accountMode === "teacher" ||
+          result.accountMode === "school_admin" ||
+          result.accountMode === "both"
+        ) {
+          setAccountMode(result.accountMode);
+          setCurrentStep(0);
+        }
       }
     } catch (error) {
       setError(
@@ -131,7 +117,48 @@ export default function OnboardingPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initialiseOnboarding() {
+      try {
+        const [response, accountResponse] = await Promise.all([
+          fetch("/api/onboarding/status", { cache: "no-store" }),
+          fetch("/api/account", { cache: "no-store" }),
+        ]);
+        const result = await response.json().catch(() => ({}));
+
+        if (response.ok && result.completed) {
+          const account = await accountResponse.json().catch(() => ({}));
+          router.replace(
+            accountResponse.ok &&
+              account.isSchoolAdmin === true &&
+              account.hasClass !== true
+              ? "/school-overview"
+              : "/"
+          );
+          return;
+        }
+
+        await loadSchool();
+      } catch (initialisationError) {
+        console.error(
+          "Onboarding completion check failed:",
+          initialisationError
+        );
+        await loadSchool();
+      } finally {
+        if (!cancelled) setCheckingCompletion(false);
+      }
+    }
+
+    void initialiseOnboarding();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSchool, router]);
 
   async function loadAcademicYear() {
     try {
@@ -210,13 +237,14 @@ export default function OnboardingPage() {
     }
   }
 
-  async function saveSchool() {
+  async function saveSchool(confirmDuplicate = false) {
     if (
       !schoolName.trim() ||
-      !country.trim()
+      !country.trim() ||
+      !accountMode
     ) {
       setError(
-        "School name and country are required."
+        "Choose how you will use OASIS and enter the school name and country."
       );
 
       return;
@@ -226,6 +254,7 @@ export default function OnboardingPage() {
       setIsSaving(true);
       setError("");
       setSavedMessage("");
+      setDuplicateWarning("");
 
       const response = await fetch(
         "/api/onboarding/school",
@@ -238,11 +267,18 @@ export default function OnboardingPage() {
           body: JSON.stringify({
             name: schoolName,
             country,
+            accountMode,
+            confirmDuplicate,
           }),
         }
       );
 
       const result = await response.json();
+
+      if (response.status === 409 && result.code === "SCHOOL_MAY_ALREADY_EXIST") {
+        setDuplicateWarning(result.error || "This school may already exist.");
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -325,7 +361,7 @@ export default function OnboardingPage() {
       await loadAcademicYear();
 
       setSavedMessage("");
-      setCurrentStep(2);
+      setCurrentStep(accountMode === "school_admin" ? 3 : 2);
     } catch (error) {
       setError(
         error instanceof Error
@@ -383,6 +419,30 @@ export default function OnboardingPage() {
     setSavedMessage("");
   }
 
+  const journeySteps =
+    accountMode === "school_admin"
+      ? ["Your role", "School", "Academic Year", "Framework", "Assessment Setup"]
+      : [
+          "Your role",
+          "School",
+          "Academic Year",
+          "Learners",
+          "Framework",
+          "Baseline",
+          "Assessment Setup",
+        ];
+  const actualStepNames: Record<number, string> = {
+    [-1]: "Your role",
+    0: "School",
+    1: "Academic Year",
+    2: "Learners",
+    3: "Framework",
+    4: "Baseline",
+    5: "Assessment Setup",
+  };
+  const currentStepName = actualStepNames[currentStep] ?? "Setup";
+  const visibleStepIndex = Math.max(journeySteps.indexOf(currentStepName), 0);
+
   if (checkingCompletion) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -405,9 +465,7 @@ export default function OnboardingPage() {
         </h1>
 
         <p className="mt-2 text-slate-600">
-          Step {currentStep + 1} of{" "}
-          {onboardingSteps.length}:{" "}
-          {onboardingSteps[currentStep]}
+          Step {visibleStepIndex + 1} of {journeySteps.length}: {currentStepName}
         </p>
 
         <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -415,6 +473,56 @@ export default function OnboardingPage() {
             <p className="text-sm text-slate-500">
               Loading…
             </p>
+          ) : currentStep === -1 ? (
+            <>
+              <h2 className="text-xl font-semibold text-slate-900">
+                How will you use OASIS?
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                This shapes your setup and navigation. You can invite people
+                with other roles later without sharing an account.
+              </p>
+
+              <div className="mt-6 grid gap-4">
+                {ACCOUNT_MODE_OPTIONS.map((option) => {
+                  const selected = accountMode === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setAccountMode(option.value);
+                        setError("");
+                      }}
+                      className={`rounded-2xl border p-5 text-left transition ${
+                        selected
+                          ? "border-cyan-500 bg-cyan-50 ring-2 ring-cyan-100"
+                          : "border-slate-200 hover:border-cyan-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="font-bold text-slate-900">
+                        {option.title}
+                      </span>
+                      <span className="mt-1 block text-sm leading-6 text-slate-600">
+                        {option.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 flex justify-end border-t border-slate-200 pt-6">
+                <button
+                  type="button"
+                  disabled={!accountMode}
+                  onClick={() => setCurrentStep(0)}
+                  className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white disabled:opacity-40"
+                >
+                  Continue
+                </button>
+              </div>
+            </>
           ) : currentStep === 0 ? (
             <>
               <h2 className="text-xl font-semibold text-slate-900">
@@ -455,10 +563,40 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              <div className="mt-8 flex justify-end border-t border-slate-200 pt-6">
+              {duplicateWarning && (
+                <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-900">
+                    This school may already be in OASIS
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-amber-800">
+                    {duplicateWarning}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void saveSchool(true)}
+                    disabled={isSaving}
+                    className="mt-3 rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900"
+                  >
+                    This is a separate school — continue
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
                 <button
                   type="button"
-                  onClick={saveSchool}
+                  onClick={() => {
+                    setCurrentStep(-1);
+                    setDuplicateWarning("");
+                    setError("");
+                  }}
+                  className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void saveSchool(false)}
                   disabled={
                     isSaving ||
                     !schoolName.trim() ||
@@ -679,11 +817,11 @@ export default function OnboardingPage() {
           ) : currentStep === 3 ? (
             <FrameworkStep
               onBack={() => {
-                setCurrentStep(2);
+                setCurrentStep(accountMode === "school_admin" ? 1 : 2);
                 setError("");
               }}
               onContinue={() => {
-                setCurrentStep(4);
+                setCurrentStep(accountMode === "school_admin" ? 5 : 4);
                 setError("");
               }}
             />
@@ -701,11 +839,13 @@ export default function OnboardingPage() {
           ) : currentStep === 5 ? (
             <AssessmentSetupStep
               onBack={() => {
-                setCurrentStep(4);
+                setCurrentStep(accountMode === "school_admin" ? 3 : 4);
                 setError("");
               }}
               onComplete={() => {
-                router.replace("/");
+                router.replace(
+                  accountMode === "school_admin" ? "/school-overview" : "/"
+                );
                 router.refresh();
               }}
             />

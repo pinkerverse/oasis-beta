@@ -7,6 +7,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
 type Learner = {
@@ -629,6 +630,7 @@ function InsightGroup({
 }
 
 export default function LearnerIntelligencePage() {
+  useClassAccessRedirect();
   const [learners, setLearners] = useState<Learner[]>([]);
   const [learnersLoading, setLearnersLoading] = useState(true);
   const [learnersError, setLearnersError] = useState("");

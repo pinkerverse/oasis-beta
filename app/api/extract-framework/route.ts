@@ -20,6 +20,7 @@ import {
   isSupportedFrameworkFile,
 } from "@/lib/framework-upload-config";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { getSchoolAdminContext } from "@/lib/supabase/current-workspace";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
@@ -306,6 +307,13 @@ function isLikelyTableContinuation(
 }
 export async function POST(request: Request) {
   try {
+    if (!(await getSchoolAdminContext())) {
+      return NextResponse.json(
+        { error: "School administrator access is required." },
+        { status: 403 }
+      );
+    }
+
     const schoolId = await getCurrentSchoolId();
 
     if (!schoolId) {

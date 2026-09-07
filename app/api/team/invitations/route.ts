@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
-  getCurrentWorkspaceContext,
-  isSchoolAdmin,
+  getCurrentAccountContext,
 } from "@/lib/supabase/current-workspace";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -19,9 +18,9 @@ function verifySameOrigin(request: Request) {
 }
 
 async function requireAdmin() {
-  const context = await getCurrentWorkspaceContext();
+  const context = await getCurrentAccountContext();
 
-  if (!context || !isSchoolAdmin(context.role)) {
+  if (!context?.isSchoolAdmin) {
     return null;
   }
 
@@ -38,30 +37,70 @@ export async function GET() {
     );
   }
 
-  const [{ data: school }, { data: invitations, error }] =
+  const [
+    { data: school },
+    { data: invitations, error },
+    { data: memberships, error: membershipsError },
+  ] =
     await Promise.all([
       supabaseAdmin
         .from("schools")
-        .select("id, name")
+        .select("id, name, owner_user_id")
         .eq("id", context.schoolId)
         .single(),
       supabaseAdmin
         .from("school_invitations")
-        .select("id, email, role, status, expires_at, accepted_at, created_at")
+        .select(
+          "id, email, role, status, expires_at, accepted_at, created_at, workspace_id, teaching_access, transfer_ownership"
+        )
         .eq("school_id", context.schoolId)
         .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("school_memberships")
+        .select("user_id, role, account_mode, is_temporary_owner, current_workspace_id")
+        .eq("school_id", context.schoolId)
+        .order("created_at", { ascending: true }),
     ]);
 
-  if (error) {
+  if (error || membershipsError) {
     return NextResponse.json(
-      { error: error.message },
+      { error: error?.message || membershipsError?.message },
       { status: 500 }
     );
   }
 
+  const team = await Promise.all(
+    (memberships ?? []).map(async (membership) => {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(
+        membership.user_id
+      );
+      const user = data.user;
+      const fullName =
+        typeof user?.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : typeof user?.user_metadata?.name === "string"
+            ? user.user_metadata.name
+            : "";
+
+      return {
+        ...membership,
+        name: fullName,
+        email: user?.email ?? "",
+        is_owner: school?.owner_user_id === membership.user_id,
+      };
+    })
+  );
+
   return NextResponse.json({
     school,
     invitations: invitations ?? [],
+    team,
+    currentUser: {
+      id: context.userId,
+      hasClass: context.hasClass,
+      isOwner: context.isSchoolOwner,
+      isTemporaryOwner: context.isTemporaryOwner,
+    },
   });
 }
 
@@ -89,11 +128,41 @@ export async function POST(request: Request) {
     typeof body?.email === "string"
       ? body.email.trim().toLowerCase()
       : "";
+  const accessType =
+    typeof body?.accessType === "string" ? body.accessType : "class_educator";
+  const allowedAccessTypes = new Set([
+    "class_educator",
+    "new_class_teacher",
+    "school_admin",
+    "school_admin_teacher",
+    "school_owner",
+  ]);
 
   if (email.length > 254 || !isValidEmail(email)) {
     return NextResponse.json(
       { error: "Enter a valid email address." },
       { status: 400 }
+    );
+  }
+
+  if (!allowedAccessTypes.has(accessType)) {
+    return NextResponse.json(
+      { error: "Choose valid access for this colleague." },
+      { status: 400 }
+    );
+  }
+
+  if (accessType === "class_educator" && !context.workspaceId) {
+    return NextResponse.json(
+      { error: "Open a class before inviting someone to share it." },
+      { status: 400 }
+    );
+  }
+
+  if (accessType === "school_owner" && !context.isSchoolOwner) {
+    return NextResponse.json(
+      { error: "Only the current school owner can hand over ownership." },
+      { status: 403 }
     );
   }
 
@@ -119,8 +188,18 @@ export async function POST(request: Request) {
 
   const invitationValues = {
     school_id: context.schoolId,
+    workspace_id:
+      accessType === "class_educator" ? context.workspaceId : null,
     email,
-    role: "teacher",
+    role:
+      accessType === "class_educator" || accessType === "new_class_teacher"
+        ? "teacher"
+        : "admin",
+    teaching_access:
+      accessType === "class_educator" ||
+      accessType === "new_class_teacher" ||
+      accessType === "school_admin_teacher",
+    transfer_ownership: accessType === "school_owner",
     status: "pending",
     invited_by: context.userId,
     auth_user_id: null,
@@ -130,6 +209,15 @@ export async function POST(request: Request) {
     ).toISOString(),
     updated_at: new Date().toISOString(),
   };
+
+  if (accessType === "school_owner") {
+    await supabaseAdmin
+      .from("school_invitations")
+      .update({ status: "revoked", updated_at: new Date().toISOString() })
+      .eq("school_id", context.schoolId)
+      .eq("status", "pending")
+      .eq("transfer_ownership", true);
+  }
 
   const { data: invitation, error: invitationError } =
     existingInvitation
@@ -163,6 +251,8 @@ export async function POST(request: Request) {
       data: {
         invitation_type: "school",
         school_name: school.name,
+        shared_class: accessType === "class_educator",
+        access_type: accessType,
       },
     });
 
@@ -200,7 +290,14 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
-    message: `Invitation sent to ${email}. It will join them to ${school.name} without exposing a school picker.`,
+    message:
+      accessType === "class_educator"
+        ? `Invitation sent to ${email}. They will join your shared class with their own sign-in.`
+        : accessType === "new_class_teacher"
+          ? `Invitation sent to ${email}. They will join ${school.name} and set up their own class.`
+          : accessType === "school_owner"
+            ? `Ownership invitation sent to ${email}. The handover happens only after they accept.`
+            : `Invitation sent to ${email}. Their school access will begin after they accept.`,
   });
 }
 

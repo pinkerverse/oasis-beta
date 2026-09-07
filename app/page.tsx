@@ -1676,6 +1676,8 @@ const [accountName, setAccountName] = useState("");
 const [accountNameDraft, setAccountNameDraft] = useState("");
 const [accountSchoolName, setAccountSchoolName] = useState("");
 const [accountRole, setAccountRole] = useState("");
+const [accountMode, setAccountMode] = useState("");
+const [accountTemporaryOwner, setAccountTemporaryOwner] = useState(false);
 const [accountContextLoading, setAccountContextLoading] =
   useState(false);
 const [accountSaving, setAccountSaving] = useState(false);
@@ -1716,6 +1718,10 @@ async function loadAccount() {
     setAccountRole(
       typeof context.role === "string" ? context.role : ""
     );
+    setAccountMode(
+      typeof context.accountMode === "string" ? context.accountMode : ""
+    );
+    setAccountTemporaryOwner(context.isTemporaryOwner === true);
   }
 
   setAccountContextLoading(false);
@@ -1990,16 +1996,13 @@ useEffect(() => {
   useEffect(() => {
     async function checkOnboarding() {
       try {
-        const response = await fetch(
-          "/api/onboarding/status",
-          {
-            cache: "no-store",
-          }
-        );
+        const [response, accountResponse] = await Promise.all([
+          fetch("/api/onboarding/status", { cache: "no-store" }),
+          fetch("/api/account", { cache: "no-store" }),
+        ]);
 
-        const result = await response
-          .json()
-          .catch(() => ({}));
+        const result = await response.json().catch(() => ({}));
+        const account = await accountResponse.json().catch(() => ({}));
 
         if (!response.ok) {
           console.error(
@@ -2012,6 +2015,15 @@ useEffect(() => {
 
         if (!result.completed) {
           router.replace("/onboarding");
+          return;
+        }
+
+        if (
+          accountResponse.ok &&
+          account.isSchoolAdmin === true &&
+          account.hasClass !== true
+        ) {
+          router.replace("/school-overview");
           return;
         }
       } catch (error) {
@@ -12080,8 +12092,15 @@ onClick={() => {
                 <p className="mt-1 text-sm font-semibold capitalize text-slate-900">
                   {accountContextLoading
                     ? "Loading…"
-                    : accountRole.replaceAll("_", " ") ||
-                      "Member"}
+                    : accountTemporaryOwner
+                      ? "Teacher · temporary school owner"
+                      : accountMode === "both"
+                        ? "School administrator and teacher"
+                        : accountMode === "school_admin"
+                          ? "School administrator"
+                          : accountMode === "teacher"
+                            ? "Teacher"
+                            : accountRole.replaceAll("_", " ") || "Member"}
                 </p>
               </div>
             </div>
@@ -12272,8 +12291,8 @@ onClick={() => {
               school administrator.
             </p>
             <p className="mt-4 rounded-xl bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-900">
-              Your learners, observations and daily focus remain private to
-              your teacher workspace.
+              Your class educators share learners, observations and daily
+              focus, while everyone keeps their own secure sign-in.
             </p>
           </section>
         )}

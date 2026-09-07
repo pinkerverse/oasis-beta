@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { FrameworkDefinition } from "@/lib/framework";
 import { getFrameworkValidationErrors } from "@/lib/framework-validation";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { getSchoolAdminContext } from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 function isFrameworkDefinition(
@@ -31,6 +32,13 @@ function isFrameworkDefinition(
 // --------------------
 export async function POST(request: Request) {
   try {
+    if (!(await getSchoolAdminContext())) {
+      return NextResponse.json(
+        { error: "School administrator access is required." },
+        { status: 403 }
+      );
+    }
+
     const schoolId = await getCurrentSchoolId();
 
 if (!schoolId) {
@@ -440,6 +448,13 @@ updated_at
 // --------------------
 export async function DELETE(request: Request) {
   try {
+    if (!(await getSchoolAdminContext())) {
+      return NextResponse.json(
+        { error: "School administrator access is required." },
+        { status: 403 }
+      );
+    }
+
 
     const schoolId = await getCurrentSchoolId();
 
@@ -570,6 +585,13 @@ const authenticatedSupabase =
 // --------------------
 export async function PATCH(request: Request) {
   try {
+    if (!(await getSchoolAdminContext())) {
+      return NextResponse.json(
+        { error: "School administrator access is required." },
+        { status: 403 }
+      );
+    }
+
     const schoolId = await getCurrentSchoolId();
 
 

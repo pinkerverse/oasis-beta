@@ -8,6 +8,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { useSchoolAdminRedirect } from "@/app/components/useSchoolAdminRedirect";
 
 type EditableTerm = {
   id?: string;
@@ -17,6 +18,7 @@ type EditableTerm = {
 };
 
 export default function AcademicYearSettingsPage() {
+  useSchoolAdminRedirect();
   const router = useRouter();
   const [academicYearName, setAcademicYearName] = useState("");
   const [academicYearStart, setAcademicYearStart] = useState("");

@@ -83,15 +83,17 @@ export default function TeacherOnboardingPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-cyan-800">
-                Your private teacher workspace
+                Your class workspace
               </p>
               <h1 className="mt-1 text-2xl font-bold text-slate-900">
-                Set up your class
+                Welcome to your class
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 You are joining{" "}
                 <strong>{context?.school?.name || "your invited school"}</strong>.
-                Your learners and observations stay in your own workspace.
+                Approved educators can share this class’s learners,
+                observations, planning and intelligence while keeping separate
+                sign-ins.
               </p>
             </div>
           </div>

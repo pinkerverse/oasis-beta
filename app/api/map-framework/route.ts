@@ -8,6 +8,7 @@ import {
   type FrameworkDefinition,
 } from "@/lib/framework";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { getSchoolAdminContext } from "@/lib/supabase/current-workspace";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -23,6 +24,13 @@ function createSlug(value: string) {
 
 export async function POST(request: Request) {
   try {
+    if (!(await getSchoolAdminContext())) {
+      return Response.json(
+        { error: "School administrator access is required." },
+        { status: 403 }
+      );
+    }
+
     const schoolId = await getCurrentSchoolId();
 
     if (!schoolId) {

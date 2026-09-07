@@ -8,6 +8,7 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
 type Learner = {
@@ -187,6 +188,7 @@ function formatShortDate(value: Date | null) {
 }
 
 export default function ClassroomInsightsPage() {
+  useClassAccessRedirect();
   const [learners, setLearners] = useState<Learner[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [frameworkAreas, setFrameworkAreas] = useState<string[]>([]);

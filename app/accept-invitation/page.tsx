@@ -15,6 +15,10 @@ export default function AcceptInvitationPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [schoolName, setSchoolName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [invitationKind, setInvitationKind] = useState<
+    "class" | "school-admin" | "school-owner"
+  >("class");
   const [checkingInvitation, setCheckingInvitation] = useState(true);
 
   useEffect(() => {
@@ -34,6 +38,18 @@ export default function AcceptInvitationPage() {
           typeof result.invitation?.school?.name === "string"
         ) {
           setSchoolName(result.invitation.school.name);
+          setWorkspaceName(
+            typeof result.invitation?.workspace?.name === "string"
+              ? result.invitation.workspace.name
+              : ""
+          );
+          setInvitationKind(
+            result.invitation.transferOwnership
+              ? "school-owner"
+              : result.invitation.teachingAccess
+                ? "class"
+                : "school-admin"
+          );
         }
       } finally {
         if (!cancelled) setCheckingInvitation(false);
@@ -90,7 +106,11 @@ export default function AcceptInvitationPage() {
           );
         }
 
-        router.replace("/onboarding/teacher");
+        router.replace(
+          result.destination === "school-overview"
+            ? "/school-overview"
+            : "/onboarding/teacher"
+        );
       } else {
         router.replace("/onboarding");
       }
@@ -128,7 +148,11 @@ export default function AcceptInvitationPage() {
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {schoolName
-              ? `Add your name and choose a password. You are joining ${schoolName}; its framework is already selected for you.`
+              ? invitationKind === "class"
+                ? `Add your name and choose a password. You are joining ${schoolName} as an educator; your class access will be ready for you.`
+                : invitationKind === "school-owner"
+                  ? `Add your name and choose a password. You are accepting responsibility for the ${schoolName} OASIS account.`
+                  : `Add your name and choose a password. You are joining the ${schoolName} school team.`
               : "Add your name and choose a password, then we’ll guide you through setting up your school and class."}
           </p>
 
@@ -138,10 +162,16 @@ export default function AcceptInvitationPage() {
                 School invitation
               </p>
               <p className="mt-1 font-semibold text-slate-900">
-                {schoolName}
+                {workspaceName
+                  ? `${workspaceName} · ${schoolName}`
+                  : schoolName}
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-600">
-                This school is fixed by your invitation and cannot be changed.
+                {invitationKind === "class"
+                  ? "You will use your own sign-in. If this invitation names an existing class, you will share its learners and evidence with the other educators."
+                  : invitationKind === "school-owner"
+                    ? "Ownership changes only after you complete this secure acceptance step."
+                    : "Your school overview and administration tools will be available without an observation workspace."}
               </p>
             </div>
           )}
@@ -218,7 +248,9 @@ export default function AcceptInvitationPage() {
               {loading || checkingInvitation
                 ? "Preparing OASIS…"
                 : schoolName
-                  ? "Continue to my class"
+                  ? invitationKind === "class"
+                    ? "Continue to OASIS"
+                    : "Continue to School Overview"
                   : "Continue to school setup"}
             </button>
           </form>

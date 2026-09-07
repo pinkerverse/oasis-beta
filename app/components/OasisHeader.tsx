@@ -10,6 +10,7 @@ type HeaderPage =
   | "learner-intelligence"
   | "classroom-insights"
   | "class-attainment"
+  | "school-overview"
   | null;
 
 type OasisHeaderProps = {
@@ -74,18 +75,21 @@ export default function OasisHeader({
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [loadedAccountName, setLoadedAccountName] = useState("");
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
+  const [hasClass, setHasClass] = useState(false);
+  const [schoolAdmin, setSchoolAdmin] = useState(false);
   const hasLearnerSelection = selectedLearnerIds.length > 0;
   const accountName = suppliedAccountName || loadedAccountName;
   const accountEmail = suppliedAccountEmail || loadedAccountEmail;
 
   useEffect(() => {
-    if (suppliedAccountName || suppliedAccountEmail) return;
-
     let cancelled = false;
 
     async function loadHeaderAccount() {
       const supabase = createBrowserSupabaseClient();
-      const { data } = await supabase.auth.getUser();
+      const [{ data }, accountResponse] = await Promise.all([
+        supabase.auth.getUser(),
+        fetch("/api/account", { cache: "no-store" }),
+      ]);
 
       if (cancelled || !data.user) return;
 
@@ -99,6 +103,13 @@ export default function OasisHeader({
 
       setLoadedAccountName(name);
       setLoadedAccountEmail(data.user.email ?? "");
+
+      if (accountResponse.ok) {
+        const account = await accountResponse.json().catch(() => ({}));
+        if (cancelled) return;
+        setHasClass(account.hasClass === true);
+        setSchoolAdmin(account.isSchoolAdmin === true);
+      }
     }
 
     void loadHeaderAccount();
@@ -131,6 +142,7 @@ export default function OasisHeader({
   const learnerIntelligenceActive = activePage === "learner-intelligence";
   const classroomInsightsActive = activePage === "classroom-insights";
   const classAttainmentActive = activePage === "class-attainment";
+  const schoolOverviewActive = activePage === "school-overview";
 
   return (
     <header
@@ -138,7 +150,7 @@ export default function OasisHeader({
     >
       <div className="mx-auto flex min-h-24 max-w-7xl items-center gap-2 sm:gap-5">
         <Link
-          href="/"
+          href={hasClass ? "/" : "/school-overview"}
           aria-label="Back to OASIS dashboard"
           className="relative h-16 w-24 shrink-0 sm:h-20 sm:w-28"
         >
@@ -154,7 +166,36 @@ export default function OasisHeader({
 
         <div className="hidden h-11 w-px bg-slate-200 lg:block" />
 
+        {schoolAdmin && (
+          <nav className="hidden items-center rounded-xl bg-slate-100 p-1 md:flex">
+            <Link
+              href="/school-overview"
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                schoolOverviewActive
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              School Overview
+            </Link>
+            {hasClass && (
+              <Link
+                href="/"
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  !schoolOverviewActive
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                My Class
+              </Link>
+            )}
+          </nav>
+        )}
+
         <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+          {hasClass && (
+            <>
           <button
             type="button"
             onClick={() => runPanelAction("ptc", onPTCNotes)}
@@ -263,7 +304,11 @@ export default function OasisHeader({
             <span className="hidden sm:inline">Today&apos;s Focus</span>
           </button>
 
-          <button
+            </>
+          )}
+
+          {hasClass && (
+            <button
             type="button"
             onClick={() => runPanelAction("settings", onSettings)}
             aria-label="Settings"
@@ -289,7 +334,8 @@ export default function OasisHeader({
               />
               <circle cx="12" cy="10" r="2.5" />
             </svg>
-          </button>
+            </button>
+          )}
 
           <div className="relative">
             <button
@@ -316,17 +362,48 @@ export default function OasisHeader({
                   {accountName || accountEmail || "My account"}
                 </p>
 
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    runPanelAction("settings", onSettings);
-                  }}
-                  className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  My account
-                </button>
+                {schoolAdmin && (
+                  <>
+                    <Link
+                      href="/school-overview"
+                      role="menuitem"
+                      className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 md:hidden"
+                    >
+                      School Overview
+                    </Link>
+                    {hasClass && (
+                      <Link
+                        href="/"
+                        role="menuitem"
+                        className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 md:hidden"
+                      >
+                        My Class
+                      </Link>
+                    )}
+                  </>
+                )}
+
+                {hasClass ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      runPanelAction("settings", onSettings);
+                    }}
+                    className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    My account
+                  </button>
+                ) : (
+                  <Link
+                    href="/settings/team"
+                    role="menuitem"
+                    className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    School team
+                  </Link>
+                )}
 
                 <form action="/auth/signout" method="post">
                   <button

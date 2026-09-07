@@ -10,7 +10,7 @@ export async function GET() {
 
   if (!context) {
     return NextResponse.json(
-      { error: "You are not linked to a teacher workspace." },
+      { error: "You are not linked to a class." },
       { status: 401 }
     );
   }
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
   if (!context) {
     return NextResponse.json(
-      { error: "You are not linked to a teacher workspace." },
+      { error: "You are not linked to a class." },
       { status: 401 }
     );
   }
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", context.workspaceId)
-    .eq("owner_user_id", context.userId);
+    .eq("school_id", context.schoolId);
 
   if (error) {
     return NextResponse.json(

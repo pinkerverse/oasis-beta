@@ -373,6 +373,7 @@ const rowsToInsert =
   school_id: context.schoolId,
   workspace_id: context.workspaceId,
   ...observationToSave,
+  created_by: context.userId,
 
   framework_version_id:
     frameworkVersionId,
@@ -430,6 +431,7 @@ const rowsToInsert =
       school_id: context.schoolId,
       workspace_id: context.workspaceId,
       ...observationToSave,
+      created_by: context.userId,
       observation: observationText,
       observation_date: observationDate,
       learner_ids: normalizedLearnerIds,

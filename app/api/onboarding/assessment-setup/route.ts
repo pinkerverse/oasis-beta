@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
+import { getSchoolAdminContext } from "@/lib/supabase/current-workspace";
 
 const DEFAULT_STATUS_LABELS = [
   "Below",
@@ -63,6 +64,13 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!(await getSchoolAdminContext())) {
+    return NextResponse.json(
+      { error: "School administrator access is required." },
+      { status: 403 }
+    );
+  }
+
   const schoolId = await getCurrentSchoolId();
 
   if (!schoolId) {
