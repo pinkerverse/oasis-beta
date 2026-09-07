@@ -17,6 +17,25 @@ function verifySameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
+function accessTypeForInvitation(invitation: {
+  role: string;
+  teaching_access: boolean;
+  transfer_ownership: boolean;
+  workspace_id: string | null;
+}) {
+  if (invitation.transfer_ownership) return "school_owner";
+  if (
+    (invitation.role === "admin" || invitation.role === "school_admin") &&
+    invitation.teaching_access
+  ) {
+    return "school_admin_teacher";
+  }
+  if (invitation.role === "admin" || invitation.role === "school_admin") {
+    return "school_admin";
+  }
+  return invitation.workspace_id ? "class_educator" : "new_class_teacher";
+}
+
 async function requireAdmin() {
   const context = await getCurrentAccountContext();
 
@@ -124,12 +143,48 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | Record<string, unknown>
     | null;
-  const email =
+  let email =
     typeof body?.email === "string"
       ? body.email.trim().toLowerCase()
       : "";
-  const accessType =
+  let accessType =
     typeof body?.accessType === "string" ? body.accessType : "class_educator";
+  const resendInvitationId =
+    typeof body?.invitationId === "string"
+      ? body.invitationId.trim()
+      : "";
+  let resendInvitation: {
+    id: string;
+    email: string;
+    role: string;
+    teaching_access: boolean;
+    transfer_ownership: boolean;
+    workspace_id: string | null;
+  } | null = null;
+
+  if (resendInvitationId) {
+    const { data, error } = await supabaseAdmin
+      .from("school_invitations")
+      .select(
+        "id, email, role, teaching_access, transfer_ownership, workspace_id"
+      )
+      .eq("id", resendInvitationId)
+      .eq("school_id", context.schoolId)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (error || !data) {
+      return NextResponse.json(
+        { error: "That pending invitation could not be found." },
+        { status: 404 }
+      );
+    }
+
+    resendInvitation = data;
+    email = data.email.trim().toLowerCase();
+    accessType = accessTypeForInvitation(data);
+  }
+
   const allowedAccessTypes = new Set([
     "class_educator",
     "new_class_teacher",
@@ -152,7 +207,11 @@ export async function POST(request: Request) {
     );
   }
 
-  if (accessType === "class_educator" && !context.workspaceId) {
+  if (
+    accessType === "class_educator" &&
+    !context.workspaceId &&
+    !resendInvitation?.workspace_id
+  ) {
     return NextResponse.json(
       { error: "Open a class before inviting someone to share it." },
       { status: 400 }
@@ -179,17 +238,23 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: existingInvitation } = await supabaseAdmin
-    .from("school_invitations")
-    .select("id")
-    .eq("school_id", context.schoolId)
-    .eq("email", email)
-    .maybeSingle();
+  const existingInvitation = resendInvitation
+    ? { id: resendInvitation.id }
+    : (
+        await supabaseAdmin
+          .from("school_invitations")
+          .select("id")
+          .eq("school_id", context.schoolId)
+          .eq("email", email)
+          .maybeSingle()
+      ).data;
 
   const invitationValues = {
     school_id: context.schoolId,
     workspace_id:
-      accessType === "class_educator" ? context.workspaceId : null,
+      accessType === "class_educator"
+        ? resendInvitation?.workspace_id || context.workspaceId
+        : null,
     email,
     role:
       accessType === "class_educator" || accessType === "new_class_teacher"
@@ -291,13 +356,15 @@ export async function POST(request: Request) {
   return NextResponse.json({
     success: true,
     message:
-      accessType === "class_educator"
-        ? `Invitation sent to ${email}. They will join your shared class with their own sign-in.`
-        : accessType === "new_class_teacher"
-          ? `Invitation sent to ${email}. They will join ${school.name} and set up their own class.`
-          : accessType === "school_owner"
-            ? `Ownership invitation sent to ${email}. The handover happens only after they accept.`
-            : `Invitation sent to ${email}. Their school access will begin after they accept.`,
+      resendInvitation
+        ? `A fresh invitation was sent to ${email}. The previous link has been replaced.`
+        : accessType === "class_educator"
+          ? `Invitation sent to ${email}. They will join your shared class with their own sign-in.`
+          : accessType === "new_class_teacher"
+            ? `Invitation sent to ${email}. They will join ${school.name} and set up their own class.`
+            : accessType === "school_owner"
+              ? `Ownership invitation sent to ${email}. The handover happens only after they accept.`
+              : `Invitation sent to ${email}. Their school access will begin after they accept.`,
   });
 }
 

@@ -48,6 +48,7 @@ export default function TeamSettingsPage() {
   const [confirmTransferUserId, setConfirmTransferUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [resendingInvitationId, setResendingInvitationId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -167,6 +168,29 @@ export default function TeamSettingsPage() {
     }
 
     setMessage("Invitation revoked.");
+    await loadTeam();
+  }
+
+  async function resendInvitation(id: string) {
+    setResendingInvitationId(id);
+    setError("");
+    setMessage("");
+
+    const response = await fetch("/api/team/invitations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationId: id }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setError(result.error || "A fresh invitation could not be sent.");
+      setResendingInvitationId("");
+      return;
+    }
+
+    setMessage(result.message || "A fresh invitation was sent.");
+    setResendingInvitationId("");
     await loadTeam();
   }
 
@@ -349,13 +373,25 @@ export default function TeamSettingsPage() {
                   </div>
 
                   {invitation.status === "pending" && (
-                    <button
-                      type="button"
-                      onClick={() => void revokeInvitation(invitation.id)}
-                      className="self-start rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 sm:self-auto"
-                    >
-                      Revoke
-                    </button>
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        disabled={resendingInvitationId === invitation.id}
+                        onClick={() => void resendInvitation(invitation.id)}
+                        className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-900 transition hover:border-cyan-300 hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {resendingInvitationId === invitation.id
+                          ? "Sending…"
+                          : "Resend invitation"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void revokeInvitation(invitation.id)}
+                        className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                      >
+                        Revoke
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
