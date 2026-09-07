@@ -62,7 +62,8 @@ const isLoginPage =
 
 const isPublicAuthRoute =
   request.nextUrl.pathname === "/auth/callback" ||
-  request.nextUrl.pathname === "/auth/confirm";
+  request.nextUrl.pathname === "/auth/confirm" ||
+  request.nextUrl.pathname === "/confirm-invitation";
 
 const isApiRoute =
   request.nextUrl.pathname.startsWith("/api/");
