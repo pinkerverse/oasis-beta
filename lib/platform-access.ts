@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type BetaAccountMode = "teacher" | "school_admin" | "both";
 
+const BOOTSTRAP_PLATFORM_OWNER_EMAILS = ["s.eichhorn.se@gmail.com"];
+
 function normaliseEmail(value: string) {
   return value.trim().toLowerCase();
 }
@@ -16,7 +18,7 @@ function configuredPlatformOwnerEmails() {
   const supportEmail = process.env.OASIS_SUPPORT_EMAIL ?? "";
 
   return new Set(
-    `${configured},${supportEmail}`
+    `${BOOTSTRAP_PLATFORM_OWNER_EMAILS.join(",")},${configured},${supportEmail}`
       .split(",")
       .map(normaliseEmail)
       .filter(Boolean)

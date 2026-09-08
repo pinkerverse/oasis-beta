@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import AccountModal from "@/app/components/AccountModal";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type HeaderPage =
@@ -81,8 +82,13 @@ export default function OasisHeader({
   settingsActive = false,
 }: OasisHeaderProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const [loadedAccountName, setLoadedAccountName] = useState("");
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [accountRole, setAccountRole] = useState("");
+  const [accountMode, setAccountMode] = useState("");
+  const [temporaryOwner, setTemporaryOwner] = useState(false);
   const [hasClass, setHasClass] = useState(false);
   const [schoolAdmin, setSchoolAdmin] = useState(false);
   const [platformOwner, setPlatformOwner] = useState(false);
@@ -116,6 +122,14 @@ export default function OasisHeader({
       if (accountResponse.ok) {
         const account = await accountResponse.json().catch(() => ({}));
         if (cancelled) return;
+        setSchoolName(
+          typeof account.school?.name === "string" ? account.school.name : ""
+        );
+        setAccountRole(typeof account.role === "string" ? account.role : "");
+        setAccountMode(
+          typeof account.accountMode === "string" ? account.accountMode : ""
+        );
+        setTemporaryOwner(account.isTemporaryOwner === true);
         setHasClass(account.hasClass === true);
         setSchoolAdmin(account.isSchoolAdmin === true);
         setPlatformOwner(account.isPlatformOwner === true);
@@ -148,6 +162,21 @@ export default function OasisHeader({
 
     window.location.assign(panelHref(panel, selectedLearnerIds));
   }
+
+  function openSettings() {
+    setShowProfileMenu(false);
+
+    if (onSettings) {
+      onSettings();
+      return;
+    }
+
+    setShowAccountModal(true);
+  }
+
+  const closeAccountModal = useCallback(() => {
+    setShowAccountModal(false);
+  }, []);
 
   const learnerIntelligenceActive = activePage === "learner-intelligence";
   const classroomInsightsActive = activePage === "classroom-insights";
@@ -302,7 +331,7 @@ export default function OasisHeader({
           {hasClass && (
             <button
               type="button"
-              onClick={() => runPanelAction("settings", onSettings)}
+              onClick={openSettings}
               aria-label="Settings"
               title="Settings"
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
@@ -416,21 +445,21 @@ export default function OasisHeader({
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      setShowProfileMenu(false);
-                      runPanelAction("settings", onSettings);
+                      openSettings();
                     }}
                     className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
                     My account
                   </button>
                 ) : (
-                  <Link
-                    href="/settings/team"
+                  <button
+                    type="button"
                     role="menuitem"
-                    className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    onClick={openSettings}
+                    className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
-                    School team
-                  </Link>
+                    My account
+                  </button>
                 )}
 
                 <form action="/auth/signout" method="post">
@@ -480,6 +509,24 @@ export default function OasisHeader({
           )}
         </div>
       </div>
+      {showAccountModal && (
+        <AccountModal
+          accountEmail={accountEmail}
+          accountMode={accountMode}
+          accountName={accountName}
+          accountRole={accountRole}
+          hasClass={hasClass}
+          isPlatformOwner={platformOwner}
+          isSchoolAdmin={schoolAdmin}
+          isTemporaryOwner={temporaryOwner}
+          onClose={closeAccountModal}
+          onProfileSaved={({ email, name }) => {
+            setLoadedAccountEmail(email);
+            setLoadedAccountName(name);
+          }}
+          schoolName={schoolName}
+        />
+      )}
     </header>
   );
 }

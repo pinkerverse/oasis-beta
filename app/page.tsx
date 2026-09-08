@@ -1678,6 +1678,7 @@ const [accountSchoolName, setAccountSchoolName] = useState("");
 const [accountRole, setAccountRole] = useState("");
 const [accountMode, setAccountMode] = useState("");
 const [accountTemporaryOwner, setAccountTemporaryOwner] = useState(false);
+const [accountPlatformOwner, setAccountPlatformOwner] = useState(false);
 const [accountContextLoading, setAccountContextLoading] =
   useState(false);
 const [accountSaving, setAccountSaving] = useState(false);
@@ -1722,6 +1723,7 @@ async function loadAccount() {
       typeof context.accountMode === "string" ? context.accountMode : ""
     );
     setAccountTemporaryOwner(context.isTemporaryOwner === true);
+    setAccountPlatformOwner(context.isPlatformOwner === true);
   }
 
   setAccountContextLoading(false);
@@ -12012,6 +12014,35 @@ onClick={() => {
             </span>
           </button>
         </div>
+
+        {accountPlatformOwner && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowSettings(false);
+              router.push("/oasis-admin/beta-access");
+            }}
+            className="group mt-3 flex w-full items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-50 px-5 py-4 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+          >
+            <span>
+              <span className="block text-xs font-bold uppercase tracking-wide text-indigo-700">
+                OASIS owner tools
+              </span>
+              <span className="mt-1 block font-bold text-slate-900">
+                Beta access and invitations
+              </span>
+              <span className="mt-1 block text-sm text-slate-600">
+                Invite new settings, review access requests and track invitations.
+              </span>
+            </span>
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold text-indigo-700 shadow-sm transition group-hover:translate-x-0.5 group-hover:bg-indigo-600 group-hover:text-white"
+              aria-hidden="true"
+            >
+              →
+            </span>
+          </button>
+        )}
       </section>
 
       <div className="mt-7 grid gap-6 lg:grid-cols-2">
