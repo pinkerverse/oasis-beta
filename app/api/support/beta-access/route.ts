@@ -1,6 +1,8 @@
 import nodemailer from "nodemailer";
 import { NextResponse } from "next/server";
 
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
 export const runtime = "nodejs";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -133,19 +135,61 @@ export async function POST(request: Request) {
       );
     }
 
+    const now = new Date().toISOString();
+    const { data: existingRequest, error: existingRequestError } =
+      await supabaseAdmin
+        .from("beta_access_requests")
+        .select("id")
+        .eq("email", email)
+        .eq("status", "requested")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (existingRequestError) {
+      console.error("Could not check existing beta request:", existingRequestError);
+      return NextResponse.json(
+        { error: "Your request could not be saved. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    const requestValues = {
+      name,
+      email,
+      school_name: school,
+      role,
+      note: note || null,
+      updated_at: now,
+    };
+    const saveResult = existingRequest
+      ? await supabaseAdmin
+          .from("beta_access_requests")
+          .update(requestValues)
+          .eq("id", existingRequest.id)
+      : await supabaseAdmin.from("beta_access_requests").insert(requestValues);
+
+    if (saveResult.error) {
+      console.error("Could not save beta request:", saveResult.error);
+      return NextResponse.json(
+        { error: "Your request could not be saved. Please try again." },
+        { status: 500 }
+      );
+    }
+
     const supportEmail = process.env.OASIS_SUPPORT_EMAIL;
     const gmailUser = process.env.OASIS_SUPPORT_GMAIL_USER;
     const gmailAppPassword = process.env.OASIS_SUPPORT_GMAIL_APP_PASSWORD;
 
     if (!supportEmail || !gmailUser || !gmailAppPassword) {
-      console.error("OASIS beta access email configuration is incomplete.");
-      return NextResponse.json(
-        {
-          error:
-            "Beta access requests are temporarily unavailable. Please try again later.",
-        },
-        { status: 503 }
+      console.warn(
+        "OASIS beta access notification email is not configured; the request was saved."
       );
+      return NextResponse.json({
+        success: true,
+        message:
+          "Thanks—your request has been received. We’ll contact you about beta access.",
+      });
     }
 
     const transporter = nodemailer.createTransport({
@@ -157,15 +201,16 @@ export async function POST(request: Request) {
     });
     const safeSchoolForSubject = school.replace(/[\r\n]+/g, " ").slice(0, 80);
 
-    await transporter.sendMail({
-      from: {
-        name: "OASIS Beta",
-        address: gmailUser,
-      },
-      to: supportEmail,
-      replyTo: email,
-      subject: `OASIS Beta Access Request — ${safeSchoolForSubject}`,
-      text: `
+    try {
+      await transporter.sendMail({
+        from: {
+          name: "OASIS Beta",
+          address: gmailUser,
+        },
+        to: supportEmail,
+        replyTo: email,
+        subject: `OASIS Beta Access Request — ${safeSchoolForSubject}`,
+        text: `
 OASIS Beta Access Request
 
 Name:
@@ -182,13 +227,19 @@ ${role}
 
 What they would like to use OASIS for:
 ${note || "Not provided"}
-      `.trim(),
-    });
+        `.trim(),
+      });
+    } catch (notificationError) {
+      console.error(
+        "Beta access request was saved, but its notification email failed:",
+        notificationError
+      );
+    }
 
     return NextResponse.json({
       success: true,
       message:
-        "Thanks—your request has been sent. We’ll contact you about beta access.",
+        "Thanks—your request has been received. We’ll contact you about beta access.",
     });
   } catch (error) {
     console.error("Beta access request failed:", error);

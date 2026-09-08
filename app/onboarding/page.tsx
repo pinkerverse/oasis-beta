@@ -50,6 +50,7 @@ export default function OnboardingPage() {
 
   const [currentStep, setCurrentStep] = useState(-1);
   const [accountMode, setAccountMode] = useState<AccountMode | null>(null);
+  const [invitedAccountMode, setInvitedAccountMode] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState("");
 
   const [schoolName, setSchoolName] = useState("");
@@ -74,14 +75,15 @@ export default function OnboardingPage() {
       setIsLoading(true);
       setError("");
 
-      const response = await fetch(
-        "/api/onboarding/school",
-        {
-          cache: "no-store",
-        }
-      );
+      const [response, invitationResponse] = await Promise.all([
+        fetch("/api/onboarding/school", { cache: "no-store" }),
+        fetch("/api/platform/invitations/current", { cache: "no-store" }),
+      ]);
 
-      const result = await response.json();
+      const [result, invitationResult] = await Promise.all([
+        response.json(),
+        invitationResponse.json().catch(() => ({})),
+      ]);
 
       if (!response.ok) {
         throw new Error(
@@ -107,6 +109,17 @@ export default function OnboardingPage() {
           setAccountMode(result.accountMode);
           setCurrentStep(0);
         }
+      } else if (
+        invitationResponse.ok &&
+        typeof invitationResult.invitation?.schoolName === "string" &&
+        (invitationResult.invitation.accountMode === "teacher" ||
+          invitationResult.invitation.accountMode === "school_admin" ||
+          invitationResult.invitation.accountMode === "both")
+      ) {
+        setSchoolName(invitationResult.invitation.schoolName);
+        setAccountMode(invitationResult.invitation.accountMode);
+        setInvitedAccountMode(true);
+        setCurrentStep(0);
       }
     } catch (error) {
       setError(
@@ -421,9 +434,15 @@ export default function OnboardingPage() {
 
   const journeySteps =
     accountMode === "school_admin"
-      ? ["Your role", "School", "Academic Year", "Framework", "Assessment Setup"]
+      ? [
+          ...(invitedAccountMode ? [] : ["Your role"]),
+          "School",
+          "Academic Year",
+          "Framework",
+          "Assessment Setup",
+        ]
       : [
-          "Your role",
+          ...(invitedAccountMode ? [] : ["Your role"]),
           "School",
           "Academic Year",
           "Learners",
@@ -529,6 +548,25 @@ export default function OnboardingPage() {
                 School
               </h2>
 
+              {invitedAccountMode && accountMode && (
+                <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-cyan-800">
+                    Your invited access
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {accountMode === "school_admin"
+                      ? "School leader"
+                      : accountMode === "both"
+                        ? "School leader and teacher"
+                        : "Teacher"}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    OASIS has prepared this role for you. Confirm the school
+                    details below to continue.
+                  </p>
+                </div>
+              )}
+
               <div className="mt-8 space-y-6">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700">
@@ -583,17 +621,21 @@ export default function OnboardingPage() {
               )}
 
               <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentStep(-1);
-                    setDuplicateWarning("");
-                    setError("");
-                  }}
-                  className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700"
-                >
-                  Back
-                </button>
+                {invitedAccountMode ? (
+                  <span />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentStep(-1);
+                      setDuplicateWarning("");
+                      setError("");
+                    }}
+                    className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700"
+                  >
+                    Back
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void saveSchool(false)}

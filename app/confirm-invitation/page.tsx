@@ -30,10 +30,14 @@ export default async function ConfirmInvitationPage({
 }) {
   const query = await searchParams;
   const tokenHash = singleValue(query.token_hash);
+  const betaInvitation = singleValue(query.kind) === "beta";
   const validInvitation =
     singleValue(query.type) === "invite" && isValidTokenHash(tokenHash);
+  const invitationDestination = betaInvitation
+    ? "/accept-invitation?kind=beta"
+    : "/accept-invitation";
   const confirmationHref = validInvitation
-    ? `/auth/confirm?token_hash=${encodeURIComponent(tokenHash)}&type=invite&next=${encodeURIComponent("/accept-invitation")}`
+    ? `/auth/confirm?token_hash=${encodeURIComponent(tokenHash)}&type=invite&next=${encodeURIComponent(invitationDestination)}`
     : "";
 
   return (
@@ -56,15 +60,17 @@ export default async function ConfirmInvitationPage({
           {validInvitation ? (
             <>
               <p className="text-sm font-semibold text-cyan-800">
-                Secure school invitation
+                {betaInvitation
+                  ? "Secure OASIS beta invitation"
+                  : "Secure school invitation"}
               </p>
               <h1 className="mt-1 text-2xl font-bold text-slate-900">
                 You’ve been invited to OASIS
               </h1>
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Continue only if you expected this invitation. The next step
-                confirms your email and shows the school or class you are
-                joining before your account is completed.
+                confirms your email and shows what your OASIS access includes
+                before your account is completed.
               </p>
 
               <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-6 text-cyan-950">
@@ -89,7 +95,7 @@ export default async function ConfirmInvitationPage({
                 This invitation link is incomplete
               </h1>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Ask your school administrator to resend the invitation from
+                Ask the person who invited you to resend the invitation from
                 OASIS. A fresh email will replace the previous link.
               </p>
             </>

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -16,27 +17,34 @@ export default function AcceptInvitationPage() {
   const [loading, setLoading] = useState(false);
   const [schoolName, setSchoolName] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
+  const [personalMessage, setPersonalMessage] = useState("");
+  const [startingRole, setStartingRole] = useState("");
   const [invitationKind, setInvitationKind] = useState<
-    "class" | "school-admin" | "school-owner"
+    "class" | "school-admin" | "school-owner" | "platform-beta"
   >("class");
   const [checkingInvitation, setCheckingInvitation] = useState(true);
+  const [invitationAvailable, setInvitationAvailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadInvitation() {
       try {
-        const response = await fetch(
-          "/api/team/invitations/current",
-          { cache: "no-store" }
-        );
-        const result = await response.json().catch(() => ({}));
+        const [response, platformResponse] = await Promise.all([
+          fetch("/api/team/invitations/current", { cache: "no-store" }),
+          fetch("/api/platform/invitations/current", { cache: "no-store" }),
+        ]);
+        const [result, platformResult] = await Promise.all([
+          response.json().catch(() => ({})),
+          platformResponse.json().catch(() => ({})),
+        ]);
 
         if (
           !cancelled &&
           response.ok &&
           typeof result.invitation?.school?.name === "string"
         ) {
+          setInvitationAvailable(true);
           setSchoolName(result.invitation.school.name);
           setWorkspaceName(
             typeof result.invitation?.workspace?.name === "string"
@@ -49,6 +57,32 @@ export default function AcceptInvitationPage() {
               : result.invitation.teachingAccess
                 ? "class"
                 : "school-admin"
+          );
+        } else if (
+          !cancelled &&
+          platformResponse.ok &&
+          typeof platformResult.invitation?.schoolName === "string"
+        ) {
+          setInvitationAvailable(true);
+          const invitedMode = platformResult.invitation.accountMode;
+          setInvitationKind("platform-beta");
+          setSchoolName(platformResult.invitation.schoolName);
+          setName(
+            typeof platformResult.invitation.name === "string"
+              ? platformResult.invitation.name
+              : ""
+          );
+          setPersonalMessage(
+            typeof platformResult.invitation.personalMessage === "string"
+              ? platformResult.invitation.personalMessage
+              : ""
+          );
+          setStartingRole(
+            invitedMode === "school_admin"
+              ? "School leader"
+              : invitedMode === "both"
+                ? "School leader and teacher"
+                : "Teacher"
           );
         }
       } finally {
@@ -92,7 +126,7 @@ export default function AcceptInvitationPage() {
 
       if (updateError) throw updateError;
 
-      if (schoolName) {
+      if (schoolName && invitationKind !== "platform-beta") {
         const response = await fetch(
           "/api/team/invitations/current",
           { method: "POST" }
@@ -142,13 +176,27 @@ export default function AcceptInvitationPage() {
         </div>
 
         <div className="px-7 pb-8 pt-6">
-          <p className="text-sm font-semibold text-cyan-800">Invitation accepted</p>
+          <p className="text-sm font-semibold text-cyan-800">
+            {checkingInvitation
+              ? "Checking invitation"
+              : invitationAvailable
+                ? "Invitation accepted"
+                : "Invitation unavailable"}
+          </p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">
-            Welcome to OASIS
+            {checkingInvitation || invitationAvailable
+              ? "Welcome to OASIS"
+              : "This invitation cannot be used"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            {schoolName
-              ? invitationKind === "class"
+            {checkingInvitation
+              ? "Confirming what your invitation includes…"
+              : !invitationAvailable
+                ? "It may have expired, been replaced, or been revoked. Ask the person who invited you to send a fresh invitation."
+                : schoolName
+              ? invitationKind === "platform-beta"
+                ? `Add your name and choose a password. You’ll then set up ${schoolName} with your ${startingRole.toLowerCase()} access already prepared.`
+                : invitationKind === "class"
                 ? `Add your name and choose a password. You are joining ${schoolName} as an educator; your class access will be ready for you.`
                 : invitationKind === "school-owner"
                   ? `Add your name and choose a password. You are accepting responsibility for the ${schoolName} OASIS account.`
@@ -156,10 +204,12 @@ export default function AcceptInvitationPage() {
               : "Add your name and choose a password, then we’ll guide you through setting up your school and class."}
           </p>
 
-          {schoolName && (
+          {invitationAvailable && schoolName && (
             <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800">
-                School invitation
+                {invitationKind === "platform-beta"
+                  ? "OASIS beta invitation"
+                  : "School invitation"}
               </p>
               <p className="mt-1 font-semibold text-slate-900">
                 {workspaceName
@@ -167,15 +217,23 @@ export default function AcceptInvitationPage() {
                   : schoolName}
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-600">
-                {invitationKind === "class"
+                {invitationKind === "platform-beta"
+                  ? `${startingRole} access is included. You’ll confirm your school details during the next step.`
+                  : invitationKind === "class"
                   ? "You will use your own sign-in. If this invitation names an existing class, you will share its learners and evidence with the other educators."
                   : invitationKind === "school-owner"
                     ? "Ownership changes only after you complete this secure acceptance step."
                     : "Your school overview and administration tools will be available without an observation workspace."}
               </p>
+              {invitationKind === "platform-beta" && personalMessage && (
+                <p className="mt-3 border-t border-cyan-200 pt-3 text-sm leading-6 text-slate-700">
+                  {personalMessage}
+                </p>
+              )}
             </div>
           )}
 
+          {invitationAvailable ? (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
               <label htmlFor="name" className="text-sm font-semibold text-slate-700">
@@ -248,12 +306,22 @@ export default function AcceptInvitationPage() {
               {loading || checkingInvitation
                 ? "Preparing OASIS…"
                 : schoolName
-                  ? invitationKind === "class"
+                  ? invitationKind === "platform-beta"
+                    ? "Continue to school setup"
+                    : invitationKind === "class"
                     ? "Continue to OASIS"
                     : "Continue to School Overview"
                   : "Continue to school setup"}
             </button>
           </form>
+          ) : !checkingInvitation ? (
+            <Link
+              href="/login"
+              className="mt-6 block w-full rounded-xl bg-slate-900 px-4 py-3 text-center font-semibold text-white"
+            >
+              Return to OASIS sign in
+            </Link>
+          ) : null}
         </div>
       </div>
     </main>

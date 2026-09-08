@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getPendingPlatformInvitation } from "@/lib/platform-access";
 import { createClient } from "@/lib/supabase/server";
 import {
   getCurrentAccountContext,
@@ -93,12 +94,27 @@ export async function POST(request: Request) {
       ? body.country.trim()
       : "";
 
-  const accountMode =
+  const requestedAccountMode =
     typeof body.accountMode === "string" &&
     ACCOUNT_MODES.has(body.accountMode as AccountMode)
       ? (body.accountMode as AccountMode)
       : null;
   const confirmDuplicate = body.confirmDuplicate === true;
+
+  const userId = claimsData.claims.sub as string;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const platformInvitation = user?.email
+    ? await getPendingPlatformInvitation(userId, user.email)
+    : null;
+  const invitedAccountMode = platformInvitation?.account_mode;
+  const accountMode: AccountMode | null =
+    invitedAccountMode === "teacher" ||
+    invitedAccountMode === "school_admin" ||
+    invitedAccountMode === "both"
+      ? invitedAccountMode
+      : requestedAccountMode;
 
   if (!name || !country || !accountMode) {
     return NextResponse.json(
@@ -157,7 +173,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const userId = claimsData.claims.sub as string;
   const { data: membership, error: membershipError } = await supabaseAdmin
     .from("school_memberships")
     .select("school_id")
@@ -242,6 +257,36 @@ export async function POST(request: Request) {
       { error: "Your OASIS role could not be saved." },
       { status: 500 }
     );
+  }
+
+  if (platformInvitation) {
+    const invitationAcceptedAt = new Date().toISOString();
+    const { error: invitationUpdateError } = await supabaseAdmin
+      .from("platform_invitations")
+      .update({
+        auth_user_id: userId,
+        status: "accepted",
+        accepted_at: invitationAcceptedAt,
+        updated_at: invitationAcceptedAt,
+      })
+      .eq("id", platformInvitation.id)
+      .eq("status", "pending");
+
+    if (invitationUpdateError) {
+      console.error(
+        "School setup succeeded but the beta invitation was not finalised:",
+        invitationUpdateError
+      );
+    } else if (platformInvitation.beta_request_id) {
+      await supabaseAdmin
+        .from("beta_access_requests")
+        .update({
+          status: "accepted",
+          reviewed_at: invitationAcceptedAt,
+          updated_at: invitationAcceptedAt,
+        })
+        .eq("id", platformInvitation.beta_request_id);
+    }
   }
 
   const { data: preparedSchool } = await supabaseAdmin

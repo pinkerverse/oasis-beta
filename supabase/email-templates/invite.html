@@ -21,18 +21,32 @@
             </tr>
             <tr>
               <td style="padding:32px;">
+                {{ if eq .Data.invitation_type "platform_beta" }}
+                <div style="font-size:13px;font-weight:700;color:#0e7490;">OASIS BETA INVITATION</div>
+                {{ else }}
                 <div style="font-size:13px;font-weight:700;color:#0e7490;">SCHOOL INVITATION</div>
+                {{ end }}
                 <h1 style="margin:8px 0 0;font-size:26px;line-height:1.25;color:#0f172a;">You’ve been invited to OASIS</h1>
+                {{ if eq .Data.invitation_type "platform_beta" }}
+                <p style="margin:16px 0 0;font-size:16px;line-height:1.6;color:#475569;">
+                  OASIS has invited you to create a secure account and start setting up your school or early years setting.
+                </p>
+                {{ else }}
                 <p style="margin:16px 0 0;font-size:16px;line-height:1.6;color:#475569;">
                   A colleague has invited you to join their school on OASIS.
                 </p>
+                {{ end }}
                 <p style="margin:12px 0 0;font-size:16px;line-height:1.6;color:#475569;">
-                  Use the secure button below to review the invitation and create your own sign-in.
+                  Use the secure button below to review your access and create your own sign-in.
                 </p>
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:26px 0 22px;">
                   <tr>
                     <td style="border-radius:12px;background:#0f172a;">
+                      {{ if eq .Data.invitation_type "platform_beta" }}
+                      <a href="{{ .SiteURL }}/confirm-invitation?token_hash={{ .TokenHash }}&amp;type=invite&amp;kind=beta" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;">Review and accept invitation</a>
+                      {{ else }}
                       <a href="{{ .SiteURL }}/confirm-invitation?token_hash={{ .TokenHash }}&amp;type=invite" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;">Review and accept invitation</a>
+                      {{ end }}
                     </td>
                   </tr>
                 </table>

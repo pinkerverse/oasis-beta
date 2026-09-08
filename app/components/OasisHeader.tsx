@@ -85,6 +85,7 @@ export default function OasisHeader({
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
   const [hasClass, setHasClass] = useState(false);
   const [schoolAdmin, setSchoolAdmin] = useState(false);
+  const [platformOwner, setPlatformOwner] = useState(false);
   const hasLearnerSelection = selectedLearnerIds.length > 0;
   const accountName = suppliedAccountName || loadedAccountName;
   const accountEmail = suppliedAccountEmail || loadedAccountEmail;
@@ -117,6 +118,7 @@ export default function OasisHeader({
         if (cancelled) return;
         setHasClass(account.hasClass === true);
         setSchoolAdmin(account.isSchoolAdmin === true);
+        setPlatformOwner(account.isPlatformOwner === true);
       }
     }
 
@@ -397,6 +399,16 @@ export default function OasisHeader({
                       Class Attainment
                     </Link>
                   </div>
+                )}
+
+                {platformOwner && (
+                  <Link
+                    href="/oasis-admin/beta-access"
+                    role="menuitem"
+                    className="mt-1 block w-full rounded-xl bg-gradient-to-r from-cyan-50 to-indigo-50 px-3 py-2 text-left text-sm font-semibold text-cyan-900 hover:from-cyan-100 hover:to-indigo-100"
+                  >
+                    OASIS Beta Access
+                  </Link>
                 )}
 
                 {hasClass ? (
