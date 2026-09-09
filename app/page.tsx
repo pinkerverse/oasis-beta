@@ -2595,7 +2595,7 @@ const buildFocusItems = (
         }
       }
 
-      const focusArea = [...activeAreas].sort(
+      const rankedFocusAreas = [...activeAreas].sort(
         (first, second) => {
           const firstScore = getAreaFocusPriorityScore({
             areaName: first.name,
@@ -2614,7 +2614,16 @@ const buildFocusItems = (
 
           return firstScore - secondScore;
         }
-      )[0];
+      );
+      const rotatingAreaPool = rankedFocusAreas.slice(
+        0,
+        Math.min(3, rankedFocusAreas.length)
+      );
+      const focusArea = rotatingAreaPool.length
+        ? rotatingAreaPool[
+            (focusDayNumber + learnerIndex) % rotatingAreaPool.length
+          ]
+        : undefined;
       const focusAreaLastSeen = focusArea
         ? latestAreaEvidence.get(focusArea.name) ?? null
         : null;
@@ -2770,9 +2779,7 @@ const buildFocusItems = (
               step.trim().length > 0
           )
         : null;
-      const tieBreaker =
-        (learnerIndex + focusDayNumber) %
-        Math.max(pupils.length, 1);
+      const tieBreaker = learnerIndex;
 
       const observe: TodaysFocusItem & {
         score: number;
@@ -2796,7 +2803,7 @@ const buildFocusItems = (
           !focusAreaLastSeen && academicYearReadiness.phase === "settling"
             ? `It is week ${academicYearReadiness.week ?? "early"} of the academic year, so OASIS has chosen a foundation step in ${focusArea?.name ?? "this learning area"} before the fuller objective.`
             : focusAreaLastSeen
-              ? `This is ${learnerName.split(" ")[0]}’s least recently evidenced learning area, and the suggested step is based on what has already been seen.`
+              ? `This is one of ${learnerName.split(" ")[0]}’s least recently evidenced learning areas. OASIS rotates these opportunities through the week, and the suggested step is based on what has already been seen.`
               : `The current records do not yet show how ${learnerName.split(" ")[0]} approaches ${focusArea?.name ?? "this learning area"}. OASIS has selected a neutral opportunity to learn more, not identified a learning deficit.`,
         frameworkStatement:
           frameworkFocus?.statement.text ||
@@ -2922,7 +2929,7 @@ const buildFocusItems = (
     }
   );
 
-  const byLowestScore = <
+  const byPriority = <
     T extends { score: number; tieBreaker: number },
   >(
     first: T,
@@ -2930,6 +2937,20 @@ const buildFocusItems = (
   ) =>
     first.score - second.score ||
     first.tieBreaker - second.tieBreaker;
+  const rotateForFocusDay = <
+    T extends { score: number; tieBreaker: number },
+  >(
+    candidates: T[]
+  ) => {
+    const ordered = [...candidates].sort(byPriority);
+
+    if (ordered.length < 2) {
+      return ordered;
+    }
+
+    const offset = focusDayNumber % ordered.length;
+    return [...ordered.slice(offset), ...ordered.slice(0, offset)];
+  };
   const selected: TodaysFocusItem[] = [];
   const selectedLearners = new Set<string>();
   const addItem = (item?: TodaysFocusItem | null) => {
@@ -2943,45 +2964,40 @@ const buildFocusItems = (
     }
   };
 
-  addItem(
-    learnerCandidates
-      .filter(
-        (candidate) =>
-          candidate.weeklyObservationCount < weeklyObservationTarget ||
-          candidate.hasImportantFollowUp
-      )
-      .map(({ support }) => support)
-      .filter(
-        (item): item is NonNullable<typeof item> =>
-          item !== null &&
-          !selectedLearners.has(item.learnerId)
-      )
-      .sort(byLowestScore)[0]
-  );
-
-  addItem(
-    learnerCandidates
-      .filter(
-        (candidate) =>
-          candidate.weeklyObservationCount < weeklyObservationTarget ||
-          candidate.hasImportantFollowUp
-      )
-      .map(({ stretch }) => stretch)
-      .filter(
-        (item): item is NonNullable<typeof item> =>
-          item !== null &&
-          !selectedLearners.has(item.learnerId)
-      )
-      .sort(byLowestScore)[0]
-  );
-
-  const observeCandidates = learnerCandidates
+  const supportCandidates = learnerCandidates
     .filter(
-      ({ weeklyObservationCount }) =>
-        weeklyObservationCount < weeklyObservationTarget
+      (candidate) =>
+        candidate.weeklyObservationCount < weeklyObservationTarget ||
+        candidate.hasImportantFollowUp
     )
-    .map(({ observe }) => observe)
-    .sort(byLowestScore);
+    .map(({ support }) => support)
+    .filter(
+      (item): item is NonNullable<typeof item> =>
+        item !== null && !selectedLearners.has(item.learnerId)
+    );
+  addItem(rotateForFocusDay(supportCandidates)[0]);
+
+  const stretchCandidates = learnerCandidates
+    .filter(
+      (candidate) =>
+        candidate.weeklyObservationCount < weeklyObservationTarget ||
+        candidate.hasImportantFollowUp
+    )
+    .map(({ stretch }) => stretch)
+    .filter(
+      (item): item is NonNullable<typeof item> =>
+        item !== null && !selectedLearners.has(item.learnerId)
+    );
+  addItem(rotateForFocusDay(stretchCandidates)[0]);
+
+  const observeCandidates = rotateForFocusDay(
+    learnerCandidates
+      .filter(
+        ({ weeklyObservationCount }) =>
+          weeklyObservationCount < weeklyObservationTarget
+      )
+      .map(({ observe }) => observe)
+  );
   const selectedFocusContexts = new Set(
     selected.map(
       (item) => `${item.area}|${item.frameworkStatement}`
@@ -12648,7 +12664,7 @@ onClick={() => {
           <p className="mt-1 text-slate-500">
             {focusCoverageComplete
               ? "Weekly coverage is complete, so the emphasis shifts to one shared learning opportunity."
-              : `One shared class opportunity, alongside purposeful noticing for learners still building this week’s evidence picture${
+              : `One shared class opportunity, with individual priorities that rotate each day for learners still building this week’s evidence picture${
                   focusDay === "tomorrow" && tomorrowFocusAvailable
                     ? " tomorrow."
                     : " today."
