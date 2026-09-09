@@ -199,6 +199,7 @@ const [learnerObservations, setLearnerObservations] = useState<any[]>([]);
 const [classObservations, setClassObservations] = useState<any[]>([]);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const [previewLearnerId, setPreviewLearnerId] = useState<string | null>(null);
   const [loadingJournal, setLoadingJournal] = useState(false);
   const [observation, setObservation] = useState("");
   const [observationDate, setObservationDate] = useState(
@@ -5966,7 +5967,22 @@ if (checkingOnboarding) {
       <button
         key={`${child.firstName}-${child.lastName}`}
         type="button"
-        onClick={() => toggleChild(child.id)}
+        onClick={() => {
+          toggleChild(child.id);
+          setPreviewLearnerId(null);
+        }}
+        onMouseEnter={() => setPreviewLearnerId(child.id)}
+        onMouseLeave={() =>
+          setPreviewLearnerId((current) =>
+            current === child.id ? null : current
+          )
+        }
+        onFocus={() => setPreviewLearnerId(child.id)}
+        onBlur={() =>
+          setPreviewLearnerId((current) =>
+            current === child.id ? null : current
+          )
+        }
         className="group relative flex flex-col items-center"
         aria-pressed={selectedChildren.includes(child.id)}
         aria-label={`${child.firstName} ${child.lastName}: ${evidenceStatus.count} of ${weeklyObservationTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
@@ -6001,7 +6017,11 @@ if (checkingOnboarding) {
   {child.firstName}
 </span>
 
-<div className="pointer-events-none absolute left-0 top-full z-50 mt-3 hidden w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block group-focus:block">
+<div
+  className={`pointer-events-none absolute left-0 top-full z-50 mt-3 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl ${
+    previewLearnerId === child.id ? "block" : "hidden"
+  }`}
+>
 
   <p className="font-semibold text-slate-900">
     {child.firstName} {child.lastName}
