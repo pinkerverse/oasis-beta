@@ -3079,15 +3079,6 @@ const sharedFocus = (() => {
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
 
-  const orderedGroups = [...groups.values()].sort(
-    (first, second) =>
-      second.length - first.length ||
-      first[0].guidanceId.localeCompare(second[0].guidanceId)
-  );
-  const strongestGroupSize = orderedGroups[0]?.length ?? 0;
-  const strongestGroups = orderedGroups.filter(
-    (candidateGroup) => candidateGroup.length === strongestGroupSize
-  );
   const sharedFocusDate = new Date(
     focusDay === "tomorrow" && tomorrowFocusAvailable
       ? focusTomorrow
@@ -3098,14 +3089,118 @@ const sharedFocus = (() => {
   const sharedFocusWeekNumber = Math.floor(
     sharedFocusDate.setHours(0, 0, 0, 0) / 86400000
   );
-  const group = strongestGroups.length
-    ? strongestGroups[sharedFocusWeekNumber % strongestGroups.length]
-    : undefined;
-  const representative = group?.[0];
+  type SharedFocusTheme =
+    | "maths"
+    | "language"
+    | "social";
+  const themePatterns: Record<SharedFocusTheme, RegExp> = {
+    maths:
+      /math|number|count|quantity|pattern|shape|space|measure|sort|classif|position/i,
+    language:
+      /communication|language|literacy|phon|reading|writing|vocabulary|story|listen/i,
+    social:
+      /social|emotion|relationship|collaborat|self.?regulat|community|friend/i,
+  };
+  const weeklyThemeRotation: SharedFocusTheme[] = [
+    "maths",
+    "language",
+    "maths",
+    "social",
+    "language",
+    "maths",
+  ];
+  const scheduledTheme =
+    weeklyThemeRotation[
+      sharedFocusWeekNumber % weeklyThemeRotation.length
+    ];
+  const matchesTheme = (
+    area: string,
+    frameworkStatement: string
+  ) => themePatterns[scheduledTheme].test(`${area} ${frameworkStatement}`);
+  const orderedGroups = [...groups.values()].sort(
+    (first, second) =>
+      second.length - first.length ||
+      first[0].guidanceId.localeCompare(second[0].guidanceId)
+  );
+  const isEligibleSharedFocus = (
+    area: string,
+    frameworkStatement: string
+  ) => {
+    const focusContext = `${area} ${frameworkStatement}`;
+
+    if (/information literacy|research|critical thinking/i.test(focusContext)) {
+      return false;
+    }
+
+    return Object.values(themePatterns).some((pattern) =>
+      pattern.test(focusContext)
+    );
+  };
+  const eligibleGroups = orderedGroups.filter((candidateGroup) =>
+    isEligibleSharedFocus(
+      candidateGroup[0].area,
+      candidateGroup[0].frameworkStatement
+    )
+  );
+  const scheduledGroups = eligibleGroups.filter((candidateGroup) =>
+    matchesTheme(
+      candidateGroup[0].area,
+      candidateGroup[0].frameworkStatement
+    )
+  );
+  const group =
+    scheduledGroups[0] ??
+    (eligibleGroups.length
+      ? eligibleGroups[sharedFocusWeekNumber % eligibleGroups.length]
+      : orderedGroups[0]);
+  const baseRepresentative = group?.[0];
+
+  const eligibleFrameworkStatements = activeFramework.areaDefinitions.flatMap(
+    (area) =>
+      area.statements
+        .filter((statement) =>
+          isEligibleSharedFocus(area.name, statement.text)
+        )
+        .map((statement) => ({ area, statement }))
+  );
+  const scheduledFrameworkStatements = eligibleFrameworkStatements.filter(
+    ({ area, statement }) => matchesTheme(area.name, statement.text)
+  );
+  const frameworkChoices = scheduledFrameworkStatements.length
+    ? scheduledFrameworkStatements
+    : eligibleFrameworkStatements;
+  const scheduledFrameworkChoice = frameworkChoices.length
+    ? frameworkChoices[sharedFocusWeekNumber % frameworkChoices.length]
+    : null;
+  const representative =
+    baseRepresentative && scheduledFrameworkChoice && scheduledGroups.length === 0
+      ? {
+          ...baseRepresentative,
+          guidanceId: createFocusGuidanceId(
+            sharedFocusDate,
+            baseRepresentative.learnerId,
+            "Observe",
+            `${scheduledFrameworkChoice.area.name}|${scheduledFrameworkChoice.statement.text}|shared`
+          ),
+          area: scheduledFrameworkChoice.area.name,
+          frameworkStatement: scheduledFrameworkChoice.statement.text,
+          progressionLabel: null,
+          lookFor:
+            scheduledFrameworkChoice.statement.guidance ||
+            `Notice how children respond to this learning opportunity: ${scheduledFrameworkChoice.statement.text}`,
+          prompt: null,
+        }
+      : baseRepresentative &&
+          isEligibleSharedFocus(
+            baseRepresentative.area,
+            baseRepresentative.frameworkStatement
+          )
+        ? baseRepresentative
+        : null;
 
   if (!representative) return null;
 
-  const relatedLearners = displayedFocusPlan.learnerCandidates
+  const areaRelatedLearners = displayedFocusPlan.learnerCandidates
     .filter(
       (candidate) =>
         candidate.observe.area === representative.area ||
@@ -3119,7 +3214,19 @@ const sharedFocus = (() => {
     .filter(
       (learner, index, all) =>
         all.findIndex((candidate) => candidate.id === learner.id) === index
-    )
+    );
+  const relatedLearners = (areaRelatedLearners.length
+    ? areaRelatedLearners
+    : displayedFocusPlan.learnerCandidates
+        .slice()
+        .sort(
+          (first, second) =>
+            first.weeklyObservationCount - second.weeklyObservationCount
+        )
+        .map((candidate) => ({
+          id: candidate.observe.learnerId,
+          name: candidate.observe.learnerName,
+        })))
     .slice(0, 3);
 
   return {
@@ -3133,7 +3240,8 @@ const sharedFocus = (() => {
         .map((candidate) => candidate.stretch)
         .find((item) => item?.area === representative.area) ?? null,
     relatedLearners,
-    evidenceLed: evidenceLedItems.length > 0,
+    evidenceLed:
+      evidenceLedItems.length > 0 && scheduledGroups.length > 0,
   };
 })();
 const sharedFocusGuidance = sharedFocus
@@ -3158,6 +3266,107 @@ const sharedFocusMoment = (() => {
     new Date(selectedFocusDate).setHours(0, 0, 0, 0) / 86400000
   );
   const context = `${sharedFocus.representative.area} ${sharedFocus.representative.frameworkStatement}`.toLowerCase();
+
+  if (
+    /math|number|count|quantity|pattern|shape|space|measure|sort|classif|position/.test(
+      context
+    )
+  ) {
+    const mathsMoments = [
+      {
+        title: "Count five objects—without losing track",
+        materials:
+          "Five blocks, animals, buttons or other small objects already in the room.",
+        steps: [
+          "Place the five objects in a loose group and ask, ‘How many are here?’",
+          "Count together while one child moves each object into a line, touching one object for each number word.",
+          "Spread the same objects out and ask whether there are still five. Count once more to check.",
+        ],
+        questions: [
+          "How can we make sure we count each one once?",
+          "Did the number change when we moved them?",
+        ],
+        notice:
+          "Whether children match one number word to each object and understand that moving the objects does not change how many there are.",
+        whyItMatters:
+          "For 3- and 4-year-olds, accurate counting is more than reciting numbers. Moving and touching each object builds one-to-one correspondence and helps children understand that the final number tells how many are in the whole group.",
+      },
+      {
+        title: "Which group has more?",
+        materials:
+          "Two plates or hoops, with two objects in one and four in the other.",
+        steps: [
+          "Show both groups for a few seconds and invite children to point to the group they think has more.",
+          "Move the objects into pairs—one from each group—until one side has objects left over.",
+          "Name the result together: ‘Four is more than two; two is fewer than four.’",
+        ],
+        questions: [
+          "Which group has more? How could we check?",
+          "What do the objects left over tell us?",
+        ],
+        notice:
+          "Whether children compare the quantities rather than the space the objects take up and use more or fewer meaningfully.",
+        whyItMatters:
+          "Comparing small quantities helps young children develop a sense of number size. Pairing the objects gives them a visible way to prove which group has more instead of relying only on appearance.",
+      },
+      {
+        title: "Copy and continue a tiny pattern",
+        materials:
+          "Six objects in two contrasting types, such as three blocks and three toy animals.",
+        steps: [
+          "Make a short pattern: block, animal, block, animal. Say each item as you point.",
+          "Invite one child to copy it with the remaining objects.",
+          "Pause before the next place and let the group decide what should come next and why.",
+        ],
+        questions: [
+          "What keeps repeating?",
+          "What comes next? How do you know?",
+        ],
+        notice:
+          "Whether children attend to the repeating unit, copy its order and use that structure to predict the next item.",
+        whyItMatters:
+          "Recognising repetition helps children predict, organise and generalise. These are early algebraic habits that also support memory, music, movement and everyday routines.",
+      },
+      {
+        title: "Find something with the same shape",
+        materials:
+          "One familiar shape to show, such as a round lid, square card or triangular block.",
+        steps: [
+          "Hold up the shape and trace its edge with your finger while children name what they notice.",
+          "Give everyone 20 seconds to look around and point to something with the same shape.",
+          "Compare two suggestions and name the matching feature, such as curved, three sides or four corners.",
+        ],
+        questions: [
+          "What do you notice about its edge or corners?",
+          "What makes your object the same shape?",
+        ],
+        notice:
+          "Whether children match by geometric features rather than colour, size or what the object is used for.",
+        whyItMatters:
+          "Finding shapes in real objects helps children move beyond memorising shape names. They begin to recognise defining features even when a shape is a different size, colour or orientation.",
+      },
+      {
+        title: "Which one is longer? Line it up and check",
+        materials:
+          "Two pencils, ribbons or blocks with clearly different lengths.",
+        steps: [
+          "Hold up both objects and ask children to predict which is longer.",
+          "Place them side by side, deliberately leaving the ends uneven, and ask whether that is a fair comparison.",
+          "Line up one end of each object and check which reaches farther. Name longer and shorter together.",
+        ],
+        questions: [
+          "How can we line them up fairly?",
+          "Which one reaches farther from the same starting point?",
+        ],
+        notice:
+          "Whether children know that the objects need the same starting point and use the endpoints to justify longer or shorter.",
+        whyItMatters:
+          "Direct comparison helps young children understand what length means. Aligning the starting points turns a visual guess into a simple mathematical method they can reuse during play and construction.",
+      },
+    ];
+
+    return mathsMoments[dayNumber % mathsMoments.length];
+  }
 
   if (/research|information literacy|source|data/.test(context)) {
     const researchMoments = [
@@ -3256,6 +3465,64 @@ const sharedFocusMoment = (() => {
     return researchMoments[dayNumber % researchMoments.length];
   }
 
+  if (/physical|motor|movement|balance|coordination/.test(context)) {
+    const movementMoments = [
+      {
+        title: "Freeze in three different balances",
+        materials: "A clear standing space; no extra equipment needed.",
+        steps: [
+          "Ask everyone to stand like a statue with two feet on the floor.",
+          "Try again with one foot slightly lifted, then with one hand touching the floor.",
+          "Hold each shape for three seconds and notice what helps the body stay still.",
+        ],
+        questions: [
+          "What helps your body stay steady?",
+          "Which balance felt easiest or hardest?",
+        ],
+        notice:
+          "Whether children adjust their feet, arms and gaze to regain balance and can hold a position briefly with control.",
+        whyItMatters:
+          "Short balance challenges strengthen body awareness, core control and the small adjustments children need for confident movement, dressing, climbing and seated learning.",
+      },
+      {
+        title: "Roll to a partner and stop the ball",
+        materials: "One soft ball and enough floor space for a small circle.",
+        steps: [
+          "Sit in a small circle and model pushing the ball with two hands towards one named child.",
+          "The receiving child traps it gently with both hands, names the next person and rolls it on.",
+          "Try one final round using a little less force so the ball stops inside the circle.",
+        ],
+        questions: [
+          "How much push does the ball need?",
+          "What can your hands do to stop it?",
+        ],
+        notice:
+          "Whether children adjust force and direction, track the moving ball and position both hands to receive it.",
+        whyItMatters:
+          "Rolling and stopping a ball gives immediate feedback about force, direction and timing while developing the coordination children use in shared physical play.",
+      },
+      {
+        title: "Copy this three-move sequence",
+        materials: "No equipment needed.",
+        steps: [
+          "Model three clear actions: clap, touch knees, reach up.",
+          "Repeat slowly as the group copies, then let children try while you only say the action words.",
+          "Invite one child to lead a new three-move sequence for everyone to copy.",
+        ],
+        questions: [
+          "Which movement comes next?",
+          "Can we keep the same order?",
+        ],
+        notice:
+          "Whether children coordinate each action, remember the order and move from watching a model to following a verbal cue.",
+        whyItMatters:
+          "Remembering and controlling a short movement sequence supports coordination, working memory and the ability to follow multi-step routines.",
+      },
+    ];
+
+    return movementMoments[dayNumber % movementMoments.length];
+  }
+
   const suggestion =
     sharedFocusGuidance.suggestions[
       dayNumber % sharedFocusGuidance.suggestions.length
@@ -3263,11 +3530,12 @@ const sharedFocusMoment = (() => {
 
   return {
     title: suggestion.title,
-    materials: "One familiar object, picture or example connected to the learning thread.",
+    materials:
+      "Two or three familiar classroom objects already within reach; no special preparation needed.",
     steps: [
-      `Gather the familiar materials or example needed for: ${suggestion.title.toLowerCase()}.`,
       suggestion.setup,
-      "Invite two or three responses, briefly name the learning you noticed, then return to the day’s routine.",
+      "Let several children try or respond at the same time, rather than turning it into a long turn-taking activity.",
+      "Name the skill in one sentence, then return to the day’s routine.",
     ],
     questions: suggestion.questions.slice(0, 2),
     notice: suggestion.notice,
@@ -5977,12 +6245,6 @@ if (checkingOnboarding) {
             current === child.id ? null : current
           )
         }
-        onFocus={() => setPreviewLearnerId(child.id)}
-        onBlur={() =>
-          setPreviewLearnerId((current) =>
-            current === child.id ? null : current
-          )
-        }
         className="group relative flex flex-col items-center"
         aria-pressed={selectedChildren.includes(child.id)}
         aria-label={`${child.firstName} ${child.lastName}: ${evidenceStatus.count} of ${weeklyObservationTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
@@ -6019,7 +6281,10 @@ if (checkingOnboarding) {
 
 <div
   className={`pointer-events-none absolute left-0 top-full z-50 mt-3 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl ${
-    previewLearnerId === child.id ? "block" : "hidden"
+    previewLearnerId === child.id &&
+    !selectedChildren.includes(child.id)
+      ? "block"
+      : "hidden"
   }`}
 >
 
@@ -12488,7 +12753,7 @@ onClick={() => {
                 Whole-class daily focus
               </span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                5–10 minutes
+                3–5 minutes
               </span>
             </div>
 
@@ -12505,7 +12770,7 @@ onClick={() => {
 
             <div className="mt-3 rounded-2xl border border-white bg-white p-4 shadow-sm sm:p-5">
               <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
-                Today’s Pre-K 3/4 mini-plan
+                Today’s quick whole-class activity
               </p>
               <h3 className="mt-1 text-lg font-bold text-slate-900">
                 {sharedFocusMoment.title}
@@ -12513,7 +12778,7 @@ onClick={() => {
 
               <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2.5">
                 <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
-                  Have ready
+                  You need
                 </p>
                 <p className="mt-1 text-sm leading-5 text-slate-700">
                   {sharedFocusMoment.materials}
