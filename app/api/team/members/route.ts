@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { getCurrentAccountContext } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
 
-export async function POST(request: Request) {
+export const dynamic = "force-dynamic";
+
+export async function DELETE(request: Request) {
   const origin = request.headers.get("origin");
 
   if (origin && origin !== new URL(request.url).origin) {
@@ -15,9 +17,9 @@ export async function POST(request: Request) {
 
   const context = await getCurrentAccountContext();
 
-  if (!context?.isSchoolOwner) {
+  if (!context?.isSchoolAdmin) {
     return NextResponse.json(
-      { error: "Only the current school owner can transfer ownership." },
+      { error: "School administrator access is required." },
       { status: 403 }
     );
   }
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
       {
         code: "mfa_required",
         error:
-          "Verify with your authenticator in My account before transferring school ownership.",
+          "Verify with your authenticator in My account before removing school access.",
       },
       { status: 428 }
     );
@@ -40,22 +42,25 @@ export async function POST(request: Request) {
 
   if (!userId) {
     return NextResponse.json(
-      { error: "Choose a school administrator." },
+      { error: "Choose a colleague to remove." },
       { status: 400 }
     );
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("transfer_school_ownership", {
-    p_new_owner_user_id: userId,
+  const { error } = await supabase.rpc("remove_school_member", {
+    p_target_user_id: userId,
   });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json(
+      { error: error.message || "School access could not be removed." },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json({
     success: true,
-    message: "School ownership transferred safely.",
+    message: "School and class access removed immediately.",
   });
 }

@@ -43,9 +43,12 @@ export default function TeamSettingsPage() {
     useState<AccessType>("class_educator");
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [hasClass, setHasClass] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [confirmTransferUserId, setConfirmTransferUserId] = useState("");
+  const [confirmRemoveUserId, setConfirmRemoveUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [resendingInvitationId, setResendingInvitationId] = useState("");
@@ -62,16 +65,21 @@ export default function TeamSettingsPage() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "The school team could not be loaded.");
       setLoading(false);
       return;
     }
 
+    setMfaRequired(false);
     setSchoolName(result.school?.name || "");
     setInvitations(result.invitations || []);
     setTeam(result.team || []);
     setHasClass(result.currentUser?.hasClass === true);
     setIsOwner(result.currentUser?.isOwner === true);
+    setCurrentUserId(result.currentUser?.id || "");
     setAccessType((current) =>
       !result.currentUser?.hasClass && current === "class_educator"
         ? "new_class_teacher"
@@ -98,6 +106,9 @@ export default function TeamSettingsPage() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "The invitation could not be sent.");
       setSending(false);
       return;
@@ -125,6 +136,9 @@ export default function TeamSettingsPage() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "Ownership could not be transferred.");
       return;
     }
@@ -163,6 +177,9 @@ export default function TeamSettingsPage() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "The invitation could not be revoked.");
       return;
     }
@@ -184,6 +201,9 @@ export default function TeamSettingsPage() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "A fresh invitation could not be sent.");
       setResendingInvitationId("");
       return;
@@ -191,6 +211,35 @@ export default function TeamSettingsPage() {
 
     setMessage(result.message || "A fresh invitation was sent.");
     setResendingInvitationId("");
+    await loadTeam();
+  }
+
+  async function removeMember(userId: string) {
+    if (confirmRemoveUserId !== userId) {
+      setConfirmRemoveUserId(userId);
+      setConfirmTransferUserId("");
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    const response = await fetch("/api/team/members", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
+      setError(result.error || "School access could not be removed.");
+      return;
+    }
+
+    setConfirmRemoveUserId("");
+    setMessage(result.message || "School access removed.");
     await loadTeam();
   }
 
@@ -230,7 +279,24 @@ export default function TeamSettingsPage() {
             Class access and school administration remain separate.
           </p>
 
-          <form
+          {mfaRequired && (
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="font-semibold text-amber-950">
+                Verify your administrator account first
+              </p>
+              <p className="mt-1 text-sm leading-6 text-amber-900">
+                Team and permission changes are protected by an authenticator code.
+              </p>
+              <Link
+                href="/?panel=settings"
+                className="mt-3 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              >
+                Open account security
+              </Link>
+            </div>
+          )}
+
+          {!mfaRequired && <form
             onSubmit={inviteColleague}
             className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.8fr)_auto]"
           >
@@ -259,12 +325,14 @@ export default function TeamSettingsPage() {
                 <option value="class_educator">Educator in my class</option>
               )}
               <option value="new_class_teacher">Teacher with a new class</option>
-              <option value="school_admin">School administrator only</option>
-              <option value="school_admin_teacher">
-                Administrator and teacher
-              </option>
               {isOwner && (
-                <option value="school_owner">New school owner</option>
+                <>
+                  <option value="school_admin">School administrator only</option>
+                  <option value="school_admin_teacher">
+                    Administrator and teacher
+                  </option>
+                  <option value="school_owner">New school owner</option>
+                </>
               )}
             </select>
             <button
@@ -274,7 +342,7 @@ export default function TeamSettingsPage() {
             >
               {sending ? "Sending…" : "Send invitation"}
             </button>
-          </form>
+          </form>}
 
           {error && (
             <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -301,6 +369,11 @@ export default function TeamSettingsPage() {
                 isOwner &&
                 !member.is_owner &&
                 (member.role === "admin" || member.role === "school_admin");
+              const canRemoveMember =
+                member.user_id !== currentUserId &&
+                !member.is_owner &&
+                (isOwner ||
+                  (member.role !== "admin" && member.role !== "school_admin"));
 
               return (
                 <div
@@ -319,20 +392,42 @@ export default function TeamSettingsPage() {
                     </p>
                   </div>
 
-                  {canReceiveOwnership && (
-                    <button
-                      type="button"
-                      onClick={() => void transferOwnership(member.user_id)}
-                      className={`self-start rounded-xl border px-4 py-2 text-sm font-semibold sm:self-auto ${
-                        confirmTransferUserId === member.user_id
-                          ? "border-amber-300 bg-amber-50 text-amber-900"
-                          : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      {confirmTransferUserId === member.user_id
-                        ? "Confirm ownership transfer"
-                        : "Make school owner"}
-                    </button>
+                  {(canReceiveOwnership || canRemoveMember) && (
+                    <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+                      {canReceiveOwnership && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmRemoveUserId("");
+                            void transferOwnership(member.user_id);
+                          }}
+                          className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                            confirmTransferUserId === member.user_id
+                              ? "border-amber-300 bg-amber-50 text-amber-900"
+                              : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          {confirmTransferUserId === member.user_id
+                            ? "Confirm ownership transfer"
+                            : "Make school owner"}
+                        </button>
+                      )}
+                      {canRemoveMember && (
+                        <button
+                          type="button"
+                          onClick={() => void removeMember(member.user_id)}
+                          className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                            confirmRemoveUserId === member.user_id
+                              ? "border-red-300 bg-red-50 text-red-800"
+                              : "border-slate-300 text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                          }`}
+                        >
+                          {confirmRemoveUserId === member.user_id
+                            ? "Confirm remove access"
+                            : "Remove access"}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               );

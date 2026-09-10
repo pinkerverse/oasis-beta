@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { isPlatformOwnerEmail } from "@/lib/platform-access";
+import { isPlatformAdministrator } from "@/lib/platform-access";
 import { getCurrentAccountContext } from "@/lib/supabase/current-workspace";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -19,7 +19,6 @@ export async function GET() {
   const [
     { data: school, error: schoolError },
     { data: workspaces },
-    { data: userData },
   ] =
     await Promise.all([
       supabaseAdmin
@@ -34,8 +33,9 @@ export async function GET() {
             .in("id", context.workspaceIds)
             .order("created_at", { ascending: true })
         : Promise.resolve({ data: [] }),
-      supabaseAdmin.auth.admin.getUserById(context.userId),
     ]);
+
+  const platformOwner = await isPlatformAdministrator(context.userId);
 
   if (schoolError) {
     return NextResponse.json(
@@ -54,7 +54,9 @@ export async function GET() {
     isSchoolAdmin: context.isSchoolAdmin,
     isSchoolOwner: context.isSchoolOwner,
     isTemporaryOwner: context.isTemporaryOwner,
-    isPlatformOwner: isPlatformOwnerEmail(userData.user?.email),
+    isPlatformOwner: platformOwner,
+    mfaRequired: context.isSchoolAdmin || platformOwner,
+    mfaVerified: context.assuranceLevel === "aal2",
     currentWorkspaceId: context.workspaceId,
     workspaces: workspaces ?? [],
   });

@@ -46,6 +46,17 @@ async function requireAdmin() {
   return context;
 }
 
+function mfaRequiredResponse() {
+  return NextResponse.json(
+    {
+      code: "mfa_required",
+      error:
+        "Verify with your authenticator in My account before changing school access.",
+    },
+    { status: 428 }
+  );
+}
+
 export async function GET() {
   const context = await requireAdmin();
 
@@ -54,6 +65,10 @@ export async function GET() {
       { error: "School administrator access is required." },
       { status: 403 }
     );
+  }
+
+  if (context.assuranceLevel !== "aal2") {
+    return mfaRequiredResponse();
   }
 
   const [
@@ -140,6 +155,10 @@ export async function POST(request: Request) {
     );
   }
 
+  if (context.assuranceLevel !== "aal2") {
+    return mfaRequiredResponse();
+  }
+
   const body = (await request.json().catch(() => null)) as
     | Record<string, unknown>
     | null;
@@ -204,6 +223,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Choose valid access for this colleague." },
       { status: 400 }
+    );
+  }
+
+  if (
+    !context.isSchoolOwner &&
+    ["school_admin", "school_admin_teacher", "school_owner"].includes(
+      accessType
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Only the school owner can grant administrator access." },
+      { status: 403 }
     );
   }
 
@@ -383,6 +414,10 @@ export async function DELETE(request: Request) {
       { error: "School administrator access is required." },
       { status: 403 }
     );
+  }
+
+  if (context.assuranceLevel !== "aal2") {
+    return mfaRequiredResponse();
   }
 
   const body = (await request.json().catch(() => null)) as

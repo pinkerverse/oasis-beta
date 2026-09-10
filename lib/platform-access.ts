@@ -7,27 +7,23 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type BetaAccountMode = "teacher" | "school_admin" | "both";
 
-const BOOTSTRAP_PLATFORM_OWNER_EMAILS = ["s.eichhorn.se@gmail.com"];
-
 function normaliseEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-function configuredPlatformOwnerEmails() {
-  const configured = process.env.OASIS_PLATFORM_OWNER_EMAILS ?? "";
-  const supportEmail = process.env.OASIS_SUPPORT_EMAIL ?? "";
+export async function isPlatformAdministrator(userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("platform_administrators")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  return new Set(
-    `${BOOTSTRAP_PLATFORM_OWNER_EMAILS.join(",")},${configured},${supportEmail}`
-      .split(",")
-      .map(normaliseEmail)
-      .filter(Boolean)
-  );
-}
+  if (error) {
+    console.error("Could not verify OASIS platform access:", error);
+    return false;
+  }
 
-export function isPlatformOwnerEmail(email: string | null | undefined) {
-  if (!email) return false;
-  return configuredPlatformOwnerEmails().has(normaliseEmail(email));
+  return Boolean(data);
 }
 
 export async function getCurrentPlatformOwner(): Promise<User | null> {
@@ -36,7 +32,19 @@ export async function getCurrentPlatformOwner(): Promise<User | null> {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return user && isPlatformOwnerEmail(user.email) ? user : null;
+  if (!user || !(await isPlatformAdministrator(user.id))) {
+    return null;
+  }
+
+  return user;
+}
+
+export async function hasCurrentMfaSession() {
+  const supabase = await createClient();
+  const { data, error } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+  return !error && data.currentLevel === "aal2";
 }
 
 export async function getPendingPlatformInvitation(

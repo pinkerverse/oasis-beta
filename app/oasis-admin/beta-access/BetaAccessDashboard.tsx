@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type AccountMode = "teacher" | "school_admin" | "both";
@@ -71,6 +72,7 @@ export default function BetaAccessDashboard() {
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [tab, setTab] = useState<Tab>("requests");
   const [loading, setLoading] = useState(true);
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [workingId, setWorkingId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -90,11 +92,15 @@ export default function BetaAccessDashboard() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "Beta access could not be loaded.");
       setLoading(false);
       return;
     }
 
+    setMfaRequired(false);
     setData(result as DashboardData);
     setLoading(false);
   }, []);
@@ -161,6 +167,9 @@ export default function BetaAccessDashboard() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "The invitation could not be sent.");
       setWorkingId("");
       return;
@@ -185,6 +194,9 @@ export default function BetaAccessDashboard() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "The invitation could not be resent.");
     } else {
       setMessage(result.message || "A fresh invitation was sent.");
@@ -209,6 +221,9 @@ export default function BetaAccessDashboard() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 428 && result.code === "mfa_required") {
+        setMfaRequired(true);
+      }
       setError(result.error || "That item could not be updated.");
     } else {
       setMessage(values.invitationId ? "Invitation revoked." : "Request closed.");
@@ -245,11 +260,29 @@ export default function BetaAccessDashboard() {
         <button
           type="button"
           onClick={openDirectInvitation}
+          disabled={mfaRequired}
           className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
         >
           + Invite a school
         </button>
       </div>
+
+      {mfaRequired && (
+        <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <p className="font-bold text-amber-950">
+            OASIS administration requires authenticator verification
+          </p>
+          <p className="mt-1 text-sm leading-6 text-amber-900">
+            This protects beta invitations and access decisions even if a password is compromised.
+          </p>
+          <Link
+            href="/?panel=settings"
+            className="mt-3 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+          >
+            Open account security
+          </Link>
+        </section>
+      )}
 
       <section className="mt-7 grid gap-4 sm:grid-cols-3">
         {[

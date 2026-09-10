@@ -5,6 +5,7 @@ export type AccountMode = "teacher" | "school_admin" | "both";
 
 export type CurrentAccountContext = {
   userId: string;
+  assuranceLevel: string | null;
   schoolId: string;
   workspaceId: string | null;
   workspaceIds: string[];
@@ -88,6 +89,10 @@ export async function getCurrentAccountContext(): Promise<CurrentAccountContext 
 
   return {
     userId,
+    assuranceLevel:
+      typeof claimsData.claims.aal === "string"
+        ? claimsData.claims.aal
+        : null,
     schoolId: membership.school_id as string,
     workspaceId,
     workspaceIds,

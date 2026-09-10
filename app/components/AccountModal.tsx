@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import AccountSecurity from "@/app/components/AccountSecurity";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type AccountModalProps = {
@@ -344,6 +345,12 @@ export default function AccountModal({
               {passwordSaving ? "Changing…" : "Change password"}
             </button>
           </section>
+        </div>
+
+        <div className="mt-6">
+          <AccountSecurity
+            mfaRequired={isSchoolAdmin || isPlatformOwner}
+          />
         </div>
 
         {error && (

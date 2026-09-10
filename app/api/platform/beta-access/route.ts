@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   getCurrentPlatformOwner,
+  hasCurrentMfaSession,
   type BetaAccountMode,
 } from "@/lib/platform-access";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -50,6 +51,16 @@ export async function GET() {
     return NextResponse.json(
       { error: "OASIS platform-owner access is required." },
       { status: 403 }
+    );
+  }
+
+  if (!(await hasCurrentMfaSession())) {
+    return NextResponse.json(
+      {
+        code: "mfa_required",
+        error: "OASIS owner access requires authenticator verification.",
+      },
+      { status: 428 }
     );
   }
 
@@ -115,6 +126,16 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "OASIS platform-owner access is required." },
       { status: 403 }
+    );
+  }
+
+  if (!(await hasCurrentMfaSession())) {
+    return NextResponse.json(
+      {
+        code: "mfa_required",
+        error: "OASIS owner access requires authenticator verification.",
+      },
+      { status: 428 }
     );
   }
 
@@ -327,6 +348,16 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       { error: "OASIS platform-owner access is required." },
       { status: 403 }
+    );
+  }
+
+  if (!(await hasCurrentMfaSession())) {
+    return NextResponse.json(
+      {
+        code: "mfa_required",
+        error: "OASIS owner access requires authenticator verification.",
+      },
+      { status: 428 }
     );
   }
 

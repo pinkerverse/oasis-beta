@@ -12,6 +12,7 @@ import {
   type FrameworkUploadProgress,
 } from "@/lib/framework-upload";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
+import AccountSecurity from "@/app/components/AccountSecurity";
 import OasisHeader from "@/app/components/OasisHeader";
 import {
   createFallbackFocusGuidance,
@@ -12629,6 +12630,16 @@ onClick={() => {
             </p>
           </section>
         )}
+      </div>
+
+      <div className="mt-6">
+        <AccountSecurity
+          mfaRequired={
+            accountRole === "admin" ||
+            accountRole === "school_admin" ||
+            accountPlatformOwner
+          }
+        />
       </div>
 
       {settingsError && (
