@@ -3,14 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Papa from "papaparse";
 import {
-  inferLearnerDateOrder,
-  normaliseLearnerDate,
-  type LearnerDateOrder,
-} from "@/lib/learner-import";
-import {
   birthMonthToStoredDate,
   formatLearnerBirthMonthYear,
   getLearnerInitials,
+  isLearnerInitial,
+  normaliseLearnerBirthMonth,
+  normaliseLearnerInitial,
 } from "@/lib/learner-privacy";
 
 type Learner = {
@@ -51,6 +49,7 @@ export default function LearnersStep({
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [externalId, setExternalId] = useState("");
   const [className, setClassName] = useState("");
   const [dateOfBirth, setDateOfBirth] =
     useState("");
@@ -58,8 +57,6 @@ export default function LearnersStep({
   const [importRows, setImportRows] = useState<
     ImportRow[]
   >([]);
-  const [importDateOrder, setImportDateOrder] =
-    useState<LearnerDateOrder>("DMY");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -102,8 +99,13 @@ export default function LearnersStep({
   }
 
   async function addLearner() {
-    if (!firstName.trim()) {
-      setError("A first name is required.");
+    if (
+      !isLearnerInitial(firstName) ||
+      !isLearnerInitial(lastName, { optional: true })
+    ) {
+      setError(
+        "Use one first initial and, optionally, one last initial. Do not enter a full name."
+      );
       return;
     }
 
@@ -119,9 +121,9 @@ export default function LearnersStep({
         body: JSON.stringify({
           learners: [
             {
-              externalId: `MANUAL-${crypto.randomUUID()}`,
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
+              externalId: externalId.trim() || `MANUAL-${crypto.randomUUID()}`,
+              firstName: normaliseLearnerInitial(firstName),
+              lastName: normaliseLearnerInitial(lastName),
               className: className.trim(),
               dateOfBirth: birthMonthToStoredDate(dateOfBirth),
             },
@@ -139,6 +141,7 @@ export default function LearnersStep({
 
       setFirstName("");
       setLastName("");
+      setExternalId("");
       setClassName("");
       setDateOfBirth("");
 
@@ -156,8 +159,8 @@ export default function LearnersStep({
 
 function downloadTemplate() {
   const csv = [
-    "pupil_id,first_name,last_name,class,birth_month",
-    "STU001,Ava,Wilson,Pre-K,2022-04",
+    "pupil_id,first_initial,last_initial,class,birth_month",
+    "STU001,A,W,Pre-K,2022-04",
   ].join("\n");
 
   const blob = new Blob([csv], {
@@ -230,12 +233,14 @@ function downloadTemplate() {
             "";
 
           const first =
+            row.firstinitial ||
             row.firstname ||
             row.forename ||
             row.first ||
             "";
 
           const last =
+            row.lastinitial ||
             row.lastname ||
             row.surname ||
             row.familyname ||
@@ -265,24 +270,19 @@ function downloadTemplate() {
           };
         });
 
-        const dateOrder =
-          inferLearnerDateOrder(
-            rawRows.map((row) => row.rawDateOfBirth)
-          ) || "DMY";
         const rows = rawRows.map((row) => {
-          const parsedDate = normaliseLearnerDate(
-            row.rawDateOfBirth,
-            dateOrder
-          );
+          const parsedDate = normaliseLearnerBirthMonth(row.rawDateOfBirth);
 
           return {
             ...row,
             rowId: crypto.randomUUID(),
-            dateOfBirth: parsedDate.date
-              ? `${parsedDate.date.slice(0, 7)}-01`
-              : "",
+            firstName: normaliseLearnerInitial(row.firstName),
+            lastName: normaliseLearnerInitial(row.lastName),
+            dateOfBirth: parsedDate.date,
             isValid: Boolean(
-              row.firstName && parsedDate.isValid
+              isLearnerInitial(row.firstName) &&
+                isLearnerInitial(row.lastName, { optional: true }) &&
+                parsedDate.isValid
             ),
           };
         });
@@ -294,12 +294,11 @@ function downloadTemplate() {
           return;
         }
 
-        setImportDateOrder(dateOrder);
         setImportRows(rows);
 
         if (rows.some((row) => !row.isValid)) {
           setError(
-            "Some rows need a first name or contain a date that could not be read."
+            "Use initials only and enter birth months as YYYY-MM. Do not upload full names or full birth dates."
           );
         }
       },
@@ -319,29 +318,6 @@ function downloadTemplate() {
       )
     );
 
-    setError("");
-  }
-
-  function changeImportDateOrder(dateOrder: LearnerDateOrder) {
-    setImportDateOrder(dateOrder);
-    setImportRows((current) =>
-      current.map((row) => {
-        const parsedDate = normaliseLearnerDate(
-          row.rawDateOfBirth,
-          dateOrder
-        );
-
-        return {
-          ...row,
-          dateOfBirth: parsedDate.date
-            ? `${parsedDate.date.slice(0, 7)}-01`
-            : "",
-          isValid: Boolean(
-            row.firstName.trim() && parsedDate.isValid
-          ),
-        };
-      })
-    );
     setError("");
   }
 
@@ -375,7 +351,6 @@ function downloadTemplate() {
             className: row.className,
             dateOfBirth: row.dateOfBirth,
           })),
-          dateOrder: importDateOrder,
         }),
       });
 
@@ -409,8 +384,15 @@ function downloadTemplate() {
       </h2>
 
       <p className="mt-2 text-sm text-slate-500">
-        Add learners manually or import a class list.
+        Add learners with initials and, where available, your school child ID.
       </p>
+
+      <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950">
+        <p className="font-semibold">Protect each child&apos;s identity</p>
+        <p className="mt-1">
+          Use initials rather than full names. Record only the month and year of birth—never a full date of birth.
+        </p>
+      </div>
 
       {isLoading ? (
         <p className="mt-8 text-sm text-slate-500">
@@ -454,20 +436,30 @@ function downloadTemplate() {
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <input
+                value={externalId}
+                onChange={(event) => setExternalId(event.target.value)}
+                placeholder="School child ID (optional)"
+                aria-label="School child ID"
+                className="rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
+              />
+
+              <input
                 value={firstName}
                 onChange={(event) =>
-                  setFirstName(event.target.value)
+                  setFirstName(normaliseLearnerInitial(event.target.value))
                 }
-                placeholder="First name"
+                placeholder="First initial"
+                aria-label="First initial"
                 className="rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
               />
 
               <input
                 value={lastName}
                 onChange={(event) =>
-                  setLastName(event.target.value)
+                  setLastName(normaliseLearnerInitial(event.target.value))
                 }
-                placeholder="Last name (optional)"
+                placeholder="Last initial (optional)"
+                aria-label="Last initial"
                 className="rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
               />
 
@@ -493,7 +485,7 @@ function downloadTemplate() {
             </div>
 
             <p className="mt-2 text-xs text-slate-500">
-              Surname and birth month can be added or changed later.
+              The first initial is required. Birth month and year are optional and can be added later.
             </p>
 
             <button
@@ -539,32 +531,12 @@ function downloadTemplate() {
               Choose CSV file
             </button>
 
+            <p className="mt-3 text-xs text-slate-500">
+              Use the columns pupil ID, first initial, last initial, class and birth month (YYYY-MM). Remove full names and full birth dates before uploading.
+            </p>
+
             {importRows.length > 0 && (
               <div className="mt-5">
-                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 px-4 py-3">
-                  <label
-                    htmlFor="onboarding-import-date-order"
-                    className="text-sm font-medium text-slate-700"
-                  >
-                    Numeric date order
-                  </label>
-                  <select
-                    id="onboarding-import-date-order"
-                    value={importDateOrder}
-                    onChange={(event) =>
-                      changeImportDateOrder(
-                        event.target.value as LearnerDateOrder
-                      )
-                    }
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
-                  >
-                    <option value="DMY">Day / Month / Year</option>
-                    <option value="MDY">Month / Day / Year</option>
-                  </select>
-                  <span className="text-xs text-slate-500">
-                    OASIS inferred this from the whole file. Change it if needed.
-                  </span>
-                </div>
                 <div className="space-y-2">
                   {importRows.map((row) => (
                     <div

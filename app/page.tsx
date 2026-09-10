@@ -14,11 +14,6 @@ import {
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import OasisHeader from "@/app/components/OasisHeader";
 import {
-  inferLearnerDateOrder,
-  normaliseLearnerDate,
-  type LearnerDateOrder,
-} from "@/lib/learner-import";
-import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
 } from "@/lib/focus-guidance";
@@ -35,6 +30,9 @@ import {
   birthMonthToStoredDate,
   formatLearnerBirthMonthYear,
   getLearnerInitials,
+  isLearnerInitial,
+  normaliseLearnerBirthMonth,
+  normaliseLearnerInitial,
   replaceLearnerNamesWithInitials,
 } from "@/lib/learner-privacy";
 
@@ -606,6 +604,7 @@ function handleRemoveManualLearningArea(strand: string) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
 const [newLearnerLastName, setNewLearnerLastName] = useState("");
+const [newLearnerExternalId, setNewLearnerExternalId] = useState("");
 const [newLearnerClassName, setNewLearnerClassName] =
   useState("");
 const [learnerMismatchConfirmed, setLearnerMismatchConfirmed] =
@@ -631,8 +630,6 @@ function getAreaShortLabel(area: string) {
 const [importText, setImportText] = useState("");
 const [importPreview, setImportPreview] =
   useState<ImportedLearnerPreview[]>([]);
-const [importDateOrder, setImportDateOrder] =
-  useState<LearnerDateOrder>("DMY");
 const [
   frameworkSaveMessage,
   setFrameworkSaveMessage,
@@ -4149,7 +4146,7 @@ function handleReviewLearners() {
       const looksLikeHeader =
         firstLine.includes("external") ||
         firstLine.includes("pupil id") ||
-        firstLine.includes("first name");
+        firstLine.includes("first initial");
 
       return !looksLikeHeader;
     })
@@ -4200,34 +4197,30 @@ return {
     return;
   }
 
-  const dateOrder =
-    inferLearnerDateOrder(
-      rawRows.map((row) => row.rawDateOfBirth)
-    ) || "DMY";
   const rows: ImportedLearnerPreview[] = rawRows.map(
     (row) => {
-      const parsedDate = normaliseLearnerDate(
-        row.rawDateOfBirth,
-        dateOrder
-      );
+      const parsedDate = normaliseLearnerBirthMonth(row.rawDateOfBirth);
+      const isValid =
+        isLearnerInitial(row.firstName) &&
+        isLearnerInitial(row.lastName, { optional: true }) &&
+        parsedDate.isValid;
 
       return {
         ...row,
         rowId: crypto.randomUUID(),
+        firstName: normaliseLearnerInitial(row.firstName),
+        lastName: normaliseLearnerInitial(row.lastName),
         dateOfBirth: parsedDate.date,
-        isValid: Boolean(
-          row.firstName.trim() && parsedDate.isValid
-        ),
+        isValid,
       };
     }
   );
 
-  setImportDateOrder(dateOrder);
   setImportPreview(rows);
 
   if (rows.some((learner) => !learner.isValid)) {
     setImportError(
-      "Some learners need a first name or contain a date that could not be read."
+      "Use initials only and enter birth months as YYYY-MM. Do not paste full names or full birth dates."
 );
   }
 }
@@ -4256,42 +4249,22 @@ function updateImportPreviewRow(
           : {}),
       };
 
-      const parsedDate = normaliseLearnerDate(
-        updatedLearner.rawDateOfBirth,
-        importDateOrder
+      const parsedDate = normaliseLearnerBirthMonth(
+        updatedLearner.rawDateOfBirth
       );
 
       return {
         ...updatedLearner,
         dateOfBirth: parsedDate.date,
         isValid: Boolean(
-          updatedLearner.firstName.trim() && parsedDate.isValid
+          isLearnerInitial(updatedLearner.firstName) &&
+            isLearnerInitial(updatedLearner.lastName, { optional: true }) &&
+            parsedDate.isValid
         ),
       };
     })
   );
 
-  setImportError("");
-}
-
-function changeImportDateOrder(dateOrder: LearnerDateOrder) {
-  setImportDateOrder(dateOrder);
-  setImportPreview((current) =>
-    current.map((learner) => {
-      const parsedDate = normaliseLearnerDate(
-        learner.rawDateOfBirth,
-        dateOrder
-      );
-
-      return {
-        ...learner,
-        dateOfBirth: parsedDate.date,
-        isValid: Boolean(
-          learner.firstName.trim() && parsedDate.isValid
-        ),
-      };
-    })
-  );
   setImportError("");
 }
 
@@ -4392,12 +4365,14 @@ if (isZipFile) {
             "";
 
           const firstName =
+            row.firstinitial ||
             row.firstname ||
             row.forename ||
             row.first ||
             "";
 
           const lastName =
+            row.lastinitial ||
             row.lastname ||
             row.surname ||
             row.familyname ||
@@ -4434,29 +4409,25 @@ if (isZipFile) {
         return;
       }
 
-      const dateOrder =
-        inferLearnerDateOrder(
-          rawRows.map((row) => row.rawDateOfBirth)
-        ) || "DMY";
       const rows: ImportedLearnerPreview[] = rawRows.map(
         (row) => {
-          const parsedDate = normaliseLearnerDate(
-            row.rawDateOfBirth,
-            dateOrder
-          );
+          const parsedDate = normaliseLearnerBirthMonth(row.rawDateOfBirth);
+          const isValid =
+            isLearnerInitial(row.firstName) &&
+            isLearnerInitial(row.lastName, { optional: true }) &&
+            parsedDate.isValid;
 
           return {
             ...row,
             rowId: crypto.randomUUID(),
+            firstName: normaliseLearnerInitial(row.firstName),
+            lastName: normaliseLearnerInitial(row.lastName),
             dateOfBirth: parsedDate.date,
-            isValid: Boolean(
-              row.firstName && parsedDate.isValid
-            ),
+            isValid,
           };
         }
       );
 
-      setImportDateOrder(dateOrder);
       setImportPreview(rows);
 
       if (results.errors.length > 0) {
@@ -4465,7 +4436,7 @@ if (isZipFile) {
         );
       } else if (rows.some((learner) => !learner.isValid)) {
         setImportError(
-          "Some learners need a first name or contain a date that could not be read."
+          "Use initials only and enter birth months as YYYY-MM. Do not upload full names or full birth dates."
 );
       }
     },
@@ -4514,7 +4485,6 @@ async function handleImportLearners() {
             birthMonthInputValue(learner.dateOfBirth)
           ),
         })),
-        dateOrder: importDateOrder,
       }),
     });
 
@@ -4808,14 +4778,19 @@ const getJourneyX = (
     .join(" ");
 
 async function handleAddLearner() {
-  const firstName = newLearnerFirstName.trim();
-const lastName = newLearnerLastName.trim();
+  const firstName = normaliseLearnerInitial(newLearnerFirstName);
+const lastName = normaliseLearnerInitial(newLearnerLastName);
 const className = newLearnerClassName.trim();
 const birthMonth = newLearnerDob.trim();
 const dateOfBirth = birthMonthToStoredDate(birthMonth);
 
-  if (!firstName) {
-    alert("Please enter the learner's first name.");
+  if (
+    !isLearnerInitial(newLearnerFirstName) ||
+    !isLearnerInitial(newLearnerLastName, { optional: true })
+  ) {
+    alert(
+      "Use one first initial and, optionally, one last initial. Do not enter a full name."
+    );
     return;
   }
 
@@ -4866,7 +4841,8 @@ const dateOfBirth = birthMonthToStoredDate(birthMonth);
         body: JSON.stringify({
           learners: [
             {
-              externalId: `MANUAL-${crypto.randomUUID()}`,
+              externalId:
+                newLearnerExternalId.trim() || `MANUAL-${crypto.randomUUID()}`,
               firstName,
               lastName,
               className,
@@ -4916,6 +4892,7 @@ const dateOfBirth = birthMonthToStoredDate(birthMonth);
 
   setNewLearnerFirstName("");
 setNewLearnerLastName("");
+setNewLearnerExternalId("");
 setNewLearnerClassName("");
 setNewLearnerDob("");
 
@@ -6488,6 +6465,10 @@ if (checkingOnboarding) {
           Observation
         </label>
 
+        <div className="mt-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
+          Use learner initials or school child IDs in your notes. Do not type full names or full dates of birth.
+        </div>
+
         <textarea
           value={observation}
           onChange={(e) => {
@@ -6499,8 +6480,8 @@ if (checkingOnboarding) {
             WebkitTextFillColor: "#000000",
             opacity: 1,
           }}
-          className="mt-2 h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
-          placeholder="Type or paste an observation..."
+          className="mt-3 h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
+          placeholder="Type or paste an observation using initials only..."
         />
 
         <div className="mt-4">
@@ -7895,6 +7876,7 @@ const hasOverride =
             }
 
             setEditingLearner(learner);
+            setNewLearnerExternalId(learner.externalId || "");
             setNewLearnerFirstName(
               learner.firstName || ""
             );
@@ -8435,6 +8417,7 @@ const hasOverride =
   setEditingLearner(child);
   setEditingIndex(index);
 
+  setNewLearnerExternalId(child.externalId || "");
   setNewLearnerFirstName(child.firstName || "");
   setNewLearnerLastName(child.lastName || "");
   setNewLearnerDob(birthMonthInputValue(child.dateOfBirth));
@@ -8566,6 +8549,13 @@ const hasOverride =
       </div>
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+        <div className="mb-5 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950">
+          <p className="font-semibold">Privacy first</p>
+          <p className="mt-1">
+            Use learner initials and your school child ID where available. Do not enter full names or full dates of birth.
+          </p>
+        </div>
+
         {importMode === "paste" && (
           <div>
             <label
@@ -8576,17 +8566,17 @@ const hasOverride =
             </label>
 
             <p className="mt-1 text-sm text-slate-500">
- Enter one learner per line: first name, last name, class
-and birth month. Use YYYY-MM. You may add
-a pupil ID as the first column if your school already uses one.
+ Enter one learner per line: first initial, last initial, class
+and birth month. Use YYYY-MM. You may add a pupil ID as the
+first column if your school already uses one.
 </p>
 
             <textarea
               id="class-list-text"
               value={importText}
               onChange={(event) => setImportText(event.target.value)}
-              placeholder={`Ava, Clarke, Reception A, 2021-04
-Yusuf, Ali, Reception A, 2021-09`}
+              placeholder={`STU001, A, C, Reception A, 2021-04
+STU002, Y, A, Reception A, 2021-09`}
               className="mt-4 min-h-56 w-full rounded-2xl border border-slate-300 bg-white p-4 text-slate-900 outline-none focus:border-slate-900"
             />
           </div>
@@ -8599,8 +8589,8 @@ Yusuf, Ali, Reception A, 2021-09`}
     </p>
 
     <p className="mt-1 text-sm text-slate-500">
-  Required columns: first name, last name and birth month.
-Class and pupil ID are optional. Use YYYY-MM.
+  Use first initial, optional last initial and birth month (YYYY-MM).
+Class and pupil ID are optional. Remove full names and full birth dates before uploading.
 </p>
 
 <a
@@ -8658,31 +8648,6 @@ Class and pupil ID are optional. Use YYYY-MM.
       <p className="text-sm text-slate-500">
         {importPreview.length} learners found
       </p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <label
-          htmlFor="learner-import-date-order"
-          className="text-sm font-medium text-slate-700"
-        >
-          Numeric date order
-        </label>
-        <select
-          id="learner-import-date-order"
-          value={importDateOrder}
-          onChange={(event) =>
-            changeImportDateOrder(
-              event.target.value as LearnerDateOrder
-            )
-          }
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
-        >
-          <option value="DMY">Day / Month / Year</option>
-          <option value="MDY">Month / Day / Year</option>
-        </select>
-        <span className="text-xs text-slate-500">
-          Inferred from the whole file. Change it before import if needed.
-        </span>
-      </div>
     </div>
 
     <div className="overflow-x-auto">
@@ -9313,7 +9278,7 @@ match.statementMatches.length > 0 ? (
           </h2>
 
           <p className="mt-2 text-slate-500">
-            Create a learner profile. Private details can be added later.
+            Create a privacy-conscious learner profile without a full name or full date of birth.
           </p>
         </div>
 
@@ -9328,6 +9293,13 @@ match.statementMatches.length > 0 ? (
 
       <div className="mt-8 space-y-6">
 
+        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950">
+          <p className="font-semibold">Protect the learner&apos;s identity</p>
+          <p className="mt-1">
+            Enter initials only. Add a birth month and year only if it is useful—never a full date of birth.
+          </p>
+        </div>
+
         {editingLearner ? (
           <div>
             <p className="block text-sm font-semibold text-slate-700">
@@ -9341,31 +9313,51 @@ match.statementMatches.length > 0 ? (
           <>
             <div>
               <label className="block text-sm font-semibold text-slate-700">
-                First Name
+                School child ID <span className="font-normal text-slate-400">(optional)</span>
               </label>
 
               <input
-                value={newLearnerFirstName}
-                onChange={(e) =>
-                  setNewLearnerFirstName(e.target.value)
-                }
+                value={newLearnerExternalId}
+                onChange={(e) => setNewLearnerExternalId(e.target.value)}
+                aria-label="School child ID"
                 className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
-                placeholder="Matthew"
+                placeholder="For example: STU001"
               />
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-slate-700">
-                Last Name <span className="font-normal text-slate-400">(optional)</span>
+                First initial
+              </label>
+
+              <input
+                value={newLearnerFirstName}
+                onChange={(e) =>
+                  setNewLearnerFirstName(
+                    normaliseLearnerInitial(e.target.value)
+                  )
+                }
+                aria-label="First initial"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
+                placeholder="M"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">
+                Last initial <span className="font-normal text-slate-400">(optional)</span>
               </label>
 
               <input
                 value={newLearnerLastName}
                 onChange={(e) =>
-                  setNewLearnerLastName(e.target.value)
+                  setNewLearnerLastName(
+                    normaliseLearnerInitial(e.target.value)
+                  )
                 }
+                aria-label="Last initial"
                 className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
-                placeholder="Smith"
+                placeholder="S"
               />
             </div>
           </>

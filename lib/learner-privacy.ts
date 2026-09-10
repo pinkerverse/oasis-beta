@@ -7,6 +7,25 @@ function firstCharacter(value: string | null | undefined) {
   return Array.from(value?.trim() ?? "")[0] ?? "";
 }
 
+export function normaliseLearnerInitial(
+  value: string | null | undefined
+) {
+  return firstCharacter(value).toLocaleUpperCase();
+}
+
+export function isLearnerInitial(
+  value: string | null | undefined,
+  options: { optional?: boolean } = {}
+) {
+  const characters = Array.from(value?.trim() ?? "");
+
+  if (characters.length === 0) {
+    return options.optional === true;
+  }
+
+  return characters.length === 1 && /^[\p{L}\p{N}]$/u.test(characters[0]);
+}
+
 export function getLearnerInitials(
   learnerOrFirstName: LearnerNameParts | string | null | undefined,
   lastName?: string | null
@@ -66,6 +85,29 @@ export function birthMonthInputValue(
 
 export function birthMonthToStoredDate(value: string) {
   return /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : "";
+}
+
+export function normaliseLearnerBirthMonth(value: unknown) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return { date: "", isValid: true };
+  }
+
+  const match = String(value).trim().match(/^(\d{4})-(\d{2})(?:-01)?$/);
+
+  if (!match) {
+    return { date: "", isValid: false };
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const suppliedMonth = `${match[1]}-${match[2]}`;
+
+  if (year < 1900 || month < 1 || month > 12 || suppliedMonth > currentMonth) {
+    return { date: "", isValid: false };
+  }
+
+  return { date: `${suppliedMonth}-01`, isValid: true };
 }
 
 function escapeRegularExpression(value: string) {

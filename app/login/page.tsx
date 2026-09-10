@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -467,6 +468,24 @@ function LoginForm() {
               Back to sign in
             </button>
           )}
+
+          <p className="mt-6 border-t border-slate-100 pt-5 text-center text-xs leading-5 text-slate-500">
+            By continuing, you agree to the{" "}
+            <Link
+              href="/terms"
+              className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-950"
+            >
+              Terms of Use
+            </Link>{" "}
+            and acknowledge the{" "}
+            <Link
+              href="/privacy"
+              className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-950"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </main>

@@ -6,14 +6,11 @@ import {
 } from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import {
-  inferLearnerDateOrder,
-  normaliseLearnerDate,
-  normaliseOptionalSurname,
-  type LearnerDateOrder,
-} from "@/lib/learner-import";
-import {
   birthMonthInputValue,
   birthMonthToStoredDate,
+  isLearnerInitial,
+  normaliseLearnerBirthMonth,
+  normaliseLearnerInitial,
 } from "@/lib/learner-privacy";
 
 export const dynamic = "force-dynamic";
@@ -91,8 +88,8 @@ const authenticatedSupabase =
         learner.external_id,
         context.workspaceId
       ),
-      firstName: learner.first_name,
-      lastName: learner.last_name,
+      firstName: normaliseLearnerInitial(learner.first_name),
+      lastName: normaliseLearnerInitial(learner.last_name),
       className: learner.class_name,
       dateOfBirth: birthMonthToStoredDate(
         birthMonthInputValue(learner.date_of_birth)
@@ -144,31 +141,18 @@ if (!context) {
     const learners: ImportedLearner[] =
       body.learners;
 
-    const requestedDateOrder: LearnerDateOrder | null =
-      body.dateOrder === "MDY" || body.dateOrder === "DMY"
-        ? body.dateOrder
-        : null;
-    const dateOrder =
-      requestedDateOrder ||
-      inferLearnerDateOrder(
-        learners.map((learner) => learner.dateOfBirth)
-      ) ||
-      "DMY";
-
     const invalidLearner = learners.some(
       (learner) =>
-        !learner.firstName?.trim() ||
-        !normaliseLearnerDate(
-          learner.dateOfBirth,
-          dateOrder
-        ).isValid
+        !isLearnerInitial(learner.firstName) ||
+        !isLearnerInitial(learner.lastName, { optional: true }) ||
+        !normaliseLearnerBirthMonth(learner.dateOfBirth).isValid
     );
 
     if (invalidLearner) {
       return NextResponse.json(
         {
           error:
-            "Each learner needs a first name. Any supplied birth month must be valid and not in the future."
+            "Use a single first initial and optional last initial for each learner. Do not enter full names. Any supplied birth month must be valid and not in the future."
         },
         { status: 400 }
       );
@@ -188,17 +172,12 @@ const rows = learners.map((learner) => {
       ":" +
       (suppliedExternalId ||
         `IMPORT-${crypto.randomUUID()}`),
-      first_name: learner.firstName.trim(),
-      last_name: normaliseOptionalSurname(
-        learner.lastName
-      ),
+      first_name: normaliseLearnerInitial(learner.firstName),
+      last_name: normaliseLearnerInitial(learner.lastName) || null,
       class_name:
         learner.className?.trim() || null,
       date_of_birth:
-        normaliseLearnerDate(
-          learner.dateOfBirth,
-          dateOrder
-        ).date || null,
+        normaliseLearnerBirthMonth(learner.dateOfBirth).date || null,
          active: true,
   };
 });
@@ -272,10 +251,7 @@ if (!context) {
         ? body.className.trim()
         : "";
 
-    const parsedDateOfBirth = normaliseLearnerDate(
-      body.dateOfBirth,
-      body.dateOrder === "MDY" ? "MDY" : "DMY"
-    );
+    const parsedDateOfBirth = normaliseLearnerBirthMonth(body.dateOfBirth);
 
     if (!id) {
       return NextResponse.json(
@@ -285,13 +261,14 @@ if (!context) {
     }
 
     if (
-      !firstName ||
+      !isLearnerInitial(firstName) ||
+      !isLearnerInitial(lastName, { optional: true }) ||
       !parsedDateOfBirth.isValid
     ) {
       return NextResponse.json(
         {
           error:
-            "A first name is required. Any supplied birth month must be valid and not in the future.",
+            "Use a single first initial and optional last initial. Do not enter a full name. Any supplied birth month must be valid and not in the future.",
         },
         { status: 400 }
       );
@@ -301,8 +278,8 @@ if (!context) {
       supabaseAdmin
         .from("learners")
         .update({
-          first_name: firstName,
-          last_name: normaliseOptionalSurname(lastName),
+          first_name: normaliseLearnerInitial(firstName),
+          last_name: normaliseLearnerInitial(lastName) || null,
           class_name: className || null,
           date_of_birth: parsedDateOfBirth.date || null,
         })
@@ -347,8 +324,8 @@ if (!context) {
           data.external_id,
           context.workspaceId
         ),
-        firstName: data.first_name,
-        lastName: data.last_name,
+        firstName: normaliseLearnerInitial(data.first_name),
+        lastName: normaliseLearnerInitial(data.last_name),
         className: data.class_name,
         dateOfBirth: birthMonthToStoredDate(
           birthMonthInputValue(data.date_of_birth)
