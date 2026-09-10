@@ -5,6 +5,10 @@ import {
   isSchoolAdmin,
 } from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  getLearnerInitials,
+  replaceLearnerNamesWithInitials,
+} from "@/lib/learner-privacy";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -151,6 +155,27 @@ export async function POST(request: Request) {
       );
     }
 
+    let classLearnerIdentityQuery = authenticatedSupabase
+      .from("learners")
+      .select("first_name, last_name")
+      .eq("school_id", context.schoolId)
+      .eq("active", true);
+
+    classLearnerIdentityQuery = isSchoolAdmin(context.role)
+      ? classLearnerIdentityQuery.or(
+          `workspace_id.eq.${context.workspaceId},workspace_id.is.null`
+        )
+      : classLearnerIdentityQuery.eq("workspace_id", context.workspaceId);
+
+    const { data: classLearnerIdentities } =
+      await classLearnerIdentityQuery;
+    const privacyIdentities = (classLearnerIdentities ?? []).map(
+      (candidate) => ({
+        firstName: candidate.first_name,
+        lastName: candidate.last_name,
+      })
+    );
+
     let observationQuery = authenticatedSupabase
       .from("observations")
       .select(
@@ -202,10 +227,18 @@ export async function POST(request: Request) {
       });
     }
 
+    const learnerIdentity = {
+      firstName: learner.first_name,
+      lastName: learner.last_name,
+    };
+    const learnerLabel = getLearnerInitials(learnerIdentity);
     const evidenceForSynthesis = entries.map((entry) => ({
       id: entry.id,
       date: entry.observation_date || entry.created_at,
-      observation: normaliseText(entry.observation).slice(0, 2200),
+      observation: replaceLearnerNamesWithInitials(
+        normaliseText(entry.observation),
+        privacyIdentities
+      ).slice(0, 2200),
       frameworkMatches: Array.isArray(entry.framework_matches)
         ? entry.framework_matches
         : [],
@@ -213,17 +246,19 @@ export async function POST(request: Request) {
         ? entry.next_steps
         : [],
     }));
-    const learnerName = [learner.first_name, learner.last_name]
-      .filter(Boolean)
-      .join(" ");
     const model =
       process.env.LEARNER_INTELLIGENCE_MODEL || "gpt-4.1-mini";
+    const privacySafeEvidenceJson = replaceLearnerNamesWithInitials(
+      JSON.stringify(evidenceForSynthesis, null, 2),
+      privacyIdentities
+    );
     const response = await openai.responses.create({
       model,
+      store: false,
       input: `
 You are an experienced early-years pedagogical documentation lead.
 
-Synthesise the repeated observation evidence for ${learnerName} to answer the central question: HOW does this learner appear to learn?
+Synthesise the repeated observation evidence for learner ${learnerLabel} to answer the central question: HOW does this learner appear to learn?
 
 This is longitudinal interpretation, not another framework coverage report.
 
@@ -244,7 +279,7 @@ RULES
 - Use concise, natural language for an early-years teacher.
 
 EVIDENCE
-${JSON.stringify(evidenceForSynthesis, null, 2)}
+${privacySafeEvidenceJson}
       `,
       text: {
         format: {

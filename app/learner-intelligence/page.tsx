@@ -7,6 +7,10 @@ import OasisEmbeddedOverlay, {
   type OasisEmbeddedOverlayKind,
 } from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
+import {
+  getLearnerInitials,
+  replaceLearnerNamesWithInitials,
+} from "@/lib/learner-privacy";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 
@@ -526,7 +530,7 @@ function BrainIcon({
 }
 
 function initials(learner: Learner) {
-  return `${learner.firstName?.[0] ?? ""}${learner.lastName?.[0] ?? ""}`.toUpperCase();
+  return getLearnerInitials(learner);
 }
 
 const toneClasses: Record<IntelligenceCard["tone"], string> = {
@@ -1019,14 +1023,26 @@ export default function LearnerIntelligencePage() {
     };
   }, [entries]);
 
+  const privacySafeEntries = useMemo(
+    () =>
+      entries.map((entry) => ({
+        ...entry,
+        observation: replaceLearnerNamesWithInitials(
+          entry.observation || "",
+          learners
+        ),
+      })),
+    [entries, learners]
+  );
+
   const intelligence = useMemo(
     () =>
       buildLearnerIntelligence(
-        entries,
+        privacySafeEntries,
         frameworkAreas,
         statusLabels
       ),
-    [entries, frameworkAreas, statusLabels]
+    [privacySafeEntries, frameworkAreas, statusLabels]
   );
 
   const displayedIntelligence = useMemo(() => {
@@ -1035,7 +1051,7 @@ export default function LearnerIntelligencePage() {
     }
 
     const entriesById = new Map(
-      entries.map((entry) => [entry.id, entry])
+      privacySafeEntries.map((entry) => [entry.id, entry])
     );
     const toCards = (
       insights: SynthesisedInsight[],
@@ -1072,7 +1088,7 @@ export default function LearnerIntelligencePage() {
         "amber"
       ),
     };
-  }, [entries, intelligence, synthesisedIntelligence]);
+  }, [privacySafeEntries, intelligence, synthesisedIntelligence]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
@@ -1191,7 +1207,7 @@ export default function LearnerIntelligencePage() {
                       type="button"
                       onClick={() => selectLearner(learner.id)}
                       aria-pressed={selected}
-                      aria-label={`View intelligence for ${learner.firstName} ${learner.lastName}: ${evidenceStatus.count} of ${weeklyTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
+                      aria-label={`View insight for ${initials(learner)}: ${evidenceStatus.count} of ${weeklyTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
                       className="group relative flex w-16 flex-col items-center rounded-xl text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
                     >
                       <span
@@ -1210,12 +1226,12 @@ export default function LearnerIntelligencePage() {
                       </span>
 
                       <span className="mt-2 block max-w-20 truncate text-sm font-medium text-slate-700">
-                        {learner.firstName}
+                        {initials(learner)}
                       </span>
 
                       <span className="pointer-events-none absolute left-0 top-full z-50 mt-3 hidden w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block group-focus:block">
                         <span className="block font-semibold text-slate-900">
-                          {learner.firstName} {learner.lastName}
+                          {initials(learner)}
                         </span>
                         <span className="mt-2 block text-sm font-medium text-slate-700">
                           This week: {evidenceStatus.count} of {weeklyTarget} observations
@@ -1283,7 +1299,7 @@ export default function LearnerIntelligencePage() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-slate-900">
-                      {selectedLearner.firstName} {selectedLearner.lastName}
+                      {initials(selectedLearner)}
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
                       {selectedLearner.className || "Class not recorded"}

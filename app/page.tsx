@@ -30,6 +30,13 @@ import {
   selectReadyStatement,
   type StatementEvidenceSummary,
 } from "@/lib/focus-readiness";
+import {
+  birthMonthInputValue,
+  birthMonthToStoredDate,
+  formatLearnerBirthMonthYear,
+  getLearnerInitials,
+  replaceLearnerNamesWithInitials,
+} from "@/lib/learner-privacy";
 
 
 
@@ -180,7 +187,7 @@ const [
     .map((id) => {
       const learner = pupils.find((p) => p.id === id);
       return learner
-        ? `${learner.firstName} ${learner.lastName}`
+        ? getLearnerInitials(learner)
         : id;
     })
     .join(", ");
@@ -2347,14 +2354,10 @@ const buildFocusItems = (
       return null;
     }
 
-    let months =
+    const months =
       (today.getFullYear() - birthDate.getFullYear()) * 12 +
       today.getMonth() -
       birthDate.getMonth();
-
-    if (today.getDate() < birthDate.getDate()) {
-      months -= 1;
-    }
 
     return months;
   };
@@ -2647,8 +2650,7 @@ const buildFocusItems = (
           Math.max(weeklyObservationTarget, 1)) *
           100
       );
-      const learnerName =
-        `${learner.firstName} ${learner.lastName}`.trim();
+      const learnerName = getLearnerInitials(learner);
       const latestAssessment = observations
         .flatMap((observation) => {
           const matches = Array.isArray(
@@ -2803,8 +2805,8 @@ const buildFocusItems = (
           !focusAreaLastSeen && academicYearReadiness.phase === "settling"
             ? `It is week ${academicYearReadiness.week ?? "early"} of the academic year, so OASIS has chosen a foundation step in ${focusArea?.name ?? "this learning area"} before the fuller objective.`
             : focusAreaLastSeen
-              ? `This is one of ${learnerName.split(" ")[0]}’s least recently evidenced learning areas. OASIS rotates these opportunities through the week, and the suggested step is based on what has already been seen.`
-              : `The current records do not yet show how ${learnerName.split(" ")[0]} approaches ${focusArea?.name ?? "this learning area"}. OASIS has selected a neutral opportunity to learn more, not identified a learning deficit.`,
+              ? `This is one of ${learnerName}’s least recently evidenced learning areas. OASIS rotates these opportunities through the week, and the suggested step is based on what has already been seen.`
+              : `The current records do not yet show how ${learnerName} approaches ${focusArea?.name ?? "this learning area"}. OASIS has selected a neutral opportunity to learn more, not identified a learning deficit.`,
         frameworkStatement:
           frameworkFocus?.statement.text ||
           focusArea?.name ||
@@ -3736,8 +3738,7 @@ const status =
         continue;
       }
 
-      const learnerName =
-        `${learner.firstName} ${learner.lastName}`.trim();
+      const learnerName = getLearnerInitials(learner);
 
       if (!levels[item.status]) {
         levels[item.status] = {
@@ -3768,9 +3769,8 @@ const status =
       noEvidence: {
         count: learnersWithoutEvidence.length,
         learners:
-          learnersWithoutEvidence.map(
-            (learner) =>
-              `${learner.firstName} ${learner.lastName}`.trim()
+          learnersWithoutEvidence.map((learner) =>
+            getLearnerInitials(learner)
           ),
       },
 
@@ -3971,7 +3971,7 @@ async function saveImportedBaselineRows(
       if (!learner) {
         unresolvedLearners.add(
           externalId ||
-            `${firstName} ${lastName}`.trim() ||
+            getLearnerInitials(firstName, lastName) ||
             "Unknown learner"
         );
 
@@ -4080,7 +4080,7 @@ async function saveImportedBaselineRows(
       if (!response.ok) {
         throw new Error(
           result.error ||
-            `Could not save baseline for ${learner.firstName} ${learner.lastName}.`
+            `Could not save baseline for ${getLearnerInitials(learner)}.`
         );
       }
     }
@@ -4412,6 +4412,7 @@ if (isZipFile) {
             "";
 
             const dateOfBirth =
+  row.birthmonth ||
   row.dateofbirth ||
   row.dob ||
   row.birthdate ||
@@ -4509,7 +4510,9 @@ async function handleImportLearners() {
           firstName: learner.firstName,
           lastName: learner.lastName,
           className: learner.className,
-          dateOfBirth: learner.dateOfBirth,
+          dateOfBirth: birthMonthToStoredDate(
+            birthMonthInputValue(learner.dateOfBirth)
+          ),
         })),
         dateOrder: importDateOrder,
       }),
@@ -4808,19 +4811,20 @@ async function handleAddLearner() {
   const firstName = newLearnerFirstName.trim();
 const lastName = newLearnerLastName.trim();
 const className = newLearnerClassName.trim();
-const dateOfBirth = newLearnerDob.trim();
+const birthMonth = newLearnerDob.trim();
+const dateOfBirth = birthMonthToStoredDate(birthMonth);
 
   if (!firstName) {
     alert("Please enter the learner's first name.");
     return;
   }
 
-  const today = new Date()
+  const currentMonth = new Date()
     .toISOString()
-    .slice(0, 10);
+    .slice(0, 7);
 
-  if (dateOfBirth && dateOfBirth > today) {
-    alert("The learner's date of birth cannot be in the future.");
+  if (birthMonth && birthMonth > currentMonth) {
+    alert("The learner's birth month cannot be in the future.");
     return;
   }
 
@@ -5626,6 +5630,14 @@ setFrameworkProcessingStage(null);
   async function handleAnalyse() {
   if (selectedChildren.length === 0) return;
   if (!observation.trim()) return;
+  const privacySafeObservation = replaceLearnerNamesWithInitials(
+    observation,
+    pupils
+  );
+
+  if (privacySafeObservation !== observation) {
+    setObservation(privacySafeObservation);
+  }
 setSavedToJournal(false);
   setLoading(true);
   setAnalysis(null);
@@ -5640,7 +5652,7 @@ setAreaOverrideReasons({});
         "Content-Type": "application/json",
       },
      body: JSON.stringify({
-  observation,
+  observation: privacySafeObservation,
   observationDate,
   frameworkKey: activeFramework.key,
         learners: selectedChildren.map((id) => {
@@ -5649,7 +5661,7 @@ setAreaOverrideReasons({});
  return {
   id,
   name: pupil
-    ? `${pupil.firstName} ${pupil.lastName}`
+    ? getLearnerInitials(pupil)
     : id,
   dateOfBirth: pupil?.dateOfBirth || null,
 };
@@ -5932,7 +5944,7 @@ const journalPayload = {
   learner_ids: selectedChildren,
   learner_entries: learnerEntries,
 
-  observation,
+  observation: replaceLearnerNamesWithInitials(observation, pupils),
   observation_date: observationDate,
 
   framework_version_id:
@@ -6249,7 +6261,7 @@ if (checkingOnboarding) {
 
       return (
       <button
-        key={`${child.firstName}-${child.lastName}`}
+        key={child.id}
         type="button"
         onClick={() => {
           toggleChild(child.id);
@@ -6263,7 +6275,7 @@ if (checkingOnboarding) {
         }
         className="group relative flex flex-col items-center"
         aria-pressed={selectedChildren.includes(child.id)}
-        aria-label={`${child.firstName} ${child.lastName}: ${evidenceStatus.count} of ${weeklyObservationTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
+        aria-label={`${getLearnerInitials(child)}: ${evidenceStatus.count} of ${weeklyObservationTarget} observations this week, ${evidenceStatus.percentage}%, ${evidenceStatus.statusText}`}
       >
 
         <div
@@ -6275,8 +6287,8 @@ if (checkingOnboarding) {
         >
 
           <span className="text-xl font-bold text-slate-600">
-  {(child.firstName[0] + child.lastName[0]).toUpperCase()}
-</span>
+            {getLearnerInitials(child)}
+          </span>
 
           <span
             className={`absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-white ${
@@ -6292,8 +6304,8 @@ if (checkingOnboarding) {
         </div>
 
         <span className="mt-2 text-sm text-slate-700">
-  {child.firstName}
-</span>
+          {getLearnerInitials(child)}
+        </span>
 
 <div
   className={`pointer-events-none absolute left-0 top-full z-50 mt-3 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl ${
@@ -6305,7 +6317,7 @@ if (checkingOnboarding) {
 >
 
   <p className="font-semibold text-slate-900">
-    {child.firstName} {child.lastName}
+    {getLearnerInitials(child)}
   </p>
 
   <p className="mt-2 text-sm font-medium text-slate-700">
@@ -6414,8 +6426,8 @@ if (checkingOnboarding) {
                 key={learner.id}
                 type="button"
                 onClick={() => toggleChild(learner.id)}
-                title={`${learner.firstName} ${learner.lastName}`}
-                aria-label={`${isSelected ? "Deselect" : "Select"} ${learner.firstName} ${learner.lastName}`}
+                title={getLearnerInitials(learner)}
+                aria-label={`${isSelected ? "Deselect" : "Select"} ${getLearnerInitials(learner)}`}
                 aria-pressed={isSelected}
                 className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition ${
                   isSelected
@@ -6423,10 +6435,7 @@ if (checkingOnboarding) {
                     : "border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-400"
                 }`}
               >
-                {(
-                  learner.firstName[0] +
-                  learner.lastName[0]
-                ).toUpperCase()}
+                {getLearnerInitials(learner)}
 
                 <span
                   className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${statusColour}`}
@@ -6599,7 +6608,7 @@ if (checkingOnboarding) {
       .map((id) => {
         const pupil = pupils.find((p) => p.id === id);
         return pupil
-          ? `${pupil.firstName} ${pupil.lastName}`
+          ? getLearnerInitials(pupil)
           : id;
       })
       .join(", ")
@@ -7840,11 +7849,11 @@ const hasOverride =
       </div>
 
       <h2 className="mt-4 text-xl font-bold text-slate-900">
-        Date of birth needed
+        Birth month and year needed
       </h2>
 
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        OASIS needs a date of birth to calculate the
+        OASIS needs a birth month and year to calculate the
         learner&apos;s age on the observation date and apply
         the framework accurately.
       </p>
@@ -7876,14 +7885,7 @@ const hasOverride =
         <button
           type="button"
           onClick={() => {
-            const learnerName =
-              missingDobLearnerNames[0] || "";
-
-            const learner = pupils.find(
-              (pupil) =>
-                `${pupil.firstName} ${pupil.lastName}` ===
-                learnerName
-            );
+            const learner = learnersMissingDateOfBirth[0];
 
             setShowMissingDobModal(false);
 
@@ -7903,7 +7905,7 @@ const hasOverride =
               learner.className || ""
             );
             setNewLearnerDob(
-              learner.dateOfBirth || ""
+              birthMonthInputValue(learner.dateOfBirth)
             );
 
             setIsSEND(Boolean(learner.send));
@@ -8308,7 +8310,7 @@ const hasOverride =
       </p>
 
       <p className="mt-2 font-semibold text-slate-900">
-        {learnerToArchive.firstName} {learnerToArchive.lastName}
+        {getLearnerInitials(learnerToArchive)}
       </p>
 
       <p className="mt-4 text-sm text-slate-500">
@@ -8362,7 +8364,7 @@ const hasOverride =
             <p className="mt-3 inline-flex rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
               {learnersMissingDateOfBirth.length} learner
               {learnersMissingDateOfBirth.length === 1 ? "" : "s"} need a
-              date of birth
+              birth month and year
             </p>
           )}
         </div>
@@ -8400,7 +8402,7 @@ const hasOverride =
             <div>
 
               <p className="font-semibold text-slate-900">
-                {child.firstName} {child.lastName}
+                {getLearnerInitials(child)}
               </p>
 
               <p className="text-sm text-slate-500">
@@ -8409,11 +8411,11 @@ const hasOverride =
 
               {child.dateOfBirth ? (
                 <p className="mt-1 text-xs text-slate-500">
-                  Date of birth recorded
+                  Born {formatLearnerBirthMonthYear(child.dateOfBirth)}
                 </p>
               ) : (
                 <p className="mt-1 text-xs font-semibold text-amber-700">
-                  Date of birth needed for analysis
+                  Birth month and year needed for analysis
                 </p>
               )}
 
@@ -8435,7 +8437,7 @@ const hasOverride =
 
   setNewLearnerFirstName(child.firstName || "");
   setNewLearnerLastName(child.lastName || "");
-  setNewLearnerDob(child.dateOfBirth || "");
+  setNewLearnerDob(birthMonthInputValue(child.dateOfBirth));
   setNewLearnerClassName(child.className || "");
 
   setIsSEND(Boolean(child.send));
@@ -8448,7 +8450,7 @@ const hasOverride =
 
   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
 >
-  {child.dateOfBirth ? "Edit" : "Add date of birth"}
+  {child.dateOfBirth ? "Edit" : "Add birth month"}
 </button>
 
               <button
@@ -8575,7 +8577,7 @@ const hasOverride =
 
             <p className="mt-1 text-sm text-slate-500">
  Enter one learner per line: first name, last name, class
-and date of birth. Use YYYY-MM-DD for dates. You may add
+and birth month. Use YYYY-MM. You may add
 a pupil ID as the first column if your school already uses one.
 </p>
 
@@ -8583,8 +8585,8 @@ a pupil ID as the first column if your school already uses one.
               id="class-list-text"
               value={importText}
               onChange={(event) => setImportText(event.target.value)}
-              placeholder={`Ava, Clarke, Reception A, 2021-04-18
-Yusuf, Ali, Reception A, 2021-09-02`}
+              placeholder={`Ava, Clarke, Reception A, 2021-04
+Yusuf, Ali, Reception A, 2021-09`}
               className="mt-4 min-h-56 w-full rounded-2xl border border-slate-300 bg-white p-4 text-slate-900 outline-none focus:border-slate-900"
             />
           </div>
@@ -8597,8 +8599,8 @@ Yusuf, Ali, Reception A, 2021-09-02`}
     </p>
 
     <p className="mt-1 text-sm text-slate-500">
-  Required columns: first name, last name and date of birth.
-Class and pupil ID are optional. Use YYYY-MM-DD for dates.
+  Required columns: first name, last name and birth month.
+Class and pupil ID are optional. Use YYYY-MM.
 </p>
 
 <a
@@ -8693,16 +8695,16 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
     (optional)
   </span>
 </th>
-    <th className="px-4 py-3">First name</th>
+    <th className="px-4 py-3">First initial</th>
     <th className="px-4 py-3">
-      Last name
+      Last initial
       <span className="ml-1 text-xs font-normal text-slate-400">
         (optional)
       </span>
     </th>
 <th className="px-4 py-3">Class</th>
 <th className="px-4 py-3">
-  Date of birth
+  Birth month and year
   <span className="ml-1 text-xs font-normal text-slate-400">
     (optional)
   </span>
@@ -8738,15 +8740,9 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
       <td className="px-3 py-3">
         <input
           type="text"
-          value={learner.firstName}
-          onChange={(event) =>
-            updateImportPreviewRow(
-              learner.rowId,
-              "firstName",
-              event.target.value
-            )
-          }
-          aria-label="First name"
+          value={Array.from(learner.firstName.trim())[0]?.toUpperCase() ?? ""}
+          readOnly
+          aria-label="First initial"
           className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
         />
       </td>
@@ -8754,16 +8750,10 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
       <td className="px-3 py-3">
         <input
           type="text"
-          placeholder="Not shared"
-          value={learner.lastName}
-          onChange={(event) =>
-            updateImportPreviewRow(
-              learner.rowId,
-              "lastName",
-              event.target.value
-            )
-          }
-          aria-label="Last name"
+          placeholder="—"
+          value={Array.from(learner.lastName.trim())[0]?.toUpperCase() ?? ""}
+          readOnly
+          aria-label="Last initial"
           className="w-full min-w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
         />
       </td>
@@ -8786,17 +8776,17 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
 
 <td className="px-3 py-3">
   <input
-    type="date"
-    value={learner.dateOfBirth}
+    type="month"
+    value={birthMonthInputValue(learner.dateOfBirth)}
     onChange={(event) =>
       updateImportPreviewRow(
         learner.rowId,
         "dateOfBirth",
-        event.target.value
+        birthMonthToStoredDate(event.target.value)
       )
     }
-    max={new Date().toISOString().slice(0, 10)}
-    aria-label="Date of birth"
+    max={new Date().toISOString().slice(0, 7)}
+    aria-label="Birth month and year"
     className="w-full min-w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
   />
 </td>
@@ -8916,11 +8906,9 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
 
         <div>
           <h2 className="text-3xl font-bold text-slate-900">
-            {
-  pupils.find((child) => child.id === journalLearner)?.firstName
-} {
-  pupils.find((child) => child.id === journalLearner)?.lastName
-}
+            {getLearnerInitials(
+              pupils.find((child) => child.id === journalLearner)
+            )}
           </h2>
 
           <p className="text-slate-500">
@@ -9044,7 +9032,7 @@ Class and pupil ID are optional. Use YYYY-MM-DD for dates.
     expanded ? "" : "line-clamp-3"
   }`}
 >
-  {entry.observation}
+  {replaceLearnerNamesWithInitials(entry.observation || "", pupils)}
 </p>
 
           </div>
@@ -9270,8 +9258,12 @@ match.statementMatches.length > 0 ? (
       </p>
 
       <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-        {observationToDelete.observation ||
-          "Observation text unavailable"}
+        {observationToDelete.observation
+          ? replaceLearnerNamesWithInitials(
+              observationToDelete.observation,
+              pupils
+            )
+          : "Observation text unavailable"}
       </p>
 
       {observationDeleteError && (
@@ -9336,35 +9328,48 @@ match.statementMatches.length > 0 ? (
 
       <div className="mt-8 space-y-6">
 
-        <div>
-          <label className="block text-sm font-semibold text-slate-700">
-            First Name
-          </label>
+        {editingLearner ? (
+          <div>
+            <p className="block text-sm font-semibold text-slate-700">
+              Learner
+            </p>
+            <p className="mt-2 rounded-xl bg-slate-100 px-4 py-3 font-bold text-slate-900">
+              {getLearnerInitials(editingLearner)}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">
+                First Name
+              </label>
 
-          <input
-            value={newLearnerFirstName}
-            onChange={(e) =>
-              setNewLearnerFirstName(e.target.value)
-            }
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
-            placeholder="Matthew"
-          />
-        </div>
+              <input
+                value={newLearnerFirstName}
+                onChange={(e) =>
+                  setNewLearnerFirstName(e.target.value)
+                }
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
+                placeholder="Matthew"
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-semibold text-slate-700">
-            Last Name <span className="font-normal text-slate-400">(optional)</span>
-          </label>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">
+                Last Name <span className="font-normal text-slate-400">(optional)</span>
+              </label>
 
-          <input
-            value={newLearnerLastName}
-            onChange={(e) =>
-              setNewLearnerLastName(e.target.value)
-            }
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
-            placeholder="Smith"
-          />
-        </div>
+              <input
+                value={newLearnerLastName}
+                onChange={(e) =>
+                  setNewLearnerLastName(e.target.value)
+                }
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
+                placeholder="Smith"
+              />
+            </div>
+          </>
+        )}
 
 <div>
   <label className="block text-sm font-semibold text-slate-700">
@@ -9422,11 +9427,11 @@ match.statementMatches.length > 0 ? (
 
         <div>
           <label className="block text-sm font-semibold text-slate-700">
-            Date of Birth <span className="font-normal text-slate-400">(optional)</span>
+            Birth month and year <span className="font-normal text-slate-400">(optional)</span>
           </label>
 
           <input
-            type="date"
+            type="month"
             value={newLearnerDob}
             onChange={(e) =>
               setNewLearnerDob(e.target.value)
@@ -9434,6 +9439,7 @@ match.statementMatches.length > 0 ? (
             onInput={(e) =>
               setNewLearnerDob(e.currentTarget.value)
             }
+            max={new Date().toISOString().slice(0, 7)}
             className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-black"
           />
         </div>
@@ -12056,7 +12062,10 @@ onClick={() => {
 
           <div className="mt-2 rounded-2xl bg-slate-100 p-4">
             <p className="line-clamp-4 text-sm leading-6 text-slate-900">
-              {selectedEvidence.observation}
+              {replaceLearnerNamesWithInitials(
+                selectedEvidence.observation || "",
+                pupils
+              )}
             </p>
           </div>
 
@@ -12120,7 +12129,7 @@ onClick={() => {
       className="rounded-full bg-white px-4 py-2 font-medium text-slate-800"
     >
       {learner
-        ? `${learner.firstName} ${learner.lastName}`
+        ? getLearnerInitials(learner)
         : id}
     </span>
   );
@@ -13209,7 +13218,7 @@ onClick={() => {
       className="rounded-full bg-white px-4 py-2 font-medium text-slate-800"
     >
       {learner
-        ? `${learner.firstName} ${learner.lastName}`
+        ? getLearnerInitials(learner)
         : id}
     </span>
   );

@@ -11,6 +11,10 @@ import {
   isSchoolAdmin,
 } from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  getLearnerInitials,
+  replaceLearnerNamesWithInitials,
+} from "@/lib/learner-privacy";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -20,6 +24,8 @@ type SelectedLearner = {
   id: string;
   name: string;
   dateOfBirth?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
 };
 
 function parseDateOfBirth(value: unknown) {
@@ -57,19 +63,12 @@ function getAgeInMonthsAtDate(
     return null;
   }
 
-  let ageInMonths =
+  const ageInMonths =
     (referenceDate.getUTCFullYear() -
       birthDate.getUTCFullYear()) *
       12 +
     (referenceDate.getUTCMonth() -
       birthDate.getUTCMonth());
-
-  if (
-    referenceDate.getUTCDate() <
-    birthDate.getUTCDate()
-  ) {
-    ageInMonths -= 1;
-  }
 
   return ageInMonths >= 0
     ? ageInMonths
@@ -173,8 +172,7 @@ export async function POST(request: Request) {
       .from("learners")
       .select("id, first_name, last_name, date_of_birth")
       .eq("school_id", context.schoolId)
-      .eq("active", true)
-      .in("id", selectedLearnerIds);
+      .eq("active", true);
 
     schoolLearnersQuery = isSchoolAdmin(context.role)
       ? schoolLearnersQuery.or(
@@ -214,13 +212,20 @@ export async function POST(request: Request) {
         return [
           {
             id: learner.id,
-            name: [learner.first_name, learner.last_name]
-              .filter(Boolean)
-              .join(" "),
+            name: getLearnerInitials({
+              firstName: learner.first_name,
+              lastName: learner.last_name,
+            }),
             dateOfBirth: learner.date_of_birth,
+            firstName: learner.first_name,
+            lastName: learner.last_name,
           },
         ];
       });
+    const privacyIdentities = (schoolLearners ?? []).map((learner) => ({
+      firstName: learner.first_name,
+      lastName: learner.last_name,
+    }));
 
     if (learners.length !== selectedLearnerIds.length) {
       return Response.json(
@@ -495,7 +500,7 @@ if (learnersWithoutValidDob.length > 0) {
     {
       code: "MISSING_LEARNER_DOB",
       error:
-        "A date of birth is required before this observation can be analysed.",
+        "A birth month and year are required before this observation can be analysed.",
       learners: learnersWithoutValidDob,
     },
     { status: 400 }
@@ -503,6 +508,7 @@ if (learnersWithoutValidDob.length > 0) {
 }
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
+      store: false,
 
       input: `
 You are an experienced early years teacher and assessment lead.
@@ -533,7 +539,7 @@ Framework areas and statements:
 ${frameworkStatementsText}
 
 Observation:
-${observation}
+${replaceLearnerNamesWithInitials(observation, privacyIdentities)}
 
 Assessment rules:
 - Only match learning areas that are clearly evidenced in the observation.
@@ -579,7 +585,7 @@ Assessment rules:
 Learner mismatch rules:
 - Check whether the observation explicitly mentions a learner by name.
 - Compare any explicitly mentioned name with the selected learner names.
-- Treat a first name as matching the corresponding selected full name. For example, "Emma" matches "Emma Brown".
+- Selected learner names have already been replaced with their initials before analysis.
 - Set detected to true only when the observation clearly names someone who is not among the selected learners.
 - If the observation contains no learner name, set detected to false.
 - Do not infer a mismatch from pronouns such as he, she, they, or the learner.
@@ -1250,7 +1256,13 @@ const unmatchedMentionedNames = mentionedNames.filter(
 
 parsed.learnerMismatch = {
   detected: unmatchedMentionedNames.length > 0,
-  mentionedNames: unmatchedMentionedNames,
+  mentionedNames: unmatchedMentionedNames.map((name: string) => {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    return getLearnerInitials(
+      parts[0],
+      parts.length > 1 ? parts.at(-1) : null
+    );
+  }),
   selectedNames,
 };
 

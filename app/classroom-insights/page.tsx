@@ -10,6 +10,7 @@ import OasisEmbeddedOverlay, {
 import OasisHeader from "@/app/components/OasisHeader";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
+import { getLearnerInitials } from "@/lib/learner-privacy";
 
 type Learner = {
   id: string;
@@ -175,7 +176,7 @@ function startOfCurrentWeek() {
 }
 
 function learnerName(learner: Learner) {
-  return `${learner.firstName} ${learner.lastName}`.trim();
+  return getLearnerInitials(learner);
 }
 
 function formatShortDate(value: Date | null) {
@@ -827,7 +828,10 @@ export default function ClassroomInsightsPage() {
                             Learners not yet seen this week
                           </h3>
                           <p className="mt-2 text-sm leading-6 text-slate-600">
-                            {unobservedThisWeek.slice(0, 4).map((item) => item.learner.firstName).join(", ")}
+                            {unobservedThisWeek
+                              .slice(0, 4)
+                              .map((item) => getLearnerInitials(item.learner))
+                              .join(", ")}
                             {unobservedThisWeek.length > 4 ? ` and ${unobservedThisWeek.length - 4} more` : ""} have no evidence yet this week. Keep them in peripheral view during natural routines rather than creating a task for the sake of coverage.
                           </p>
                         </article>

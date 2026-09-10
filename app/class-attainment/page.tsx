@@ -9,6 +9,7 @@ import OasisEmbeddedOverlay, {
 import OasisHeader from "@/app/components/OasisHeader";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
+import { getLearnerInitials } from "@/lib/learner-privacy";
 
 type Learner = {
   id: string;
@@ -53,7 +54,7 @@ const DEFAULT_STATUS_LABELS = [
 ];
 
 function learnerName(learner: Learner) {
-  return `${learner.firstName} ${learner.lastName}`.trim();
+  return getLearnerInitials(learner);
 }
 
 function assessmentDisplayLabel(value: string, statusLabels: string[]) {

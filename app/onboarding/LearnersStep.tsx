@@ -7,6 +7,11 @@ import {
   normaliseLearnerDate,
   type LearnerDateOrder,
 } from "@/lib/learner-import";
+import {
+  birthMonthToStoredDate,
+  formatLearnerBirthMonthYear,
+  getLearnerInitials,
+} from "@/lib/learner-privacy";
 
 type Learner = {
   id: string;
@@ -118,7 +123,7 @@ export default function LearnersStep({
               firstName: firstName.trim(),
               lastName: lastName.trim(),
               className: className.trim(),
-              dateOfBirth,
+              dateOfBirth: birthMonthToStoredDate(dateOfBirth),
             },
           ],
         }),
@@ -151,8 +156,8 @@ export default function LearnersStep({
 
 function downloadTemplate() {
   const csv = [
-    "pupil_id,first_name,last_name,class,date_of_birth",
-    "STU001,Ava,Wilson,Pre-K,2022-04-15",
+    "pupil_id,first_name,last_name,class,birth_month",
+    "STU001,Ava,Wilson,Pre-K,2022-04",
   ].join("\n");
 
   const blob = new Blob([csv], {
@@ -245,6 +250,7 @@ function downloadTemplate() {
             "";
 
           const dob =
+            row.birthmonth ||
             row.dateofbirth ||
             row.dob ||
             row.birthdate ||
@@ -272,7 +278,9 @@ function downloadTemplate() {
           return {
             ...row,
             rowId: crypto.randomUUID(),
-            dateOfBirth: parsedDate.date,
+            dateOfBirth: parsedDate.date
+              ? `${parsedDate.date.slice(0, 7)}-01`
+              : "",
             isValid: Boolean(
               row.firstName && parsedDate.isValid
             ),
@@ -325,7 +333,9 @@ function downloadTemplate() {
 
         return {
           ...row,
-          dateOfBirth: parsedDate.date,
+          dateOfBirth: parsedDate.date
+            ? `${parsedDate.date.slice(0, 7)}-01`
+            : "",
           isValid: Boolean(
             row.firstName.trim() && parsedDate.isValid
           ),
@@ -425,8 +435,7 @@ function downloadTemplate() {
                     className="flex justify-between text-sm"
                   >
                     <span className="text-slate-800">
-                      {learner.firstName}{" "}
-                      {learner.lastName}
+                      {getLearnerInitials(learner)}
                     </span>
 
                     <span className="text-slate-500">
@@ -472,17 +481,19 @@ function downloadTemplate() {
               />
 
               <input
-                type="date"
+                type="month"
                 value={dateOfBirth}
                 onChange={(event) =>
                   setDateOfBirth(event.target.value)
                 }
+                max={new Date().toISOString().slice(0, 7)}
+                aria-label="Birth month and year"
                 className="rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
               />
             </div>
 
             <p className="mt-2 text-xs text-slate-500">
-              Surname and date of birth can be added or changed later.
+              Surname and birth month can be added or changed later.
             </p>
 
             <button
@@ -562,16 +573,19 @@ function downloadTemplate() {
                     >
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
-                          {row.firstName || "Missing"}{" "}
-                          {row.lastName || "(surname not shared)"}
+                          {row.firstName
+                            ? getLearnerInitials(row)
+                            : "Missing learner"}
                         </p>
 
                         <p className="text-xs text-slate-500">
                           {row.className || "No class"} ·{" "}
-                          {row.dateOfBirth ||
+                          {row.dateOfBirth
+                            ? formatLearnerBirthMonthYear(row.dateOfBirth)
+                            :
                             (row.rawDateOfBirth
                               ? `${row.rawDateOfBirth} — check date`
-                              : "DOB not shared")}
+                              : "Birth month not shared")}
                         </p>
                       </div>
 

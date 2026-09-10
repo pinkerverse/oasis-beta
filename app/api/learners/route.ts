@@ -11,6 +11,10 @@ import {
   normaliseOptionalSurname,
   type LearnerDateOrder,
 } from "@/lib/learner-import";
+import {
+  birthMonthInputValue,
+  birthMonthToStoredDate,
+} from "@/lib/learner-privacy";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +94,9 @@ const authenticatedSupabase =
       firstName: learner.first_name,
       lastName: learner.last_name,
       className: learner.class_name,
-      dateOfBirth: learner.date_of_birth,
+      dateOfBirth: birthMonthToStoredDate(
+        birthMonthInputValue(learner.date_of_birth)
+      ),
       status: "yellow",
       send: false,
       eal: false,
@@ -162,7 +168,7 @@ if (!context) {
       return NextResponse.json(
         {
           error:
-            "Each learner needs a first name. Any supplied date of birth must be a valid past date."
+            "Each learner needs a first name. Any supplied birth month must be valid and not in the future."
         },
         { status: 400 }
       );
@@ -285,7 +291,7 @@ if (!context) {
       return NextResponse.json(
         {
           error:
-            "A first name is required. Any supplied date of birth must be a valid past date.",
+            "A first name is required. Any supplied birth month must be valid and not in the future.",
         },
         { status: 400 }
       );
@@ -344,7 +350,9 @@ if (!context) {
         firstName: data.first_name,
         lastName: data.last_name,
         className: data.class_name,
-        dateOfBirth: data.date_of_birth,
+        dateOfBirth: birthMonthToStoredDate(
+          birthMonthInputValue(data.date_of_birth)
+        ),
         status: "yellow",
         send: false,
         eal: false,

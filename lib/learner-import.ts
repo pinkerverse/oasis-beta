@@ -150,6 +150,16 @@ export function normaliseLearnerDate(
   const value = String(rawValue).trim();
   if (!value) return { date: "", isValid: true };
 
+  const yearMonthMatch = value.match(/^(\d{4})[\s./-](\d{1,2})$/);
+
+  if (yearMonthMatch) {
+    return buildIsoDate(
+      Number(yearMonthMatch[1]),
+      Number(yearMonthMatch[2]),
+      1
+    );
+  }
+
   const textMonthDate = parseTextMonth(value);
   if (textMonthDate) return textMonthDate;
 

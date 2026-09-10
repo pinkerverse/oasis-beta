@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 
 import type { FrameworkDefinition } from "@/lib/framework";
+import { getLearnerInitials } from "@/lib/learner-privacy";
 
 type Learner = {
   id: string;
@@ -606,8 +607,8 @@ export default function BaselineStep({
                     learner?.id ?? "",
 
                   learnerName: learner
-                    ? `${learner.firstName} ${learner.lastName}`
-                    : `${firstName} ${lastName}`.trim(),
+                    ? getLearnerInitials(learner)
+                    : getLearnerInitials(firstName, lastName),
 
                   areaId: area?.id ?? "",
 
@@ -1389,8 +1390,7 @@ export default function BaselineStep({
                         key={learner.id}
                         value={learner.id}
                       >
-                        {learner.firstName}{" "}
-                        {learner.lastName}
+                        {getLearnerInitials(learner)}
                         {savedLearnerIds.has(
                           learner.id
                         )
@@ -1593,7 +1593,7 @@ export default function BaselineStep({
                     >
                       {isSaving
                         ? "Saving…"
-                        : `Save baseline for ${selectedLearner.firstName}`}
+                        : `Save baseline for ${getLearnerInitials(selectedLearner)}`}
                     </button>
                   )}
                 </>
