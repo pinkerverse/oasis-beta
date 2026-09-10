@@ -23,21 +23,23 @@ school's privacy lead before signature or approval.
 8. [Staff access-control policy](staff-access-control.md)
 9. [Business continuity plan](business-continuity.md)
 10. [Evidence register](evidence-register.md)
+11. [Step 7 internal security baseline](step-7-internal-security-baseline.md)
+12. [Independent security test scope](independent-security-test-scope.md)
 
 ## Readiness summary
 
 | Area | Current position | Release status |
 | --- | --- | --- |
-| Tenant isolation | School/class access enforced in application and database policies; automated cross-tenant tests exist | Built; production migration still requires verification |
-| Account security | Individual accounts, role separation, privileged MFA, session controls and ownership safeguards | Built; production migration/deployment still required |
+| Tenant isolation | School/class access enforced in application and database policies; automated cross-tenant tests exist | Built and production migration verified; independent testing remains |
+| Account security | Individual accounts, role separation, privileged MFA, session controls and ownership safeguards | Built and deployed; independent testing remains |
 | Data minimisation | Learner initials/IDs, birth month and year, name replacement before AI processing | Built |
 | AI safeguards | Educator review required; no solely automated decisions; Responses API calls use `store: false` | Built; provider zero-retention approval is not in place |
-| Audit trail | Sensitive administrative actions recorded without learner narrative content; 365-day purge function | Built; production migration/deployment still required |
+| Audit trail | Sensitive administrative actions recorded without learner narrative content; 365-day purge function | Built and production migration verified |
 | Backups | Supabase production dashboard reports no managed backups on the current Free plan | **Blocking for wider rollout** |
 | Monitoring | In-product security review exists; production alert delivery is not yet configured | **Open** |
 | Deletion/export | Observation deletion and access removal exist; complete school export and verified hard deletion do not | **Open** |
 | Contracts | Draft DPA and subprocessor list prepared | Legal entity details, provider DPAs and counsel review required |
-| Independent assurance | Not yet commissioned | Step 7 |
+| Independent assurance | Internal baseline complete; external test scope drafted | Step 7 in progress |
 
 ## Decisions and evidence still required
 
