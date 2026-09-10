@@ -7,6 +7,37 @@ import {
 export async function updateSession(
   request: NextRequest
 ) {
+  const isApiRoute =
+    request.nextUrl.pathname.startsWith("/api/");
+  const isMutation = ![
+    "GET",
+    "HEAD",
+    "OPTIONS",
+  ].includes(request.method.toUpperCase());
+
+  if (isApiRoute && isMutation) {
+    const origin = request.headers.get("origin");
+    const fetchSite = request.headers.get("sec-fetch-site");
+    const hasUntrustedOrigin = (() => {
+      if (origin) {
+        try {
+          return new URL(origin).origin !== request.nextUrl.origin;
+        } catch {
+          return true;
+        }
+      }
+
+      return fetchSite === "cross-site";
+    })();
+
+    if (hasUntrustedOrigin) {
+      return NextResponse.json(
+        { error: "This request could not be verified." },
+        { status: 403 }
+      );
+    }
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -66,9 +97,6 @@ const isPublicAuthRoute =
   request.nextUrl.pathname === "/confirm-invitation" ||
   request.nextUrl.pathname === "/privacy" ||
   request.nextUrl.pathname === "/terms";
-
-const isApiRoute =
-  request.nextUrl.pathname.startsWith("/api/");
 
 if (
   !userId &&
