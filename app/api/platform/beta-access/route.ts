@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { recordSecurityEvent } from "@/lib/security-audit";
 import {
   getCurrentPlatformOwner,
   hasCurrentMfaSession,
@@ -263,6 +264,14 @@ export async function POST(request: Request) {
         .single();
 
   if (invitationResult.error || !invitationResult.data) {
+    await recordSecurityEvent({
+      actorUserId: owner.id,
+      eventKey: "platform_invitation_failed",
+      outcome: "failed",
+      request,
+      severity: "warning",
+      targetType: "platform_invitation",
+    });
     return NextResponse.json(
       {
         error:
@@ -291,6 +300,16 @@ export async function POST(request: Request) {
       .from("platform_invitations")
       .update({ status: "revoked", updated_at: new Date().toISOString() })
       .eq("id", invitationId);
+
+    await recordSecurityEvent({
+      actorUserId: owner.id,
+      eventKey: "platform_invitation_failed",
+      outcome: "failed",
+      request,
+      severity: "warning",
+      targetId: invitationId,
+      targetType: "platform_invitation",
+    });
 
     const alreadyRegistered =
       inviteError?.message.toLowerCase().includes("registered") ||
@@ -325,6 +344,17 @@ export async function POST(request: Request) {
       })
       .eq("id", requestId);
   }
+
+  await recordSecurityEvent({
+    actorUserId: owner.id,
+    eventKey: resendInvitationId
+      ? "platform_invitation_resent"
+      : "platform_invitation_sent",
+    outcome: "succeeded",
+    request,
+    targetId: invitationId,
+    targetType: "platform_invitation",
+  });
 
   return NextResponse.json({
     success: true,
@@ -378,6 +408,15 @@ export async function DELETE(request: Request) {
       .maybeSingle();
 
     if (error) {
+      await recordSecurityEvent({
+        actorUserId: owner.id,
+        eventKey: "platform_invitation_revoke_failed",
+        outcome: "failed",
+        request,
+        severity: "warning",
+        targetId: invitationId,
+        targetType: "platform_invitation",
+      });
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -409,6 +448,16 @@ export async function DELETE(request: Request) {
       }
     }
 
+    await recordSecurityEvent({
+      actorUserId: owner.id,
+      eventKey: "platform_invitation_revoked",
+      outcome: "succeeded",
+      request,
+      severity: "warning",
+      targetId: invitationId,
+      targetType: "platform_invitation",
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -420,8 +469,26 @@ export async function DELETE(request: Request) {
       .eq("status", "requested");
 
     if (error) {
+      await recordSecurityEvent({
+        actorUserId: owner.id,
+        eventKey: "beta_access_request_close_failed",
+        outcome: "failed",
+        request,
+        severity: "warning",
+        targetId: requestId,
+        targetType: "beta_access_request",
+      });
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await recordSecurityEvent({
+      actorUserId: owner.id,
+      eventKey: "beta_access_request_closed",
+      outcome: "succeeded",
+      request,
+      targetId: requestId,
+      targetType: "beta_access_request",
+    });
 
     return NextResponse.json({ success: true });
   }

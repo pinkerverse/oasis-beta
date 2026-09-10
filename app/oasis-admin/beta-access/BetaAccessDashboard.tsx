@@ -257,14 +257,22 @@ export default function BetaAccessDashboard() {
             team access inside each school.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openDirectInvitation}
-          disabled={mfaRequired}
-          className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
-        >
-          + Invite a school
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/oasis-admin/security"
+            className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            Security activity
+          </Link>
+          <button
+            type="button"
+            onClick={openDirectInvitation}
+            disabled={mfaRequired}
+            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            + Invite a school
+          </button>
+        </div>
       </div>
 
       {mfaRequired && (

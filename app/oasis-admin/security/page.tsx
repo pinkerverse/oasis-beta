@@ -1,0 +1,21 @@
+import { redirect } from "next/navigation";
+
+import OasisHeader from "@/app/components/OasisHeader";
+import { getCurrentPlatformOwner } from "@/lib/platform-access";
+
+import SecurityEventsDashboard from "./SecurityEventsDashboard";
+
+export const dynamic = "force-dynamic";
+
+export default async function SecurityActivityPage() {
+  const owner = await getCurrentPlatformOwner();
+
+  if (!owner) redirect("/");
+
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <OasisHeader />
+      <SecurityEventsDashboard />
+    </main>
+  );
+}

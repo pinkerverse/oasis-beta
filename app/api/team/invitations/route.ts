@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { recordSecurityEvent } from "@/lib/security-audit";
 import {
   getCurrentAccountContext,
 } from "@/lib/supabase/current-workspace";
@@ -330,6 +331,15 @@ export async function POST(request: Request) {
           .single();
 
   if (invitationError || !invitation) {
+    await recordSecurityEvent({
+      actorUserId: context.userId,
+      eventKey: "school_invitation_failed",
+      outcome: "failed",
+      request,
+      schoolId: context.schoolId,
+      severity: "warning",
+      targetType: "school_invitation",
+    });
     return NextResponse.json(
       {
         error:
@@ -361,6 +371,17 @@ export async function POST(request: Request) {
       })
       .eq("id", invitation.id);
 
+    await recordSecurityEvent({
+      actorUserId: context.userId,
+      eventKey: "school_invitation_failed",
+      outcome: "failed",
+      request,
+      schoolId: context.schoolId,
+      severity: "warning",
+      targetId: invitation.id,
+      targetType: "school_invitation",
+    });
+
     const alreadyRegistered =
       inviteError?.message.toLowerCase().includes("registered") ||
       inviteError?.message.toLowerCase().includes("exists");
@@ -383,6 +404,18 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", invitation.id);
+
+  await recordSecurityEvent({
+    actorUserId: context.userId,
+    eventKey: resendInvitation
+      ? "school_invitation_resent"
+      : "school_invitation_sent",
+    outcome: "succeeded",
+    request,
+    schoolId: context.schoolId,
+    targetId: invitation.id,
+    targetType: "school_invitation",
+  });
 
   return NextResponse.json({
     success: true,
@@ -444,11 +477,31 @@ export async function DELETE(request: Request) {
     .eq("status", "pending");
 
   if (error) {
+    await recordSecurityEvent({
+      actorUserId: context.userId,
+      eventKey: "school_invitation_revoke_failed",
+      outcome: "failed",
+      request,
+      schoolId: context.schoolId,
+      severity: "warning",
+      targetId: invitationId,
+      targetType: "school_invitation",
+    });
     return NextResponse.json(
       { error: error.message },
       { status: 500 }
     );
   }
+
+  await recordSecurityEvent({
+    actorUserId: context.userId,
+    eventKey: "school_invitation_revoked",
+    outcome: "succeeded",
+    request,
+    schoolId: context.schoolId,
+    targetId: invitationId,
+    targetType: "school_invitation",
+  });
 
   return NextResponse.json({ success: true });
 }

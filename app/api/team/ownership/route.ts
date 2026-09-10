@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { recordSecurityEvent } from "@/lib/security-audit";
 import { getCurrentAccountContext } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
 
@@ -51,8 +52,29 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    await recordSecurityEvent({
+      actorUserId: context.userId,
+      eventKey: "school_ownership_transfer_failed",
+      outcome: "failed",
+      request,
+      schoolId: context.schoolId,
+      severity: "warning",
+      targetId: userId,
+      targetType: "user",
+    });
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+
+  await recordSecurityEvent({
+    actorUserId: context.userId,
+    eventKey: "school_ownership_transferred",
+    outcome: "succeeded",
+    request,
+    schoolId: context.schoolId,
+    severity: "warning",
+    targetId: userId,
+    targetType: "user",
+  });
 
   return NextResponse.json({
     success: true,
