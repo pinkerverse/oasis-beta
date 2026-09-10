@@ -2,6 +2,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 Operational security procedures are maintained in
 [`docs/security/operational-safeguards.md`](docs/security/operational-safeguards.md).
+The school-facing security and privacy evidence pack is indexed in
+[`docs/security/evidence-pack/README.md`](docs/security/evidence-pack/README.md).
 
 ## Getting Started
 

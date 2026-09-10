@@ -129,6 +129,7 @@ const frameworkTableText =
     const response =
       await openai.responses.create({
         model,
+        store: false,
 
         input: `
 You are mapping an educational framework into structured data for OASIS.
