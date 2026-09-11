@@ -404,32 +404,6 @@ export default function OasisHeader({
                   </>
                 )}
 
-                {hasClass && (
-                  <div className="border-b border-slate-100 pb-1 min-[520px]:hidden">
-                    <Link
-                      href="/learner-intelligence"
-                      role="menuitem"
-                      className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Learner Insight
-                    </Link>
-                    <Link
-                      href="/classroom-insights"
-                      role="menuitem"
-                      className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Classroom Intelligence
-                    </Link>
-                    <Link
-                      href="/class-attainment"
-                      role="menuitem"
-                      className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Class Attainment
-                    </Link>
-                  </div>
-                )}
-
                 {platformOwner && (
                   <Link
                     href="/oasis-admin/beta-access"
@@ -509,6 +483,74 @@ export default function OasisHeader({
           )}
         </div>
       </div>
+
+      {hasClass && (
+        <nav
+          aria-label="Class tools"
+          className="mx-auto grid max-w-[1600px] grid-cols-3 gap-1 border-t border-slate-100 px-1 py-2 min-[520px]:hidden"
+        >
+          <Link
+            href="/learner-intelligence"
+            aria-current={learnerIntelligenceActive ? "page" : undefined}
+            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
+              learnerIntelligenceActive
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-slate-50 text-slate-700 active:bg-slate-900 active:text-white"
+            }`}
+          >
+            <Image
+              src="/learner-intelligence-brain.png"
+              alt=""
+              width={128}
+              height={128}
+              className={iconClasses(learnerIntelligenceActive)}
+              aria-hidden="true"
+            />
+            <span>Learner Insight</span>
+          </Link>
+
+          <Link
+            href="/classroom-insights"
+            aria-current={classroomInsightsActive ? "page" : undefined}
+            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
+              classroomInsightsActive
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-slate-50 text-slate-700 active:bg-slate-900 active:text-white"
+            }`}
+          >
+            <Image
+              src="/classroom-insights-eye.png"
+              alt=""
+              width={128}
+              height={128}
+              className={iconClasses(classroomInsightsActive)}
+              aria-hidden="true"
+            />
+            <span>Classroom Intelligence</span>
+          </Link>
+
+          <Link
+            href="/class-attainment"
+            aria-current={classAttainmentActive ? "page" : undefined}
+            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
+              classAttainmentActive
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-slate-50 text-slate-700 active:bg-slate-900 active:text-white"
+            }`}
+          >
+            <Image
+              src="/class-attainment-icon.png"
+              alt=""
+              width={128}
+              height={128}
+              className={iconClasses(classAttainmentActive)}
+              aria-hidden="true"
+            />
+            <span>Class Attainment</span>
+          </Link>
+        </nav>
+      )}
+
       {showAccountModal && (
         <AccountModal
           accountEmail={accountEmail}
