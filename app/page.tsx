@@ -6153,7 +6153,7 @@ if (checkingOnboarding) {
 
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-8">
+    <main className="min-h-screen w-full min-w-0 overflow-x-clip bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-8">
 <OasisHeader
   className="-mx-4 -mt-4 mb-8 sm:-mx-8 sm:-mt-8"
   selectedLearnerIds={selectedChildren}
@@ -6289,7 +6289,7 @@ if (checkingOnboarding) {
   className={`pointer-events-none absolute left-0 top-full z-50 mt-3 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl ${
     previewLearnerId === child.id &&
     !selectedChildren.includes(child.id)
-      ? "block"
+      ? "hidden sm:block"
       : "hidden"
   }`}
 >
@@ -7058,7 +7058,7 @@ const hasOverride =
 </div>
 
 {selectedChildren.length <= 1 && (
-<div className="mt-8 w-full">
+<div className="mt-8 w-full min-w-0">
 
   <div className="my-8 flex w-full items-center gap-4">
 
@@ -7089,9 +7089,9 @@ const hasOverride =
 
   ) : (
 
-    <div className="mt-8 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
-            <h2 className="text-2xl font-bold text-slate-900">
+    <div className="mt-8 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
+          <div className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg sm:p-8">
+            <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
               Learner Progress
             </h2>
 
@@ -7108,13 +7108,13 @@ const hasOverride =
     <div className="space-y-5">
       {liveLearnerProgress.map((item) => (
         <div key={item.area}>
-          <div className="mb-2 flex items-center justify-between gap-4">
-            <span className="font-medium text-slate-900">
+          <div className="mb-2 flex min-w-0 items-start justify-between gap-2 sm:items-center sm:gap-4">
+            <span className="min-w-0 flex-1 break-words text-sm font-medium text-slate-900 sm:text-base">
               {item.area}
             </span>
 
             <span
-              className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium sm:px-3 sm:text-sm ${
   getAssessmentLevelColours(item.level).badge
 }`}
             >
@@ -7149,11 +7149,11 @@ const hasOverride =
 </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                 <h2 className="text-2xl font-bold text-slate-900">
+          <div className="min-w-0 space-y-6">
+            <div className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg sm:p-8">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                 <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
   Evidence Coverage
 </h2>
 
@@ -7166,7 +7166,7 @@ const hasOverride =
 </p>
                 </div>
 
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <p className="text-sm text-slate-500">
   Observations
 </p>
@@ -7185,14 +7185,14 @@ const hasOverride =
                 </div>
               </div>
 
-              <div className="mt-8 flex h-56 items-end gap-4 border-b border-slate-200 pb-4">
+              <div className="mt-8 flex h-56 min-w-0 items-end gap-1 border-b border-slate-200 pb-4 sm:gap-4">
                 {evidenceCoverage.map((item) => (
                   <div
                     key={item.area}
                     className="group relative flex h-full flex-1 flex-col items-center justify-end"
                   >
                     <div
-                      className="w-10 rounded-t-xl bg-slate-900 transition-all hover:bg-slate-700"
+                      className="w-full max-w-10 rounded-t-xl bg-slate-900 transition-all hover:bg-slate-700"
                       style={{
                         height: `${Math.max(
                           (item.count / maxEvidenceCount) * 170,
@@ -7216,11 +7216,12 @@ const hasOverride =
                 ))}
               </div>
 
-              <div className="mt-3 flex gap-4 text-center text-xs font-semibold text-slate-500">
+              <div className="mt-3 flex min-w-0 gap-1 text-center text-[10px] font-semibold text-slate-500 sm:gap-4 sm:text-xs">
   {evidenceCoverage.map((item) => (
     <span
       key={item.area}
-      className="min-w-0 flex-1"
+      className="min-w-0 flex-1 truncate"
+      title={item.area}
     >
       {item.short}
     </span>
@@ -7228,10 +7229,10 @@ const hasOverride =
 </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
+            <div className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg sm:p-6">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
   Learning Journey
 </h2>
 
@@ -7250,7 +7251,7 @@ const hasOverride =
     setSelectedJourney(event.target.value)
   }
   disabled={liveJourneyAreas.length === 0}
-  className="w-40 shrink-0 rounded-xl border border-slate-300 px-3 py-2 text-sm text-black disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+  className="w-full min-w-0 rounded-xl border border-slate-300 px-3 py-2 text-sm text-black disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:w-40 sm:shrink-0"
 >
   {liveJourneyAreas.length > 0 ? (
     liveJourneyAreas.map((area) => (
@@ -7352,7 +7353,7 @@ const hasOverride =
   <>
     {/* ASSESSMENT SNAPSHOT */}
 
-    <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
+    <div className="mt-8 min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg sm:p-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">
@@ -7496,7 +7497,7 @@ const hasOverride =
         </div>
       </div>
 
-<div className="mt-8 grid gap-4 md:grid-cols-2">
+<div className="mt-8 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
   {liveSnapshotData.length === 0 && (
     <div className="rounded-2xl bg-slate-50 p-6 text-center md:col-span-2">
       <p className="font-medium text-slate-700">
@@ -7512,11 +7513,11 @@ const hasOverride =
   {liveSnapshotData.map((item) => (
     <div
       key={item.area}
-      className="rounded-2xl bg-slate-50 p-4"
+      className="min-w-0 rounded-2xl bg-slate-50 p-4"
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="break-words text-sm font-semibold text-slate-900">
             {item.area}
           </p>
 
@@ -7525,7 +7526,7 @@ const hasOverride =
           </p>
         </div>
 
-        <div>
+        <div className="shrink-0 self-start sm:self-auto">
           {!item.hasEvidenceAfterFrom ? (
             <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
               No new evidence
