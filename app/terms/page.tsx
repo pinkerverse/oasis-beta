@@ -77,7 +77,13 @@ export default function TermsPage() {
           <li>provide required information to staff, families and learners;</li>
           <li>obtain parental or guardian consent where applicable law requires it;</li>
           <li>limit data to what is relevant for observation and assessment;</li>
-          <li>avoid unnecessary sensitive, medical or safeguarding information; and</li>
+          <li>
+            use learner initials or school-generated IDs and birth month/year only;
+          </li>
+          <li>
+            never enter protected health information, medical records, diagnoses or
+            safeguarding case information; and
+          </li>
           <li>review permissions, exports and generated content before sharing them.</li>
         </LegalList>
         <p>

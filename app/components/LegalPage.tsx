@@ -75,8 +75,25 @@ export default function LegalPage({
             {description}
           </p>
           <p className="mt-3 text-sm font-medium text-slate-500">
-            Effective 10 September 2026 · Version 1.0
+            Effective 11 September 2026 · Version 1.1
           </p>
+
+          <aside className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50 px-5 py-4 text-sm leading-6 text-indigo-950">
+            <p className="font-bold">Compliance position</p>
+            <p className="mt-1">
+              OASIS is designed to support schools&apos; compliance with applicable
+              data-protection and student-privacy requirements, including GDPR,
+              India&apos;s DPDP framework, COPPA and FERPA. Applicability depends on
+              the school, jurisdiction and deployment. OASIS is an adult-only
+              educator service, does not sell learner data or use it for advertising,
+              and does not make solely automated high-impact decisions. CIPA
+              obligations remain with eligible schools and libraries. OASIS is not a
+              healthcare-record system and must not be used to store protected health
+              information or medical records. Formal compliance remains subject to
+              completed contracts, school approval, legal review and the controls
+              identified in the OASIS readiness plan.
+            </p>
+          </aside>
 
           <div className="mt-10 space-y-8">{children}</div>
         </article>

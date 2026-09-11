@@ -9,6 +9,11 @@ import {
   getLearnerInitials,
   replaceLearnerNamesWithInitials,
 } from "@/lib/learner-privacy";
+import {
+  privacyReviewResponse,
+  reviewPrivacyText,
+} from "@/lib/privacy-guardrails";
+import { recordSecurityEvent } from "@/lib/security-audit";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -252,6 +257,28 @@ export async function POST(request: Request) {
       JSON.stringify(evidenceForSynthesis, null, 2),
       privacyIdentities
     );
+    const privacyReview = reviewPrivacyText(
+      evidenceForSynthesis.map((entry) => entry.observation).join("\n")
+    );
+
+    if (privacyReview.requiresReview) {
+      await recordSecurityEvent({
+        actorUserId: context.userId,
+        eventKey: "privacy_guardrail_triggered",
+        outcome: "denied",
+        request,
+        schoolId: context.schoolId,
+        severity: "warning",
+        targetId: learnerId,
+        targetType: "learner_intelligence",
+      });
+
+      return Response.json(
+        privacyReviewResponse(privacyReview),
+        { status: 422 }
+      );
+    }
+
     const response = await openai.responses.create({
       model,
       store: false,

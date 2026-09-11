@@ -6,6 +6,11 @@ import {
 } from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  privacyReviewResponse,
+  reviewPrivacyText,
+} from "@/lib/privacy-guardrails";
+import { recordSecurityEvent } from "@/lib/security-audit";
 
 function normalizeObservationText(value: unknown) {
   if (typeof value !== "string") {
@@ -123,6 +128,45 @@ const normalizedLearnerIds =
   learnerEntryIds.length > 0
     ? learnerEntryIds
     : normalizeLearnerIds(body.learner_ids);
+
+    const privacyReview = reviewPrivacyText(
+      [
+        observationText,
+        ...learnerEntries.flatMap((entry: unknown) => {
+          const learnerEntry =
+            entry && typeof entry === "object"
+              ? (entry as Record<string, unknown>)
+              : {};
+
+          return [
+            typeof learnerEntry.observation === "string"
+              ? learnerEntry.observation
+              : "",
+            typeof learnerEntry.teacher_notes === "string"
+              ? learnerEntry.teacher_notes
+              : "",
+          ];
+        }),
+      ].join("\n")
+    );
+
+    if (privacyReview.requiresReview) {
+      await recordSecurityEvent({
+        actorUserId: context.userId,
+        eventKey: "privacy_guardrail_triggered",
+        outcome: "denied",
+        request,
+        schoolId: context.schoolId,
+        severity: "warning",
+        targetType: "observation_save",
+      });
+
+      return NextResponse.json(
+        privacyReviewResponse(privacyReview),
+        { status: 422 }
+      );
+    }
+
     const observationDate =
       normalizeObservationDate(
         body.observation_date ??

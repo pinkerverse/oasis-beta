@@ -4,6 +4,17 @@
 data-protection counsel.** This draft records the intended controller/processor
 relationship and is not a substitute for advice on a school's specific duties.
 
+OASIS is designed to support schools' compliance with applicable data-protection
+and student-privacy requirements, including GDPR, India's DPDP framework, COPPA
+and FERPA. Applicability depends on the school, jurisdiction and deployment. OASIS
+is an adult-only educator service, does not sell learner data or use it for
+advertising, and does not make solely automated high-impact decisions. CIPA
+obligations remain with eligible schools and libraries. OASIS is not a
+healthcare-record system and must not be used to store protected health information
+or medical records. Formal compliance remains subject to completed contracts,
+school approval, legal review and the controls identified in the OASIS readiness
+plan.
+
 Effective date: `[DATE]`
 
 Parties:
@@ -54,7 +65,7 @@ children/guardian requirements, user authorisation and the accuracy of its data.
 | Purpose | Provide and secure OASIS under the Controller's configuration and authorised user actions |
 | Data subjects | learners/children; educators; school leaders; invited staff; limited family/other people appearing in supplied narrative or images |
 | Data | learner initials/ID, birth month/year, class, observations, evidence images, baselines, judgements, framework mappings, staff account/membership and audit metadata |
-| Sensitive data | Not intentionally required. Narrative/images may incidentally reveal health, disability, ethnicity, religion or safeguarding context; users must avoid such data unless the Controller has expressly authorised and safeguarded it |
+| Sensitive data | Protected health information, medical records, diagnoses and safeguarding case information are prohibited. Educational narrative/images may still incidentally reveal disability, ethnicity, religion or other sensitive context; the Controller must minimise it and ensure that any necessary processing is specifically lawful and safeguarded |
 | Frequency | Continuous during authorised use; AI transfer only when a relevant feature is requested |
 
 The detailed inventory is maintained in [Data inventory and retention

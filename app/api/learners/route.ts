@@ -12,6 +12,7 @@ import {
   normaliseLearnerBirthMonth,
   normaliseLearnerInitial,
 } from "@/lib/learner-privacy";
+import { recordSecurityEvent } from "@/lib/security-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -149,6 +150,16 @@ if (!context) {
     );
 
     if (invalidLearner) {
+      await recordSecurityEvent({
+        actorUserId: context.userId,
+        eventKey: "privacy_guardrail_triggered",
+        outcome: "denied",
+        request,
+        schoolId: context.schoolId,
+        severity: "warning",
+        targetType: "learner_import",
+      });
+
       return NextResponse.json(
         {
           error:
@@ -265,6 +276,16 @@ if (!context) {
       !isLearnerInitial(lastName, { optional: true }) ||
       !parsedDateOfBirth.isValid
     ) {
+      await recordSecurityEvent({
+        actorUserId: context.userId,
+        eventKey: "privacy_guardrail_triggered",
+        outcome: "denied",
+        request,
+        schoolId: context.schoolId,
+        severity: "warning",
+        targetType: "learner_update",
+      });
+
       return NextResponse.json(
         {
           error:

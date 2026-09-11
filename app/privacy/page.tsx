@@ -66,10 +66,9 @@ export default function PrivacyPolicyPage() {
             assessment frameworks.
           </li>
           <li>
-            <strong>Learner information:</strong> learner identifiers, initials or
-            names supplied by the school, class, birth information (presented as
-            month and year in the app), support flags, observations, evidence,
-            teacher judgements, baselines and next steps.
+            <strong>Learner information:</strong> school-generated learner
+            identifiers, initials, class, birth month and year, support flags,
+            observations, evidence, teacher judgements, baselines and next steps.
           </li>
           <li>
             <strong>Uploaded and generated content:</strong> framework documents,
@@ -86,10 +85,11 @@ export default function PrivacyPolicyPage() {
           </li>
         </LegalList>
         <p>
-          OASIS is not designed to hold medical diagnoses, safeguarding case files,
-          government identity numbers, financial information or other data that is
-          not necessary for observation and assessment. Users should not enter such
-          information into free-text observations.
+          OASIS is not designed to hold protected health information, medical
+          diagnoses, safeguarding case files, government identity numbers,
+          financial information or other data that is not necessary for observation
+          and assessment. Users must not enter such information into free-text
+          observations or uploads.
         </p>
       </LegalSection>
 
@@ -133,10 +133,11 @@ export default function PrivacyPolicyPage() {
           under 18 as a child, while European rules give children specific protection.
         </p>
         <p>
-          OASIS applies data-minimising presentation: learner-facing screens use
-          initials, birth information is presented as month and year, and known
-          learner names are replaced with initials before supported observation analysis.
-          Schools should still avoid unnecessary identifying detail in narrative text.
+          OASIS applies data-minimising presentation: learner profiles use initials
+          or school-generated IDs, birth information is limited to month and year,
+          and known learner names are replaced with initials before supported
+          observation analysis. Schools must not enter full learner names or
+          unnecessary identifying detail in narrative text or uploads.
         </p>
       </LegalSection>
 

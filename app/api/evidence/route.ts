@@ -5,6 +5,12 @@ import {
   isSchoolAdmin,
   type CurrentWorkspaceContext,
 } from "@/lib/supabase/current-workspace";
+import {
+  hasEvidencePrivacyConfirmation,
+  privacyReviewResponse,
+  reviewPrivacyText,
+} from "@/lib/privacy-guardrails";
+import { recordSecurityEvent } from "@/lib/security-audit";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const BUCKET = "observation-evidence";
@@ -82,11 +88,44 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get("file");
+    const privacyConfirmed = hasEvidencePrivacyConfirmation(
+      formData.get("privacy_confirmed")
+    );
 
     if (!(file instanceof File)) {
       return NextResponse.json(
         { error: "Choose an image to upload." },
         { status: 400 }
+      );
+    }
+
+    const readableFileName = file.name
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_-]+/g, " ");
+    const fileNameReview = reviewPrivacyText(readableFileName, {
+      context: "file_name",
+    });
+
+    if (!privacyConfirmed || fileNameReview.requiresReview) {
+      await recordSecurityEvent({
+        actorUserId: context.userId,
+        eventKey: "privacy_guardrail_triggered",
+        outcome: "denied",
+        request,
+        schoolId: context.schoolId,
+        severity: "warning",
+        targetType: "evidence_upload",
+      });
+
+      return NextResponse.json(
+        fileNameReview.requiresReview
+          ? privacyReviewResponse(fileNameReview)
+          : {
+              code: "PRIVACY_CONFIRMATION_REQUIRED",
+              error:
+                "Check the photo and confirm that it contains no identifying, medical or safeguarding information before uploading.",
+            },
+        { status: 422 }
       );
     }
 

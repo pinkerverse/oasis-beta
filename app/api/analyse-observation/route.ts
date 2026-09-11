@@ -15,6 +15,11 @@ import {
   getLearnerInitials,
   replaceLearnerNamesWithInitials,
 } from "@/lib/learner-privacy";
+import {
+  privacyReviewResponse,
+  reviewPrivacyText,
+} from "@/lib/privacy-guardrails";
+import { recordSecurityEvent } from "@/lib/security-audit";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -495,6 +500,30 @@ if (requestedObservationDate > today) {
         { status: 400 }
       );
     }
+
+const privacySafeObservation = replaceLearnerNamesWithInitials(
+  observation,
+  privacyIdentities
+);
+const privacyReview = reviewPrivacyText(privacySafeObservation);
+
+if (privacyReview.requiresReview) {
+  await recordSecurityEvent({
+    actorUserId: context.userId,
+    eventKey: "privacy_guardrail_triggered",
+    outcome: "denied",
+    request,
+    schoolId: context.schoolId,
+    severity: "warning",
+    targetType: "observation_analysis",
+  });
+
+  return Response.json(
+    privacyReviewResponse(privacyReview),
+    { status: 422 }
+  );
+}
+
 if (learnersWithoutValidDob.length > 0) {
   return Response.json(
     {
@@ -539,7 +568,7 @@ Framework areas and statements:
 ${frameworkStatementsText}
 
 Observation:
-${replaceLearnerNamesWithInitials(observation, privacyIdentities)}
+${privacySafeObservation}
 
 Assessment rules:
 - Only match learning areas that are clearly evidenced in the observation.

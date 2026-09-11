@@ -36,6 +36,11 @@ import {
   normaliseLearnerInitial,
   replaceLearnerNamesWithInitials,
 } from "@/lib/learner-privacy";
+import {
+  privacyFindingLabels,
+  privacyReviewMessage,
+  reviewPrivacyText,
+} from "@/lib/privacy-guardrails";
 
 
 
@@ -212,6 +217,11 @@ const [journalEntries, setJournalEntries] = useState<any[]>([]);
   () => new Date().toISOString().slice(0, 10)
 );
   const [evidenceImage, setEvidenceImage] = useState<File | null>(null);
+  const [evidencePrivacyConfirmed, setEvidencePrivacyConfirmed] =
+    useState(false);
+  const [observationPrivacyError, setObservationPrivacyError] =
+    useState("");
+  const [photoPrivacyError, setPhotoPrivacyError] = useState("");
   const [showBaselineModal, setShowBaselineModal] = useState(false);
   const [baselineImporting, setBaselineImporting] =
   useState(false);
@@ -1777,6 +1787,9 @@ function openObservationComposer() {
   invalidateObservationAnalysis();
   setObservation("");
   setEvidenceImage(null);
+  setEvidencePrivacyConfirmed(false);
+  setObservationPrivacyError("");
+  setPhotoPrivacyError("");
 
   if (fileInputRef.current) {
     fileInputRef.current.value = "";
@@ -5616,6 +5629,15 @@ setFrameworkProcessingStage(null);
   if (privacySafeObservation !== observation) {
     setObservation(privacySafeObservation);
   }
+
+  const privacyReview = reviewPrivacyText(privacySafeObservation);
+
+  if (privacyReview.requiresReview) {
+    setObservationPrivacyError(privacyReviewMessage(privacyReview));
+    return;
+  }
+
+  setObservationPrivacyError("");
 setSavedToJournal(false);
   setLoading(true);
   setAnalysis(null);
@@ -5650,6 +5672,14 @@ setAreaOverrideReasons({});
 const data = await response.json();
 
 if (!response.ok) {
+  if (data.code === "PRIVACY_REVIEW_REQUIRED") {
+    setObservationPrivacyError(
+      data.error ||
+        "Review and remove sensitive details before continuing."
+    );
+    return;
+  }
+
   if (
     response.status === 400 &&
     data.code === "MISSING_LEARNER_DOB"
@@ -5803,6 +5833,13 @@ useEffect(() => {
 async function handleSaveToJournal() {
   if (!analysis) return;
 
+  if (evidenceImage && !evidencePrivacyConfirmed) {
+    setPhotoPrivacyError(
+      "Check the photo and confirm that it contains no identifying, medical or safeguarding information before saving."
+    );
+    return;
+  }
+
 const learnerEntries = analysis.learnerAnalyses.map(
   (learnerAnalysis) => {
     const savedFrameworkMatches =
@@ -5900,6 +5937,7 @@ type JournalSaveResponse = {
 if (evidenceImage) {
   const evidenceFormData = new FormData();
   evidenceFormData.append("file", evidenceImage);
+  evidenceFormData.append("privacy_confirmed", "true");
 
   const uploadResponse = await fetch("/api/evidence", {
     method: "POST",
@@ -5983,6 +6021,8 @@ if (!response.ok) {
 
     setSavedToJournal(true);
     setEvidenceImage(null);
+    setEvidencePrivacyConfirmed(false);
+    setPhotoPrivacyError("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -6024,6 +6064,8 @@ async function discardDuplicateEvidence() {
 
   setShowDuplicateObservationModal(false);
   setDuplicateSavePayload(null);
+  setEvidencePrivacyConfirmed(false);
+  setPhotoPrivacyError("");
 }
 
 async function handleConfirmDuplicateSave() {
@@ -6062,6 +6104,8 @@ async function handleConfirmDuplicateSave() {
 setDuplicateSavePayload(null);
 setSavedToJournal(true);
 setEvidenceImage(null);
+setEvidencePrivacyConfirmed(false);
+setPhotoPrivacyError("");
 
 if (fileInputRef.current) {
   fileInputRef.current.value = "";
@@ -6474,6 +6518,7 @@ if (checkingOnboarding) {
           value={observation}
           onChange={(e) => {
             invalidateObservationAnalysis();
+            setObservationPrivacyError("");
             setObservation(e.target.value);
           }}
           style={{
@@ -6484,6 +6529,29 @@ if (checkingOnboarding) {
           className="mt-3 h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
           placeholder="Type or paste an observation using initials only..."
         />
+
+        {(() => {
+          const privacyReview = reviewPrivacyText(observation);
+          const message =
+            observationPrivacyError || privacyReviewMessage(privacyReview);
+
+          if (!message) return null;
+
+          return (
+            <div
+              role="alert"
+              className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            >
+              <p className="font-bold">Review and remove sensitive details</p>
+              <p className="mt-1">{message}</p>
+              {privacyReview.findings.length > 0 && (
+                <p className="mt-2 text-xs font-medium text-amber-800">
+                  Detected: {privacyFindingLabels(privacyReview).join(", ")}.
+                </p>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="mt-4">
 
@@ -6500,11 +6568,31 @@ if (checkingOnboarding) {
   type="file"
   accept="image/*"
   className="hidden"
-  onChange={(e) =>
-    setEvidenceImage(
-      e.target.files?.[0] || null
-    )
-  }
+  onChange={(event) => {
+    const file = event.target.files?.[0] || null;
+    setEvidencePrivacyConfirmed(false);
+    setPhotoPrivacyError("");
+
+    if (file) {
+      const readableFileName = file.name
+        .replace(/\.[^.]+$/, "")
+        .replace(/[_-]+/g, " ");
+      const fileNameReview = reviewPrivacyText(readableFileName, {
+        context: "file_name",
+      });
+
+      if (fileNameReview.requiresReview) {
+        setEvidenceImage(null);
+        setPhotoPrivacyError(
+          `${privacyReviewMessage(fileNameReview)} Rename the file after removing those details, then choose it again.`
+        );
+        event.target.value = "";
+        return;
+      }
+    }
+
+    setEvidenceImage(file);
+  }}
 />
 
   </label>
@@ -6526,6 +6614,8 @@ if (checkingOnboarding) {
       <button
         onClick={() => {
   setEvidenceImage(null);
+  setEvidencePrivacyConfirmed(false);
+  setPhotoPrivacyError("");
 
   if (fileInputRef.current) {
     fileInputRef.current.value = "";
@@ -6542,8 +6632,34 @@ if (checkingOnboarding) {
       {evidenceImage.name}
     </p>
 
+    <label className="mt-3 flex max-w-xl items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+      <input
+        type="checkbox"
+        checked={evidencePrivacyConfirmed}
+        onChange={(event) => {
+          setEvidencePrivacyConfirmed(event.target.checked);
+          setPhotoPrivacyError("");
+        }}
+        className="mt-0.5 h-4 w-4 rounded border-slate-300"
+      />
+      <span>
+        I checked this photo. It contains no visible full names, full birth
+        dates, contact details, medical records or safeguarding documents.
+      </span>
+    </label>
+
   </div>
 
+)}
+
+{photoPrivacyError && (
+  <div
+    role="alert"
+    className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+  >
+    <p className="font-bold">Review the photo evidence</p>
+    <p className="mt-1">{photoPrivacyError}</p>
+  </div>
 )}
       </div>
 
@@ -6557,7 +6673,11 @@ if (checkingOnboarding) {
 
       <button
         onClick={handleAnalyse}
-        disabled={loading || selectedChildren.length === 0}
+        disabled={
+          loading ||
+          selectedChildren.length === 0 ||
+          reviewPrivacyText(observation).requiresReview
+        }
         className="mt-6 rounded-xl bg-slate-900 px-6 py-3 font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
       >
         {loading ? "Analysing..." : "Analyse Observation"}
