@@ -4,9 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import OasisEmbeddedOverlay, {
-  type OasisEmbeddedOverlayKind,
-} from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
 import { useSchoolAdminRedirect } from "@/app/components/useSchoolAdminRedirect";
 
@@ -28,9 +25,6 @@ export default function AcademicYearSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [headerOverlay, setHeaderOverlay] =
-    useState<OasisEmbeddedOverlayKind | null>(null);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -207,15 +201,6 @@ export default function AcademicYearSettingsPage() {
       <OasisHeader
         className="-mx-4 sm:-mx-8"
         settingsActive
-        onAddObservation={() => setHeaderOverlay("observation")}
-        onTodaysFocus={() => setHeaderOverlay("focus")}
-        addObservationActive={headerOverlay === "observation"}
-        todaysFocusActive={headerOverlay === "focus"}
-      />
-
-      <OasisEmbeddedOverlay
-        kind={headerOverlay}
-        onClose={() => setHeaderOverlay(null)}
       />
 
       <div className="mx-auto max-w-6xl pt-10">

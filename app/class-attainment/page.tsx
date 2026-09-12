@@ -3,9 +3,6 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
-import OasisEmbeddedOverlay, {
-  type OasisEmbeddedOverlayKind,
-} from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
@@ -149,9 +146,6 @@ export default function ClassAttainmentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const [headerOverlay, setHeaderOverlay] =
-    useState<OasisEmbeddedOverlayKind | null>(null);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -400,15 +394,6 @@ export default function ClassAttainmentPage() {
       <OasisHeader
         className="-mx-4 sm:-mx-8"
         activePage="class-attainment"
-        onAddObservation={() => setHeaderOverlay("observation")}
-        onTodaysFocus={() => setHeaderOverlay("focus")}
-        addObservationActive={headerOverlay === "observation"}
-        todaysFocusActive={headerOverlay === "focus"}
-      />
-
-      <OasisEmbeddedOverlay
-        kind={headerOverlay}
-        onClose={() => setHeaderOverlay(null)}
       />
 
       <div className="mx-auto max-w-7xl pt-10">

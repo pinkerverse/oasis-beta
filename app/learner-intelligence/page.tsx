@@ -1,11 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import OasisEmbeddedOverlay, {
-  type OasisEmbeddedOverlayKind,
-} from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
 import {
   getLearnerInitials,
@@ -635,6 +633,7 @@ function InsightGroup({
 
 export default function LearnerIntelligencePage() {
   useClassAccessRedirect();
+  const router = useRouter();
   const [learners, setLearners] = useState<Learner[]>([]);
   const [learnersLoading, setLearnersLoading] = useState(true);
   const [learnersError, setLearnersError] = useState("");
@@ -659,8 +658,6 @@ export default function LearnerIntelligencePage() {
   const [statusLabels, setStatusLabels] = useState(
     DEFAULT_STATUS_LABELS
   );
-  const [headerOverlay, setHeaderOverlay] =
-    useState<OasisEmbeddedOverlayKind | null>(null);
   const [learnersReloadKey, setLearnersReloadKey] = useState(0);
   const [evidenceReloadKey, setEvidenceReloadKey] = useState(0);
 
@@ -1098,18 +1095,6 @@ export default function LearnerIntelligencePage() {
         selectedLearnerIds={
           selectedLearnerId ? [selectedLearnerId] : []
         }
-        onAddObservation={() => setHeaderOverlay("observation")}
-        onTodaysFocus={() => setHeaderOverlay("focus")}
-        addObservationActive={headerOverlay === "observation"}
-        todaysFocusActive={headerOverlay === "focus"}
-      />
-
-      <OasisEmbeddedOverlay
-        kind={headerOverlay}
-        selectedLearnerIds={
-          selectedLearnerId ? [selectedLearnerId] : []
-        }
-        onClose={() => setHeaderOverlay(null)}
       />
 
       <div className="mx-auto max-w-7xl pt-10">
@@ -1309,7 +1294,13 @@ export default function LearnerIntelligencePage() {
 
                 <button
                   type="button"
-                  onClick={() => setHeaderOverlay("observation")}
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      panel: "observation",
+                      learner: selectedLearnerId,
+                    });
+                    router.push(`/?${params.toString()}`);
+                  }}
                   className="rounded-xl border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Add observation

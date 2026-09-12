@@ -4,9 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import OasisEmbeddedOverlay, {
-  type OasisEmbeddedOverlayKind,
-} from "@/app/components/OasisEmbeddedOverlay";
 import OasisHeader from "@/app/components/OasisHeader";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
@@ -201,8 +198,6 @@ export default function ClassroomInsightsPage() {
   const [areaPeriod, setAreaPeriod] = useState<AreaPeriod>("week");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [headerOverlay, setHeaderOverlay] =
-    useState<OasisEmbeddedOverlayKind | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -582,15 +577,6 @@ export default function ClassroomInsightsPage() {
       <OasisHeader
         className="-mx-4 sm:-mx-8"
         activePage="classroom-insights"
-        onAddObservation={() => setHeaderOverlay("observation")}
-        onTodaysFocus={() => setHeaderOverlay("focus")}
-        addObservationActive={headerOverlay === "observation"}
-        todaysFocusActive={headerOverlay === "focus"}
-      />
-
-      <OasisEmbeddedOverlay
-        kind={headerOverlay}
-        onClose={() => setHeaderOverlay(null)}
       />
 
       <div className="mx-auto w-full min-w-0 max-w-7xl pt-10">
