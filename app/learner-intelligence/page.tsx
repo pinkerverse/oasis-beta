@@ -234,7 +234,7 @@ function buildLearnerIntelligence(
 
   for (const entry of entries) {
     for (const match of entry.framework_matches ?? []) {
-      const area = resolveArea(match) || match.strand?.trim();
+      const area = resolveArea(match);
       if (!area) continue;
 
       const statementEvidenceText =
@@ -432,7 +432,7 @@ function buildLearnerIntelligence(
   const latestStepAreas = new Set(
     (latestSavedNextStep?.framework_matches ?? [])
       .map((match) =>
-        (resolveArea(match) || match.strand?.trim())?.toLowerCase()
+        resolveArea(match)?.toLowerCase()
       )
       .filter(Boolean)
   );
@@ -988,6 +988,9 @@ export default function LearnerIntelligencePage() {
   }
 
   const evidenceSummary = useMemo(() => {
+    const resolveArea = createFrameworkAreaResolver(
+      frameworkAreas.map((name) => ({ name }))
+    );
     const areas = new Set<string>();
     const uniqueEvidenceMoments = new Set<string>();
     let latestDate: Date | null = null;
@@ -996,9 +999,8 @@ export default function LearnerIntelligencePage() {
       uniqueEvidenceMoments.add(evidenceMomentKey(entry));
 
       for (const match of entry.framework_matches ?? []) {
-        if (match.strand?.trim()) {
-          areas.add(match.strand.trim());
-        }
+        const area = resolveArea(match);
+        if (area) areas.add(area);
       }
 
       const rawDate = entry.observation_date || entry.created_at;
@@ -1018,7 +1020,7 @@ export default function LearnerIntelligencePage() {
       latestDate,
       uniqueEvidenceCount: uniqueEvidenceMoments.size,
     };
-  }, [entries]);
+  }, [entries, frameworkAreas]);
 
   const privacySafeEntries = useMemo(
     () =>

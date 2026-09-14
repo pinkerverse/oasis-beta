@@ -363,9 +363,8 @@ export default function ClassroomInsightsPage() {
         const learnerAreas = weeklyAreasByLearner.get(learnerId) ?? new Set();
 
         for (const match of entry.framework_matches ?? []) {
-          const rawArea = match.strand?.trim();
-          if (!rawArea) continue;
-          learnerAreas.add(resolveArea(match) || rawArea);
+          const area = resolveArea(match);
+          if (area) learnerAreas.add(area);
         }
 
         weeklyAreasByLearner.set(learnerId, learnerAreas);
@@ -514,9 +513,8 @@ export default function ClassroomInsightsPage() {
         }
 
         for (const match of entry.framework_matches ?? []) {
-          const rawArea = match.strand?.trim();
-          if (!rawArea) continue;
-          const area = resolveArea(match) || rawArea;
+          const area = resolveArea(match);
+          if (!area) continue;
           areaCounts.set(area, (areaCounts.get(area) ?? 0) + 1);
         }
       }

@@ -18,6 +18,7 @@ import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
 } from "@/lib/focus-guidance";
+import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import {
   getAcademicYearReadiness,
   getAreaFocusPriorityScore,
@@ -268,6 +269,9 @@ const [assessmentPhilosophy, setAssessmentPhilosophy] =
   useState("Hybrid");
 const activeFramework =
   activeSavedFramework ?? frameworks.eyfs;
+const resolveActiveFrameworkArea = createFrameworkAreaResolver(
+  activeFramework.areaDefinitions
+);
  function getAssessmentDisplayLabel(
   value: string
 ) {
@@ -895,8 +899,11 @@ useEffect(() => {
 const evidenceCoverage = learnerObservations.reduce(
   (acc: any[], entry: any) => {
     entry.framework_matches?.forEach((match: any) => {
+      const area = resolveActiveFrameworkArea(match);
+      if (!area) return;
+
       const existing = acc.find(
-        (item: any) => item.area === match.strand
+        (item: any) => item.area === area
       );
 
       if (existing) {
@@ -906,8 +913,8 @@ const evidenceCoverage = learnerObservations.reduce(
 ).toLocaleDateString();
       } else {
         acc.push({
-          area: match.strand,
-          short: match.strand
+          area,
+          short: area
             .split(" ")
             .map((w: string) => w[0])
             .join("")
@@ -951,10 +958,7 @@ const liveLearnerProgress = (() => {
       : [];
 
     for (const match of frameworkMatches) {
-      const area =
-        typeof match?.strand === "string"
-          ? match.strand.trim()
-          : "";
+      const area = resolveActiveFrameworkArea(match) ?? "";
 
       // Keep only the newest judgement for each area.
       if (
@@ -1347,11 +1351,12 @@ historyByArea.set(area, {
       const match of
       frameworkMatches
     ) {
-      const area =
+      const rawArea =
         typeof match?.strand ===
         "string"
           ? match.strand.trim()
           : "";
+      const area = resolveActiveFrameworkArea(match) ?? "";
 
       if (!area) {
         continue;
@@ -1370,7 +1375,7 @@ historyByArea.set(area, {
 
   const label =
   getFrameworkDevelopmentalLabel(
-    area,
+    rawArea,
     developmentalLevel,
     undefined,
     typeof entry.framework_version_id === "string"
@@ -1553,10 +1558,7 @@ const result: Record<string, LiveJourneyPoint[]> = {};
     }[] = [];
 
     for (const match of frameworkMatches) {
-      const area =
-        typeof match?.strand === "string"
-          ? match.strand.trim()
-          : "";
+      const area = resolveActiveFrameworkArea(match) ?? "";
 
       const levelLabel =
         match?.finalLevel ||
@@ -2322,12 +2324,6 @@ const buildFocusItems = (
       area.name.trim().toLowerCase() !==
       "the characteristics of effective teaching and learning"
   );
-  const canonicalAreaNames = new Map(
-    activeAreas.map((area) => [
-      area.name.trim().toLowerCase(),
-      area.name,
-    ])
-  );
   const statusOrder = new Map(
     assessmentStatusLabels.map((label, index) => [
       label.trim().toLowerCase(),
@@ -2543,10 +2539,7 @@ const buildFocusItems = (
             continue;
           }
 
-          const areaName =
-            canonicalAreaNames.get(
-              match.strand.trim().toLowerCase()
-            );
+          const areaName = resolveActiveFrameworkArea(match);
 
           if (!areaName) {
             continue;
@@ -2712,11 +2705,7 @@ const buildFocusItems = (
         })
         .find(({ match, status }) => {
           const area =
-            typeof match?.strand === "string"
-              ? canonicalAreaNames.get(
-                  match.strand.trim().toLowerCase()
-                )
-              : null;
+            resolveActiveFrameworkArea(match);
 
           return (
             Boolean(area) &&
@@ -2725,10 +2714,10 @@ const buildFocusItems = (
         });
       const latestMatch = latestAssessment?.match ?? null;
       const latestArea =
-        typeof latestMatch?.strand === "string"
-          ? canonicalAreaNames.get(
-              latestMatch.strand.trim().toLowerCase()
-            ) ?? latestMatch.strand.trim()
+        latestMatch
+          ? resolveActiveFrameworkArea(latestMatch) ??
+            focusArea?.name ??
+            "Current learning"
           : focusArea?.name ?? "Current learning";
       const latestStatementMatch =
         latestMatch?.statementMatches?.[0];
@@ -3749,14 +3738,6 @@ const activeAreaNames =
 const areaNames =
   new Set(activeAreaNames);
 
-const canonicalAreaNames =
-  new Map(
-    activeAreaNames.map((area) => [
-      area.trim().toLowerCase(),
-      area,
-    ])
-  );
-
   const latestByLearnerArea = new Map<
     string,
     {
@@ -3790,15 +3771,7 @@ const canonicalAreaNames =
 
     for (const learnerId of learnerIds) {
       for (const match of matches) {
-       const rawArea =
-  typeof match?.strand === "string"
-    ? match.strand.trim()
-    : "";
-
-const area =
-  canonicalAreaNames.get(
-    rawArea.toLowerCase()
-  ) ?? "";
+const area = resolveActiveFrameworkArea(match) ?? "";
 
        const rawStatus =
   typeof match?.teacherOverride ===
@@ -9234,6 +9207,9 @@ Class and pupil ID are optional. Remove full names and full birth dates before u
   entry.framework_matches.length > 0 ? (
     entry.framework_matches.map(
       (match: any, matchIndex: number) => {
+        const currentArea = resolveActiveFrameworkArea(match);
+        if (!currentArea) return null;
+
         const finalLevel =
           match.finalLevel ||
           match.teacherOverride ||
@@ -9245,11 +9221,11 @@ Class and pupil ID are optional. Remove full names and full birth dates before u
 
         return (
          <span
-  key={`${entry.id}-${match.strand}-${matchIndex}`}
-  title={match.strand}
+  key={`${entry.id}-${currentArea}-${matchIndex}`}
+  title={currentArea}
   className={`rounded-full px-3 py-1 text-xs font-semibold ${levelClasses}`}
 >
-  {getAreaShortLabel(match.strand)} · {finalLevel}
+  {getAreaShortLabel(currentArea)} · {finalLevel}
 </span>
         );
       }
@@ -9308,6 +9284,9 @@ Class and pupil ID are optional. Remove full names and full birth dates before u
         entry.framework_matches.length > 0 ? (
           entry.framework_matches.map(
             (match: any, matchIndex: number) => {
+              const currentArea = resolveActiveFrameworkArea(match);
+              if (!currentArea) return null;
+
               const finalLevel =
                 match.finalLevel ||
                 match.teacherOverride ||
@@ -9316,13 +9295,13 @@ Class and pupil ID are optional. Remove full names and full birth dates before u
 
               return (
                 <div
-                  key={`${entry.id}-${match.strand}-${matchIndex}`}
+                  key={`${entry.id}-${currentArea}-${matchIndex}`}
                   className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-semibold text-slate-900">
-                        {match.strand}
+                        {currentArea}
                       </p>
 
                       <p className="mt-1 text-xs text-slate-500">
