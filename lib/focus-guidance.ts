@@ -1073,7 +1073,7 @@ const templates: Array<{
     },
   },
   {
-    matches: /record|information|source|data|chart|tally|photograph|draw|observ/i,
+    matches: /record|information literacy|source|data|chart|tally|photograph|draw|observ/i,
     guidance: {
       friendlyGoal:
         "Give the child something genuine to investigate, then notice how they capture and explain what they found.",

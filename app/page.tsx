@@ -3284,7 +3284,16 @@ const sharedFocusGuidance = sharedFocus
       savedNextStep: sharedFocus.representative.prompt,
     })
   : null;
-const sharedFocusMoment = (() => {
+type SharedFocusMoment = {
+  title: string;
+  learningAim: string;
+  materials: string;
+  steps: string[];
+  questions: string[];
+  notice: string;
+  whyItMatters: string;
+};
+const sharedFocusMoment: SharedFocusMoment | null = (() => {
   if (!sharedFocus || !sharedFocusGuidance) return null;
 
   const selectedFocusDate =
@@ -3304,6 +3313,8 @@ const sharedFocusMoment = (() => {
     const mathsMoments = [
       {
         title: "Count five objects—without losing track",
+        learningAim:
+          "Children count five objects once each and know the final number tells how many there are.",
         materials:
           "Five blocks, animals, buttons or other small objects already in the room.",
         steps: [
@@ -3322,6 +3333,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Which group has more?",
+        learningAim:
+          "Children compare two small groups and show which has more by matching the objects.",
         materials:
           "Two plates or hoops, with two objects in one and four in the other.",
         steps: [
@@ -3340,6 +3353,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Copy and continue a tiny pattern",
+        learningAim:
+          "Children identify the repeating part of a simple pattern and use it to predict what comes next.",
         materials:
           "Six objects in two contrasting types, such as three blocks and three toy animals.",
         steps: [
@@ -3358,6 +3373,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Find something with the same shape",
+        learningAim:
+          "Children match shapes by their sides, corners or curves rather than by colour or size.",
         materials:
           "One familiar shape to show, such as a round lid, square card or triangular block.",
         steps: [
@@ -3376,6 +3393,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Which one is longer? Line it up and check",
+        learningAim:
+          "Children compare two lengths fairly by lining up the objects at the same starting point.",
         materials:
           "Two pencils, ribbons or blocks with clearly different lengths.",
         steps: [
@@ -3401,6 +3420,8 @@ const sharedFocusMoment = (() => {
     const researchMoments = [
       {
         title: "How does a duck move? Choose the picture that helps",
+        learningAim:
+          "Children choose the picture that answers a question and point to the clue that helped.",
         materials:
           "A photo of a whole duck walking or swimming, plus a close-up photo of duck feathers.",
         steps: [
@@ -3419,6 +3440,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "What is inside an apple? Choose how to find out",
+        learningAim:
+          "Children select a useful source for a question and explain what it lets them find out.",
         materials:
           "A whole apple and a picture book page showing the inside of an apple.",
         steps: [
@@ -3437,6 +3460,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Is the leaf smooth or bumpy? Check two clues",
+        learningAim:
+          "Children use touch and sight as different clues, then combine what each one tells them.",
         materials:
           "One large leaf children can touch and a clear photograph of the same kind of leaf.",
         steps: [
@@ -3455,6 +3480,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Which tower is taller? Look, compare, answer",
+        learningAim:
+          "Children answer a comparison question using something they can see as evidence.",
         materials:
           "Two small block towers with an obvious but not extreme height difference.",
         steps: [
@@ -3473,6 +3500,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Can a penguin fly? Choose the clue that helps",
+        learningAim:
+          "Children distinguish a pretend object from a source that gives information about a real animal.",
         materials:
           "A toy penguin and a clear photo of a penguin swimming, ideally from a familiar factual book.",
         steps: [
@@ -3494,10 +3523,123 @@ const sharedFocusMoment = (() => {
     return researchMoments[dayNumber % researchMoments.length];
   }
 
+  if (
+    /social|relationship|collabor|communicat|language|listen|speak|conversation|exchange/.test(
+      context
+    )
+  ) {
+    const communicationMoments: SharedFocusMoment[] = [
+      {
+        title: "Tell your partner what changed",
+        learningAim:
+          "Children listen to one short message and pass on the important detail clearly.",
+        materials:
+          "Three familiar classroom objects and a cloth, tray or sheet of paper to hide them.",
+        steps: [
+          "Show the three objects. Ask one child to turn around while you hide or swap one object.",
+          "Invite a second child to describe what changed without pointing at the objects.",
+          "Let the listener identify the change, then briefly name the detail that made the message clear.",
+        ],
+        questions: [
+          "What changed?",
+          "Which detail helped you understand?",
+        ],
+        notice:
+          "Whether the speaker includes the important detail and the listener responds to what was actually said.",
+        whyItMatters:
+          "Pre-K children need practice making a message clear enough for another person to use. This strengthens vocabulary, purposeful listening and the shared attention needed for play, discussion and problem-solving.",
+      },
+      {
+        title: "Describe it so we can find it",
+        learningAim:
+          "Children give two useful clues and listen closely enough to identify the object being described.",
+        materials:
+          "Three noticeably different classroom objects, such as a red block, a spoon and a toy animal.",
+        steps: [
+          "Place the objects where everyone can see them and secretly choose one.",
+          "Give two clues about its colour, shape, texture or use without saying its name.",
+          "Let children choose the object, then invite one child to describe a new object for the group.",
+        ],
+        questions: [
+          "Which clue helped you most?",
+          "What else could you say to make it clearer?",
+        ],
+        notice:
+          "Whether children select relevant describing words and use the speaker’s clues rather than guessing immediately.",
+        whyItMatters:
+          "Describing something for a real listener helps 3- and 4-year-olds choose precise words, organise a short message and understand that successful communication depends on what another person needs to know.",
+      },
+      {
+        title: "Pass on one building instruction",
+        learningAim:
+          "Children give and follow one precise instruction using an object and a position word.",
+        materials:
+          "Two blocks and one toy figure for each pair, or one set to demonstrate with the group.",
+        steps: [
+          "Build a tiny model, such as a figure beside a two-block tower, where only one child can see it.",
+          "That child tells a partner how to copy it using words such as on, beside, under or behind.",
+          "Compare the models and identify the instruction that helped or the detail that was missing.",
+        ],
+        questions: [
+          "Where exactly should it go?",
+          "What did your partner need you to say?",
+        ],
+        notice:
+          "Whether the speaker communicates position clearly and the listener acts on the instruction or asks for clarification.",
+        whyItMatters:
+          "Following and giving a meaningful instruction brings speaking, listening and spatial language together. It helps children coordinate shared play and repair misunderstandings instead of relying only on gestures.",
+      },
+      {
+        title: "Add one idea to a shared story",
+        learningAim:
+          "Children listen to the previous idea, stay on the same topic and add one connected detail.",
+        materials:
+          "One familiar toy or an interesting classroom object to begin a very short story.",
+        steps: [
+          "Start with one sentence about the object, such as, ‘The bear found a tiny door.’",
+          "Invite three children in turn to add one sentence that connects to what was just said.",
+          "Retell the four-sentence story together and point out one idea that linked well to another.",
+        ],
+        questions: [
+          "What could happen next?",
+          "How does your idea connect to the last one?",
+        ],
+        notice:
+          "Whether children attend to earlier contributions and add information that keeps the shared meaning going.",
+        whyItMatters:
+          "A tiny shared story makes conversational turn-taking purposeful. Children practise holding another person’s idea in mind, contributing relevant information and building something together through language.",
+      },
+      {
+        title: "Ask for the missing detail",
+        learningAim:
+          "Children notice when a message is incomplete and ask a question that helps them understand it.",
+        materials:
+          "One familiar classroom object placed somewhere visible, such as a book beside a basket.",
+        steps: [
+          "Give an incomplete request, such as, ‘Please bring me the one over there,’ while several objects are visible.",
+          "Model one useful question—‘Which one do you mean?’—then answer with a clear detail.",
+          "Repeat with a new object and invite children to ask for the information they need before acting.",
+        ],
+        questions: [
+          "What information is missing?",
+          "What could you ask so you know what to do?",
+        ],
+        notice:
+          "Whether children recognise uncertainty and ask a relevant question instead of guessing or disengaging.",
+        whyItMatters:
+          "Knowing how to seek clarification gives young children an active way to repair communication. It supports independence, reduces frustration and helps them participate more successfully in routines and collaborative play.",
+      },
+    ];
+
+    return communicationMoments[dayNumber % communicationMoments.length];
+  }
+
   if (/physical|motor|movement|balance|coordination/.test(context)) {
-    const movementMoments = [
+    const movementMoments: SharedFocusMoment[] = [
       {
         title: "Freeze in three different balances",
+        learningAim:
+          "Children adjust their body position to hold three different balances for three seconds.",
         materials: "A clear standing space; no extra equipment needed.",
         steps: [
           "Ask everyone to stand like a statue with two feet on the floor.",
@@ -3515,6 +3657,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Roll to a partner and stop the ball",
+        learningAim:
+          "Children adjust force and direction to roll a ball to a partner and stop it with control.",
         materials: "One soft ball and enough floor space for a small circle.",
         steps: [
           "Sit in a small circle and model pushing the ball with two hands towards one named child.",
@@ -3532,6 +3676,8 @@ const sharedFocusMoment = (() => {
       },
       {
         title: "Copy this three-move sequence",
+        learningAim:
+          "Children remember and reproduce three movements in the same order.",
         materials: "No equipment needed.",
         steps: [
           "Model three clear actions: clap, touch knees, reach up.",
@@ -3559,6 +3705,7 @@ const sharedFocusMoment = (() => {
 
   return {
     title: suggestion.title,
+    learningAim: `Children show one observable example of “${sharedFocus.representative.frameworkStatement}” during a short shared task.`,
     materials:
       "Two or three familiar classroom objects already within reach; no special preparation needed.",
     steps: [
@@ -12924,6 +13071,10 @@ onClick={() => {
               <h3 className="mt-1 text-lg font-bold text-slate-900">
                 {sharedFocusMoment.title}
               </h3>
+              <p className="mt-1.5 text-sm leading-5 text-slate-700">
+                <span className="font-bold text-indigo-700">Learning aim: </span>
+                {sharedFocusMoment.learningAim}
+              </p>
 
               <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2.5">
                 <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
