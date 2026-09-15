@@ -49,7 +49,7 @@ function iconClasses(active: boolean) {
 }
 
 function actionButtonClasses(active: boolean) {
-  return `group flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-3 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white ${
+  return `group flex h-11 w-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white md:w-auto md:px-3 ${
     active
       ? "border-slate-900 bg-slate-900 text-white"
       : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
@@ -187,11 +187,11 @@ export default function OasisHeader({
     <header
       className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-2 shadow-sm backdrop-blur sm:px-4 ${className}`}
     >
-      <div className="mx-auto flex min-h-24 max-w-[1600px] items-center gap-2 sm:gap-4">
+      <div className="mx-auto flex min-h-20 max-w-[1600px] items-center gap-1 sm:min-h-24 sm:gap-4">
         <Link
           href={hasClass ? "/" : "/school-overview"}
           aria-label="Back to OASIS dashboard"
-          className="relative h-14 w-20 shrink-0 sm:h-20 sm:w-28"
+          className="relative h-12 w-16 shrink-0 sm:h-20 sm:w-28"
         >
           <Image
             src="/oasis-logo.png"
@@ -243,7 +243,7 @@ export default function OasisHeader({
                 aria-label="Learner Insight"
                 aria-current={learnerIntelligenceActive ? "page" : undefined}
                 title="Learner Insight"
-                className={`${actionButtonClasses(learnerIntelligenceActive)} hidden min-[520px]:flex`}
+                className={actionButtonClasses(learnerIntelligenceActive)}
               >
                 <Image
                   src="/learner-intelligence-brain.png"
@@ -263,7 +263,7 @@ export default function OasisHeader({
                 aria-label="Classroom Intelligence"
                 aria-current={classroomInsightsActive ? "page" : undefined}
                 title="Classroom Intelligence"
-                className={`${actionButtonClasses(classroomInsightsActive)} hidden min-[520px]:flex`}
+                className={actionButtonClasses(classroomInsightsActive)}
               >
                 <Image
                   src="/classroom-insights-eye.png"
@@ -283,7 +283,7 @@ export default function OasisHeader({
                 aria-label="Class Attainment"
                 aria-current={classAttainmentActive ? "page" : undefined}
                 title="Class Attainment"
-                className={`${actionButtonClasses(classAttainmentActive)} hidden min-[520px]:flex`}
+                className={actionButtonClasses(classAttainmentActive)}
               >
                 <Image
                   src="/class-attainment-icon.png"
@@ -316,7 +316,7 @@ export default function OasisHeader({
                 onClick={() => runPanelAction("focus", onTodaysFocus)}
                 aria-label="Today’s Focus"
                 title="Today’s Focus"
-                className={`group flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-3 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white ${
+                className={`group flex h-11 w-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white md:w-auto md:px-3 ${
                   todaysFocusActive
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-100 text-slate-900 hover:border-indigo-300 hover:from-cyan-100 hover:to-indigo-100"
@@ -334,7 +334,7 @@ export default function OasisHeader({
               onClick={openSettings}
               aria-label="Settings"
               title="Settings"
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
+              className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition min-[520px]:flex ${
                 settingsActive
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-900 active:text-white"
@@ -483,73 +483,6 @@ export default function OasisHeader({
           )}
         </div>
       </div>
-
-      {hasClass && (
-        <nav
-          aria-label="Class tools"
-          className="mx-auto grid max-w-[1600px] grid-cols-3 gap-1 border-t border-slate-100 px-1 py-2 min-[520px]:hidden"
-        >
-          <Link
-            href="/learner-intelligence"
-            aria-current={learnerIntelligenceActive ? "page" : undefined}
-            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
-              learnerIntelligenceActive
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-slate-50 text-slate-700 active:bg-slate-900 active:text-white"
-            }`}
-          >
-            <Image
-              src="/learner-intelligence-brain.png"
-              alt=""
-              width={128}
-              height={128}
-              className={iconClasses(learnerIntelligenceActive)}
-              aria-hidden="true"
-            />
-            <span>Learner Insight</span>
-          </Link>
-
-          <Link
-            href="/classroom-insights"
-            aria-current={classroomInsightsActive ? "page" : undefined}
-            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
-              classroomInsightsActive
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-slate-50 text-slate-700 active:bg-slate-900 active:text-white"
-            }`}
-          >
-            <Image
-              src="/classroom-insights-eye.png"
-              alt=""
-              width={128}
-              height={128}
-              className={iconClasses(classroomInsightsActive)}
-              aria-hidden="true"
-            />
-            <span>Classroom Intelligence</span>
-          </Link>
-
-          <Link
-            href="/class-attainment"
-            aria-current={classAttainmentActive ? "page" : undefined}
-            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
-              classAttainmentActive
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-slate-50 text-slate-700 active:bg-slate-900 active:text-white"
-            }`}
-          >
-            <Image
-              src="/class-attainment-icon.png"
-              alt=""
-              width={128}
-              height={128}
-              className={iconClasses(classAttainmentActive)}
-              aria-hidden="true"
-            />
-            <span>Class Attainment</span>
-          </Link>
-        </nav>
-      )}
 
       {showAccountModal && (
         <AccountModal
