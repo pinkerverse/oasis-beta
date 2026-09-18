@@ -13,6 +13,7 @@ import {
 } from "@/lib/framework-upload";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import AccountSecurity from "@/app/components/AccountSecurity";
+import AsbPtcNotesModal from "@/app/components/AsbPtcNotesModal";
 import OasisHeader from "@/app/components/OasisHeader";
 import {
   createFallbackFocusGuidance,
@@ -1697,6 +1698,7 @@ const [accountRole, setAccountRole] = useState("");
 const [accountMode, setAccountMode] = useState("");
 const [accountTemporaryOwner, setAccountTemporaryOwner] = useState(false);
 const [accountPlatformOwner, setAccountPlatformOwner] = useState(false);
+const [ptcTemplate, setPtcTemplate] = useState("");
 const [accountContextLoading, setAccountContextLoading] =
   useState(false);
 const [accountSaving, setAccountSaving] = useState(false);
@@ -1742,6 +1744,9 @@ async function loadAccount() {
     );
     setAccountTemporaryOwner(context.isTemporaryOwner === true);
     setAccountPlatformOwner(context.isPlatformOwner === true);
+    setPtcTemplate(
+      typeof context.ptcTemplate === "string" ? context.ptcTemplate : ""
+    );
   }
 
   setAccountContextLoading(false);
@@ -13422,7 +13427,15 @@ onClick={() => {
   </div>
 )}
 
-{showPTCNotes && (
+{showPTCNotes && ptcTemplate === "asb_pre_k" && (
+  <AsbPtcNotesModal
+    learners={pupils}
+    initialLearnerIds={selectedChildren}
+    onClose={() => setShowPTCNotes(false)}
+  />
+)}
+
+{showPTCNotes && ptcTemplate !== "asb_pre_k" && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
     <div

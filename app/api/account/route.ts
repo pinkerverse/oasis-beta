@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isPlatformAdministrator } from "@/lib/platform-access";
 import { getCurrentAccountContext } from "@/lib/supabase/current-workspace";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getPtcTemplateForSchool } from "@/lib/asb-ptc";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export async function GET() {
     mfaRequired: context.isSchoolAdmin || platformOwner,
     mfaVerified: context.assuranceLevel === "aal2",
     currentWorkspaceId: context.workspaceId,
+    ptcTemplate: getPtcTemplateForSchool(context.schoolId),
     workspaces: workspaces ?? [],
   });
 }
