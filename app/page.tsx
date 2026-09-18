@@ -6333,6 +6333,7 @@ if (checkingOnboarding) {
   onAddObservation={openObservationComposer}
   onTodaysFocus={openTodaysFocus}
   onSettings={() => void openSettings()}
+  ptcNotesRequiresLearnerSelection={ptcTemplate !== "asb_pre_k"}
   ptcNotesActive={showPTCNotes}
   reportHelperActive={showReportHelper}
   addObservationActive={showObservationModal}

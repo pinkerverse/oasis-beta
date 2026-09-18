@@ -25,6 +25,7 @@ type OasisHeaderProps = {
   onAddObservation?: () => void;
   onTodaysFocus?: () => void;
   onSettings?: () => void;
+  ptcNotesRequiresLearnerSelection?: boolean;
   ptcNotesActive?: boolean;
   reportHelperActive?: boolean;
   addObservationActive?: boolean;
@@ -75,6 +76,7 @@ export default function OasisHeader({
   onAddObservation,
   onTodaysFocus,
   onSettings,
+  ptcNotesRequiresLearnerSelection = true,
   ptcNotesActive = false,
   reportHelperActive = false,
   addObservationActive = false,
@@ -211,10 +213,12 @@ export default function OasisHeader({
               <button
                 type="button"
                 onClick={() => runPanelAction("ptc", onPTCNotes)}
-                disabled={!hasLearnerSelection}
+                disabled={
+                  ptcNotesRequiresLearnerSelection && !hasLearnerSelection
+                }
                 aria-label="PTC Notes"
                 title={
-                  hasLearnerSelection
+                  !ptcNotesRequiresLearnerSelection || hasLearnerSelection
                     ? "PTC Notes"
                     : "Select a learner to open PTC Notes"
                 }
