@@ -306,10 +306,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const response = await openai.responses.create({
-      model: process.env.PTC_NOTES_MODEL || "gpt-4.1-mini",
-      store: false,
-      input: `
+    const ptcPrompt = `
 You are an experienced Pre-K pedagogical documentation lead preparing concise parent-teacher conference notes for learner ${learnerInitials}.
 
 Use only the supplied OASIS observations. The learner identifier is initials, and you must use only ${learnerInitials}. Never infer or include a full name, parent name, diagnosis, personality label, family detail, medical information, safeguarding information, or unsupported developmental claim.
@@ -329,6 +326,8 @@ WRITING RULES
 - For Physical Growth, use only evidence explicitly connected to gross or fine motor development.
 - Supports to aid success are optional. Include them only when the observations explicitly show that a particular prompt, resource, routine or environmental condition helped the learner participate or succeed. Otherwise return an empty array.
 - If a domain does not have enough evidence for two defensible bullets, return empty arrays for that domain. OASIS will show an honest evidence-needed message instead.
+- Do not include calendar dates, dates of birth, phone numbers, email addresses, contact details, full names or invented names.
+- Do not include medical, diagnostic, safeguarding, child-protection or family case information, even if it appears in source material.
 - Keep every bullet under 32 words.
 
 ACTIVE FRAMEWORK AREAS
@@ -336,10 +335,14 @@ ${JSON.stringify(activeFramework.areaDefinitions.map((area) => area.name))}
 
 EVIDENCE
 ${JSON.stringify(entries, null, 2)}
-      `,
+    `;
+    const responseRequest = {
+      model: process.env.PTC_NOTES_MODEL || "gpt-4.1-mini",
+      store: false,
+      input: ptcPrompt,
       text: {
         format: {
-          type: "json_schema",
+          type: "json_schema" as const,
           name: "asb_pre_k_ptc_notes",
           strict: true,
           schema: {
@@ -465,30 +468,56 @@ ${JSON.stringify(entries, null, 2)}
           },
         },
       },
-    });
-    const outputText = response.output_text.trim();
+    };
 
-    if (!outputText) {
-      throw new Error("The PTC synthesis returned no content.");
+    async function generatePtcReport(input: string) {
+      const response = await openai.responses.create({
+        ...responseRequest,
+        input,
+      });
+      const outputText = response.output_text.trim();
+
+      if (!outputText) {
+        throw new Error("The PTC synthesis returned no content.");
+      }
+
+      return normaliseGeneratedAsbPtcReport({
+        value: JSON.parse(outputText),
+        learnerId,
+        learnerInitials,
+        validEntryIds,
+      });
     }
 
-    const report = normaliseGeneratedAsbPtcReport({
-      value: JSON.parse(outputText),
-      learnerId,
-      learnerInitials,
-      validEntryIds,
-    });
-    const outputPrivacyReview = reviewPrivacyText(
-      [
-        ...report.learnerProfile.map((item) => item.text),
-        ...report.overallNextSteps.map((item) => item.text),
-        ...Object.values(report.domains).flatMap((domain) => [
-          ...domain.observations.map((item) => item.text),
-          ...domain.nextSteps.map((item) => item.text),
-        ]),
-        ...report.supports.map((item) => item.text),
-      ].join("\n")
-    );
+    function reviewPtcReport(
+      report: ReturnType<typeof normaliseGeneratedAsbPtcReport>
+    ) {
+      return reviewPrivacyText(
+        [
+          ...report.learnerProfile.map((item) => item.text),
+          ...report.overallNextSteps.map((item) => item.text),
+          ...Object.values(report.domains).flatMap((domain) => [
+            ...domain.observations.map((item) => item.text),
+            ...domain.nextSteps.map((item) => item.text),
+          ]),
+          ...report.supports.map((item) => item.text),
+        ].join("\n")
+      );
+    }
+
+    let report = await generatePtcReport(ptcPrompt);
+    let outputPrivacyReview = reviewPtcReport(report);
+
+    if (outputPrivacyReview.requiresReview) {
+      report = await generatePtcReport(`${ptcPrompt}
+
+PRIVACY CORRECTION
+The first draft was rejected by the privacy guard for these categories: ${outputPrivacyReview.findings
+        .map((finding) => finding.category)
+        .join(", ")}.
+Return a completely fresh draft. Use only ${learnerInitials} as the learner identifier. Omit all dates, contact details, full or invented names, medical or diagnostic wording, safeguarding or child-protection wording, and family case information.`);
+      outputPrivacyReview = reviewPtcReport(report);
+    }
 
     if (outputPrivacyReview.requiresReview) {
       await recordSecurityEvent({
