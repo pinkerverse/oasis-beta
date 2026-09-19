@@ -60,6 +60,20 @@ function docxBullet(text: string) {
   });
 }
 
+function docxNarrative(text: string) {
+  return new Paragraph({
+    spacing: { after: 0, line: 288 },
+    children: [
+      new TextRun({
+        text,
+        font: "Arial",
+        size: 20,
+        color: TEXT_COLOUR,
+      }),
+    ],
+  });
+}
+
 function docxCell(
   children: Paragraph[],
   options: { fill?: string; width?: number } = {}
@@ -114,12 +128,14 @@ function docxPairedTable({
   leftItems,
   rightTitle,
   rightItems,
+  leftAsNarrative = false,
 }: {
   leftTitle: string;
   leftSubtitle?: string;
   leftItems: string[];
   rightTitle: string;
   rightItems: string[];
+  leftAsNarrative?: boolean;
 }) {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -138,7 +154,11 @@ function docxPairedTable({
       new TableRow({
         cantSplit: true,
         children: [
-          docxCell(leftItems.map(docxBullet)),
+          docxCell(
+            leftAsNarrative
+              ? [docxNarrative(leftItems.join(" "))]
+              : leftItems.map(docxBullet)
+          ),
           docxCell(rightItems.map(docxBullet)),
         ],
       }),
@@ -184,6 +204,7 @@ function docxReportChildren(report: AsbPtcReport, index: number) {
       leftItems: report.learnerProfile.map((item) => item.text),
       rightTitle: "Next steps",
       rightItems: report.overallNextSteps.map((item) => item.text),
+      leftAsNarrative: true,
     }),
     new Paragraph({ spacing: { after: 150 } })
   );
@@ -276,6 +297,17 @@ function pdfListHeight(
   );
 }
 
+function pdfNarrativeHeight(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  width: number
+) {
+  return doc.heightOfString(text, {
+    width,
+    lineGap: 2.5,
+  });
+}
+
 function drawPdfList(
   doc: PDFKit.PDFDocument,
   items: string[],
@@ -297,6 +329,20 @@ function drawPdfList(
   return cursorY;
 }
 
+function drawPdfNarrative(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  width: number
+) {
+  doc
+    .font("Helvetica")
+    .fontSize(9.5)
+    .fillColor(`#${TEXT_COLOUR}`)
+    .text(text, x, y, { width, lineGap: 2.5 });
+}
+
 function ensurePdfSpace(doc: PDFKit.PDFDocument, neededHeight: number) {
   const bottom = doc.page.height - doc.page.margins.bottom;
 
@@ -313,11 +359,13 @@ function drawPdfPairedSection(
     leftSubtitle,
     leftItems,
     rightItems,
+    leftAsNarrative = false,
   }: {
     leftTitle: string;
     leftSubtitle?: string;
     leftItems: string[];
     rightItems: string[];
+    leftAsNarrative?: boolean;
   }
 ) {
   const pageWidth =
@@ -325,11 +373,11 @@ function drawPdfPairedSection(
   const columnWidth = pageWidth / 2;
   const innerWidth = columnWidth - 24;
   const headerHeight = leftSubtitle ? 34 : 26;
+  const leftHeight = leftAsNarrative
+    ? pdfNarrativeHeight(doc, leftItems.join(" "), innerWidth)
+    : pdfListHeight(doc, leftItems, innerWidth);
   const bodyHeight =
-    Math.max(
-      pdfListHeight(doc, leftItems, innerWidth),
-      pdfListHeight(doc, rightItems, innerWidth)
-    ) + 18;
+    Math.max(leftHeight, pdfListHeight(doc, rightItems, innerWidth)) + 18;
   const totalHeight = headerHeight + bodyHeight;
 
   ensurePdfSpace(doc, totalHeight + 12);
@@ -377,7 +425,17 @@ function drawPdfPairedSection(
     .fontSize(10.5)
     .fillColor("#000000")
     .text("Next steps", rightX + 10, y + 7, { width: innerWidth });
-  drawPdfList(doc, leftItems, x + 12, y + headerHeight + 9, innerWidth);
+  if (leftAsNarrative) {
+    drawPdfNarrative(
+      doc,
+      leftItems.join(" "),
+      x + 12,
+      y + headerHeight + 9,
+      innerWidth
+    );
+  } else {
+    drawPdfList(doc, leftItems, x + 12, y + headerHeight + 9, innerWidth);
+  }
   drawPdfList(
     doc,
     rightItems,
@@ -459,6 +517,7 @@ export async function createAsbPtcPdf(reports: AsbPtcReport[]) {
       leftTitle: "Your child as a learner",
       leftItems: report.learnerProfile.map((item) => item.text),
       rightItems: report.overallNextSteps.map((item) => item.text),
+      leftAsNarrative: true,
     });
 
     for (const domain of ASB_PTC_DOMAINS) {

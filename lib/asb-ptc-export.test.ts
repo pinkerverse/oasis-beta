@@ -12,12 +12,23 @@ const report: AsbPtcReport = {
   learnerInitials: "AB",
   generatedAt: "2026-09-18T00:00:00.000Z",
   learnerProfile: [
-    { text: "Persists with a familiar challenge.", evidenceEntryIds: ["e1"] },
-    { text: "Explains a chosen strategy.", evidenceEntryIds: ["e2"] },
+    {
+      text: "AB approaches familiar challenges with curiosity and a positive willingness to have a go.",
+      evidenceEntryIds: ["e1"],
+    },
+    {
+      text: "They listen to friends, contribute ideas during shared construction and treat other viewpoints with respect.",
+      evidenceEntryIds: ["e2"],
+    },
+    {
+      text: "They are growing in confidence when explaining a chosen strategy and revisiting an idea after a first attempt.",
+      evidenceEntryIds: ["e1", "e2"],
+    },
   ],
   overallNextSteps: [
     { text: "Offer a slightly more complex version.", linkedObservationIndex: 0 },
     { text: "Invite a comparison of two strategies.", linkedObservationIndex: 1 },
+    { text: "Ask what changed after another attempt.", linkedObservationIndex: 2 },
   ],
   domains: {
     managingComplexity: {

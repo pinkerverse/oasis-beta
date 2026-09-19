@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ASB_PTC_SCHOOL_ID,
+  asbPtcLearnerNarrative,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
 } from "./asb-ptc.ts";
@@ -84,7 +85,7 @@ test("unsupported claims are replaced with an honest evidence-needed section", (
     validEntryIds,
   });
 
-  assert.equal(report.learnerProfile.length, 2);
+  assert.equal(report.learnerProfile.length, 3);
   assert.equal(report.domains.physical.observations.length, 2);
   assert.match(
     report.domains.physical.observations[0].text,
@@ -114,5 +115,37 @@ test("three profile points receive three fallback next steps", () => {
   assert.deepEqual(
     report.overallNextSteps.map((step) => step.linkedObservationIndex),
     [0, 1, 2]
+  );
+});
+
+test("the learner profile becomes one flowing narrative", () => {
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: [
+        evidencePoint("AB approaches familiar play with curiosity."),
+        evidencePoint(
+          "They listen to friends and add ideas during shared construction.",
+          "evidence-2"
+        ),
+        evidencePoint(
+          "They are growing in confidence when explaining a chosen strategy."
+        ),
+      ],
+      overallNextSteps: [
+        { text: "Offer a new material.", linkedObservationIndex: 0 },
+        { text: "Invite a follow-up question.", linkedObservationIndex: 1 },
+        { text: "Ask for a brief explanation.", linkedObservationIndex: 2 },
+      ],
+      domains: {},
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+
+  assert.equal(
+    asbPtcLearnerNarrative(report),
+    "AB approaches familiar play with curiosity. They listen to friends and add ideas during shared construction. They are growing in confidence when explaining a chosen strategy."
   );
 });

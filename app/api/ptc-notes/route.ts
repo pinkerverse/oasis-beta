@@ -319,8 +319,14 @@ WRITING RULES
 - Use appropriate approaches-to-learning language when supported: cognitive, intrapersonal, interpersonal, self-management, communication, research and thinking skills.
 - Treat assessment statuses as judgements about individual evidence, not fixed labels for the learner.
 - Each evidence point must cite one or more supplied evidence entry IDs.
-- Produce two or three concise bullets for the learner profile and for each domain.
-- Every next step must link by zero-based index to one evidence bullet in the same section. Provide exactly one next step for every evidence bullet.
+- Write the learner profile as exactly three connected narrative segments of 40-50 words each. OASIS will join them into one flowing paragraph of roughly 120-150 words, so each segment must continue naturally from the previous one rather than read like a bullet.
+- Begin with a warm but evidence-grounded picture of the learner's disposition, then include something recognisably personal from the observations: an interest, friendship, question, creation, classroom contribution or characteristic way of approaching play and learning.
+- Let the second segment show relationships, communication or collaboration. Let the third show independence, self-management, thinking or research behaviours and one gently framed area of growth.
+- Weave ATL language naturally into the prose. Do not list ATL categories or turn the paragraph into assessment jargon.
+- Use varied, natural sentences and UK English. Prefer phrases such as "is beginning to", "has grown in confidence", "responds well to" and "would benefit from" when the evidence supports them.
+- End the profile with a specific, optimistic view of the learner's continued growth. Avoid generic praise, repeated stock openings and claims that are not supported by evidence.
+- Use ${learnerInitials} only in the opening sentence and use they/their afterwards. Do not infer gender or use he/she.
+- Every next step must link by zero-based index to one evidence segment in the same section. Provide exactly one next step for every evidence segment.
 - A next step should extend the demonstrated learning or address the specific emerging capability described in its linked evidence bullet.
 - Do not repeat the same claim or next step across sections.
 - For Physical Growth, use only evidence explicitly connected to gross or fine motor development.
@@ -351,7 +357,7 @@ ${JSON.stringify(entries, null, 2)}
             properties: {
               learnerProfile: {
                 type: "array",
-                minItems: 2,
+                minItems: 3,
                 maxItems: 3,
                 items: {
                   type: "object",
@@ -370,7 +376,7 @@ ${JSON.stringify(entries, null, 2)}
               },
               overallNextSteps: {
                 type: "array",
-                minItems: 2,
+                minItems: 3,
                 maxItems: 3,
                 items: {
                   type: "object",

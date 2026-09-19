@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import {
   ASB_PTC_DOMAINS,
+  asbPtcLearnerNarrative,
   asbPtcReportToPlainText,
   type AsbPtcReport,
 } from "@/lib/asb-ptc";
@@ -244,8 +245,10 @@ export default function AsbPtcNotesModal({
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
               OASIS uses each learner&apos;s documented journey to draft the
-              school&apos;s required sections. The output is unbranded and uses
-              initials only, ready to review and copy into the official form.
+              school&apos;s required sections, including one warm, personal
+              learner portrait written as a flowing narrative. The output is
+              unbranded and uses initials only, ready to review and copy into
+              the official form.
             </p>
           </div>
           <button
@@ -421,11 +424,9 @@ export default function AsbPtcNotesModal({
                     <h4 className="mb-3 font-bold text-slate-900">
                       Your child as a learner
                     </h4>
-                    <BulletList
-                      items={activeReport.learnerProfile.map(
-                        (item) => item.text
-                      )}
-                    />
+                    <p className="text-sm leading-7 text-slate-700">
+                      {asbPtcLearnerNarrative(activeReport)}
+                    </p>
                   </div>
                   <div className="border-t border-slate-200 p-4 md:border-t-0">
                     <h4 className="mb-3 font-bold text-slate-900">

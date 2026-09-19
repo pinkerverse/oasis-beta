@@ -68,6 +68,13 @@ export type AsbPtcReport = {
   supports: AsbPtcEvidencePoint[];
 };
 
+export function asbPtcLearnerNarrative(report: AsbPtcReport) {
+  return report.learnerProfile
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function getPtcTemplateForSchool(
   schoolId: string | null | undefined
 ): AsbPtcTemplateKey | null {
@@ -85,7 +92,8 @@ function normaliseText(value: unknown, maximumLength = 320) {
 function normaliseEvidencePoints(
   value: unknown,
   validEntryIds: Set<string>,
-  maximumItems: number
+  maximumItems: number,
+  maximumTextLength = 320
 ) {
   if (!Array.isArray(value)) return [];
 
@@ -94,7 +102,7 @@ function normaliseEvidencePoints(
       if (!candidate || typeof candidate !== "object") return [];
 
       const item = candidate as Partial<AsbPtcEvidencePoint>;
-      const text = normaliseText(item.text);
+      const text = normaliseText(item.text, maximumTextLength);
       const evidenceEntryIds = [
         ...new Set(
           Array.isArray(item.evidenceEntryIds)
@@ -231,20 +239,26 @@ export function normaliseGeneratedAsbPtcReport({
   const profile = normaliseEvidencePoints(
     candidate.learnerProfile,
     validEntryIds,
-    3
+    3,
+    420
   );
   const learnerProfile =
-    profile.length >= 2
+    profile.length === 3
       ? profile
       : [
           {
             text:
-              "The current evidence offers a partial view of this learner across familiar routines and play.",
+              "The current evidence offers a partial view of this learner across familiar routines and play, including moments when they choose how to begin and sustain an activity.",
             evidenceEntryIds: [],
           },
           {
             text:
-              "Further observations across different contexts will help build a more dependable learner portrait.",
+              "There is not yet enough documented evidence to describe their relationships, communication and participation with confidence.",
+            evidenceEntryIds: [],
+          },
+          {
+            text:
+              "Further observations across different contexts will help build a warmer and more dependable picture of their interests, approaches to learning and developing independence.",
             evidenceEntryIds: [],
           },
         ];
@@ -316,7 +330,7 @@ export function asbPtcReportToPlainText(report: AsbPtcReport) {
     `Learner: ${report.learnerInitials}`,
     "",
     "Your child as a learner",
-    formatBulletList(report.learnerProfile.map((item) => item.text)),
+    asbPtcLearnerNarrative(report),
     "",
     "Next steps",
     formatBulletList(report.overallNextSteps.map((item) => item.text)),
