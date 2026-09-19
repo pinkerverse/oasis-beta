@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   frameworks,
   type FrameworkDefinition,
@@ -1706,7 +1706,7 @@ const [newPassword, setNewPassword] = useState("");
 const [confirmPassword, setConfirmPassword] = useState("");
 const [passwordSaving, setPasswordSaving] = useState(false);
 
-async function loadAccount() {
+const loadAccount = useCallback(async () => {
   const supabase = createBrowserSupabaseClient();
   setAccountContextLoading(true);
 
@@ -1714,6 +1714,22 @@ async function loadAccount() {
     supabase.auth.getUser(),
     fetch("/api/account", { cache: "no-store" }),
   ]);
+
+  if (contextResponse.ok) {
+    const context = await contextResponse.json();
+    setAccountSchoolName(context.school?.name ?? "");
+    setAccountRole(
+      typeof context.role === "string" ? context.role : ""
+    );
+    setAccountMode(
+      typeof context.accountMode === "string" ? context.accountMode : ""
+    );
+    setAccountTemporaryOwner(context.isTemporaryOwner === true);
+    setAccountPlatformOwner(context.isPlatformOwner === true);
+    setPtcTemplate(
+      typeof context.ptcTemplate === "string" ? context.ptcTemplate : ""
+    );
+  }
 
   if (error || !data.user) {
     setAccountContextLoading(false);
@@ -1733,24 +1749,8 @@ async function loadAccount() {
   setAccountName(name);
   setAccountNameDraft(name);
 
-  if (contextResponse.ok) {
-    const context = await contextResponse.json();
-    setAccountSchoolName(context.school?.name ?? "");
-    setAccountRole(
-      typeof context.role === "string" ? context.role : ""
-    );
-    setAccountMode(
-      typeof context.accountMode === "string" ? context.accountMode : ""
-    );
-    setAccountTemporaryOwner(context.isTemporaryOwner === true);
-    setAccountPlatformOwner(context.isPlatformOwner === true);
-    setPtcTemplate(
-      typeof context.ptcTemplate === "string" ? context.ptcTemplate : ""
-    );
-  }
-
   setAccountContextLoading(false);
-}
+}, []);
 
 async function openSettings() {
   setSettingsStatusLabels([
@@ -2019,7 +2019,7 @@ async function changePassword() {
 
 useEffect(() => {
   void Promise.resolve().then(loadAccount);
-}, []);
+}, [loadAccount]);
 
   useEffect(() => {
     async function checkOnboarding() {
