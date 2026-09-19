@@ -291,7 +291,7 @@ export default function AsbPtcNotesModal({
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-5 sm:gap-6">
             {learners.map((learner) => {
               const selected = selectedLearnerIds.includes(learner.id);
               const initials = getLearnerInitials(learner);
@@ -303,14 +303,30 @@ export default function AsbPtcNotesModal({
                   onClick={() => toggleLearner(learner.id)}
                   disabled={generating}
                   aria-pressed={selected}
-                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
-                    selected
-                      ? "border-cyan-300 bg-cyan-50 text-cyan-900"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                  }`}
+                  aria-label={`${selected ? "Deselect" : "Select"} learner ${initials}`}
+                  className="group flex w-16 flex-col items-center disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {selected ? "✓ " : ""}
-                  {initials}
+                  <span
+                    className={`flex h-16 w-16 items-center justify-center rounded-full border-4 bg-slate-300 transition ${
+                      selected
+                        ? "border-blue-500 shadow-sm"
+                        : "border-slate-200 group-hover:border-cyan-300"
+                    }`}
+                  >
+                    <span className="text-xl font-bold text-slate-600">
+                      {initials}
+                    </span>
+                  </span>
+                  <span
+                    className={`mt-2 text-sm ${
+                      selected
+                        ? "font-semibold text-blue-700"
+                        : "text-slate-700"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {initials}
+                  </span>
                 </button>
               );
             })}
@@ -355,16 +371,18 @@ export default function AsbPtcNotesModal({
         {reports.length > 0 && (
           <section className="mt-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-3">
                 {reports.map((report) => (
                   <button
                     key={report.learnerId}
                     type="button"
                     onClick={() => setActiveLearnerId(report.learnerId)}
-                    className={`rounded-xl px-4 py-2 text-sm font-bold ${
+                    aria-pressed={activeReport?.learnerId === report.learnerId}
+                    aria-label={`Show ${report.learnerInitials}'s PTC summary`}
+                    className={`flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-bold transition ${
                       activeReport?.learnerId === report.learnerId
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        ? "border-blue-500 bg-slate-300 text-slate-700 shadow-sm"
+                        : "border-slate-200 bg-slate-200 text-slate-600 hover:border-cyan-300"
                     }`}
                   >
                     {report.learnerInitials}
