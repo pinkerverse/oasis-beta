@@ -83,9 +83,27 @@ export function getPtcTemplateForSchool(
     : null;
 }
 
+const EVIDENCE_UUID_IN_BRACKETS =
+  /[([]\s*[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\s*[,;]\s*[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})*\s*[)\]]/gi;
+const EVIDENCE_UUID =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
+
+function removeInternalEvidenceReferences(value: string) {
+  return value
+    .replace(EVIDENCE_UUID_IN_BRACKETS, "")
+    .replace(EVIDENCE_UUID, "")
+    .replace(/\(\s*(?:[,;]\s*)*\)/g, "")
+    .replace(/\[\s*(?:[,;]\s*)*\]/g, "")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/([,;:])\s*([.!?])/g, "$2");
+}
+
 function normaliseText(value: unknown, maximumLength = 320) {
   return typeof value === "string"
-    ? value.trim().replace(/\s+/g, " ").slice(0, maximumLength)
+    ? removeInternalEvidenceReferences(value)
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, maximumLength)
     : "";
 }
 

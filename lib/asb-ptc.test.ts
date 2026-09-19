@@ -149,3 +149,48 @@ test("the learner profile becomes one flowing narrative", () => {
     "AB approaches familiar play with curiosity. They listen to friends and add ideas during shared construction. They are growing in confidence when explaining a chosen strategy."
   );
 });
+
+test("internal evidence IDs never appear in report prose", () => {
+  const firstId = "56449278-e087-4e44-b269-d5339306d50f";
+  const secondId = "bf7bb6ea-9b87-45a8-8dd2-3521db97c242";
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: [
+        {
+          text: `AB builds detailed models (${firstId}, ${secondId}).`,
+          evidenceEntryIds: [firstId],
+        },
+        {
+          text: `They share ideas with friends [${secondId}].`,
+          evidenceEntryIds: [secondId],
+        },
+        {
+          text: `They revisit a plan after a first attempt ${firstId}.`,
+          evidenceEntryIds: [firstId],
+        },
+      ],
+      overallNextSteps: [
+        {
+          text: `Offer another material (${firstId}).`,
+          linkedObservationIndex: 0,
+        },
+        { text: "Invite a shared plan.", linkedObservationIndex: 1 },
+        { text: "Compare two attempts.", linkedObservationIndex: 2 },
+      ],
+      domains: {},
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds: new Set([firstId, secondId]),
+  });
+
+  const visibleText = [
+    asbPtcLearnerNarrative(report),
+    ...report.overallNextSteps.map((item) => item.text),
+  ].join(" ");
+
+  assert.doesNotMatch(visibleText, /[0-9a-f]{8}-[0-9a-f-]{27,}/i);
+  assert.match(visibleText, /AB builds detailed models\./);
+  assert.match(visibleText, /Offer another material\./);
+});

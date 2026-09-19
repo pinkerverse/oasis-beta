@@ -419,16 +419,16 @@ export default function AsbPtcNotesModal({
                   </p>
                 </div>
 
-                <div className="mt-5 grid overflow-hidden rounded-2xl border border-slate-200 md:grid-cols-2">
-                  <div className="p-4 md:border-r md:border-slate-200">
+                <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+                  <section className="p-5 sm:p-6">
                     <h4 className="mb-3 font-bold text-slate-900">
                       Your child as a learner
                     </h4>
-                    <p className="text-sm leading-7 text-slate-700">
+                    <p className="max-w-none text-sm leading-7 text-slate-700">
                       {asbPtcLearnerNarrative(activeReport)}
                     </p>
-                  </div>
-                  <div className="border-t border-slate-200 p-4 md:border-t-0">
+                  </section>
+                  <section className="border-t border-slate-200 bg-slate-50/60 p-5 sm:p-6">
                     <h4 className="mb-3 font-bold text-slate-900">
                       Next steps
                     </h4>
@@ -437,7 +437,7 @@ export default function AsbPtcNotesModal({
                         (item) => item.text
                       )}
                     />
-                  </div>
+                  </section>
                 </div>
 
                 <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">

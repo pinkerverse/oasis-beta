@@ -128,14 +128,12 @@ function docxPairedTable({
   leftItems,
   rightTitle,
   rightItems,
-  leftAsNarrative = false,
 }: {
   leftTitle: string;
   leftSubtitle?: string;
   leftItems: string[];
   rightTitle: string;
   rightItems: string[];
-  leftAsNarrative?: boolean;
 }) {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -154,12 +152,45 @@ function docxPairedTable({
       new TableRow({
         cantSplit: true,
         children: [
-          docxCell(
-            leftAsNarrative
-              ? [docxNarrative(leftItems.join(" "))]
-              : leftItems.map(docxBullet)
-          ),
+          docxCell(leftItems.map(docxBullet)),
           docxCell(rightItems.map(docxBullet)),
+        ],
+      }),
+    ],
+  });
+}
+
+function docxFullWidthTable({
+  title,
+  items,
+  fill,
+  asNarrative = false,
+}: {
+  title: string;
+  items: string[];
+  fill: string;
+  asNarrative?: boolean;
+}) {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    layout: TableLayoutType.FIXED,
+    borders: tableBorders,
+    rows: [
+      new TableRow({
+        cantSplit: true,
+        children: [
+          docxCell([docxHeading(title)], { fill, width: 100 }),
+        ],
+      }),
+      new TableRow({
+        cantSplit: true,
+        children: [
+          docxCell(
+            asNarrative
+              ? [docxNarrative(items.join(" "))]
+              : items.map(docxBullet),
+            { width: 100 }
+          ),
         ],
       }),
     ],
@@ -199,12 +230,17 @@ function docxReportChildren(report: AsbPtcReport, index: number) {
         }),
       ],
     }),
-    docxPairedTable({
-      leftTitle: "Your child as a learner",
-      leftItems: report.learnerProfile.map((item) => item.text),
-      rightTitle: "Next steps",
-      rightItems: report.overallNextSteps.map((item) => item.text),
-      leftAsNarrative: true,
+    docxFullWidthTable({
+      title: "Your child as a learner",
+      items: report.learnerProfile.map((item) => item.text),
+      fill: LEFT_FILL,
+      asNarrative: true,
+    }),
+    new Paragraph({ spacing: { after: 80 } }),
+    docxFullWidthTable({
+      title: "Next steps",
+      items: report.overallNextSteps.map((item) => item.text),
+      fill: RIGHT_FILL,
     }),
     new Paragraph({ spacing: { after: 150 } })
   );
@@ -359,13 +395,11 @@ function drawPdfPairedSection(
     leftSubtitle,
     leftItems,
     rightItems,
-    leftAsNarrative = false,
   }: {
     leftTitle: string;
     leftSubtitle?: string;
     leftItems: string[];
     rightItems: string[];
-    leftAsNarrative?: boolean;
   }
 ) {
   const pageWidth =
@@ -373,11 +407,11 @@ function drawPdfPairedSection(
   const columnWidth = pageWidth / 2;
   const innerWidth = columnWidth - 24;
   const headerHeight = leftSubtitle ? 34 : 26;
-  const leftHeight = leftAsNarrative
-    ? pdfNarrativeHeight(doc, leftItems.join(" "), innerWidth)
-    : pdfListHeight(doc, leftItems, innerWidth);
   const bodyHeight =
-    Math.max(leftHeight, pdfListHeight(doc, rightItems, innerWidth)) + 18;
+    Math.max(
+      pdfListHeight(doc, leftItems, innerWidth),
+      pdfListHeight(doc, rightItems, innerWidth)
+    ) + 18;
   const totalHeight = headerHeight + bodyHeight;
 
   ensurePdfSpace(doc, totalHeight + 12);
@@ -425,17 +459,7 @@ function drawPdfPairedSection(
     .fontSize(10.5)
     .fillColor("#000000")
     .text("Next steps", rightX + 10, y + 7, { width: innerWidth });
-  if (leftAsNarrative) {
-    drawPdfNarrative(
-      doc,
-      leftItems.join(" "),
-      x + 12,
-      y + headerHeight + 9,
-      innerWidth
-    );
-  } else {
-    drawPdfList(doc, leftItems, x + 12, y + headerHeight + 9, innerWidth);
-  }
+  drawPdfList(doc, leftItems, x + 12, y + headerHeight + 9, innerWidth);
   drawPdfList(
     doc,
     rightItems,
@@ -443,6 +467,67 @@ function drawPdfPairedSection(
     y + headerHeight + 9,
     innerWidth
   );
+  doc.y = y + totalHeight + 12;
+}
+
+function drawPdfFullWidthSection(
+  doc: PDFKit.PDFDocument,
+  {
+    title,
+    items,
+    fill,
+    asNarrative = false,
+  }: {
+    title: string;
+    items: string[];
+    fill: string;
+    asNarrative?: boolean;
+  }
+) {
+  const width =
+    doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const innerWidth = width - 24;
+  const headerHeight = 26;
+  const bodyHeight =
+    (asNarrative
+      ? pdfNarrativeHeight(doc, items.join(" "), innerWidth)
+      : pdfListHeight(doc, items, innerWidth)) + 18;
+  const totalHeight = headerHeight + bodyHeight;
+
+  ensurePdfSpace(doc, totalHeight + 12);
+
+  const x = doc.page.margins.left;
+  const y = doc.y;
+
+  doc.save().rect(x, y, width, headerHeight).fill(`#${fill}`).restore();
+  doc
+    .save()
+    .lineWidth(0.7)
+    .strokeColor(`#${LIGHT_BORDER}`)
+    .rect(x, y, width, totalHeight)
+    .stroke()
+    .moveTo(x, y + headerHeight)
+    .lineTo(x + width, y + headerHeight)
+    .stroke()
+    .restore();
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10.5)
+    .fillColor("#000000")
+    .text(title, x + 10, y + 7, { width: innerWidth });
+
+  if (asNarrative) {
+    drawPdfNarrative(
+      doc,
+      items.join(" "),
+      x + 12,
+      y + headerHeight + 9,
+      innerWidth
+    );
+  } else {
+    drawPdfList(doc, items, x + 12, y + headerHeight + 9, innerWidth);
+  }
+
   doc.y = y + totalHeight + 12;
 }
 
@@ -513,11 +598,16 @@ export async function createAsbPtcPdf(reports: AsbPtcReport[]) {
       .text(`Learner ${report.learnerInitials}`);
     doc.moveDown(1);
 
-    drawPdfPairedSection(doc, {
-      leftTitle: "Your child as a learner",
-      leftItems: report.learnerProfile.map((item) => item.text),
-      rightItems: report.overallNextSteps.map((item) => item.text),
-      leftAsNarrative: true,
+    drawPdfFullWidthSection(doc, {
+      title: "Your child as a learner",
+      items: report.learnerProfile.map((item) => item.text),
+      fill: LEFT_FILL,
+      asNarrative: true,
+    });
+    drawPdfFullWidthSection(doc, {
+      title: "Next steps",
+      items: report.overallNextSteps.map((item) => item.text),
+      fill: RIGHT_FILL,
     });
 
     for (const domain of ASB_PTC_DOMAINS) {

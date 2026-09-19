@@ -318,7 +318,7 @@ WRITING RULES
 - Use warm, clear, parent-friendly language and observable verbs.
 - Use appropriate approaches-to-learning language when supported: cognitive, intrapersonal, interpersonal, self-management, communication, research and thinking skills.
 - Treat assessment statuses as judgements about individual evidence, not fixed labels for the learner.
-- Each evidence point must cite one or more supplied evidence entry IDs.
+- Each evidence point must cite one or more supplied evidence entry IDs in its evidenceEntryIds field only. Never place an ID, UUID, citation, bracketed reference or source reference inside any prose text.
 - Write the learner profile as exactly three connected narrative segments of 40-50 words each. OASIS will join them into one flowing paragraph of roughly 120-150 words, so each segment must continue naturally from the previous one rather than read like a bullet.
 - Begin with a warm but evidence-grounded picture of the learner's disposition, then include something recognisably personal from the observations: an interest, friendship, question, creation, classroom contribution or characteristic way of approaching play and learning.
 - Let the second segment show relationships, communication or collaboration. Let the third show independence, self-management, thinking or research behaviours and one gently framed area of growth.
@@ -334,7 +334,7 @@ WRITING RULES
 - If a domain does not have enough evidence for two defensible bullets, return empty arrays for that domain. OASIS will show an honest evidence-needed message instead.
 - Do not include calendar dates, dates of birth, phone numbers, email addresses, contact details, full names or invented names.
 - Do not include medical, diagnostic, safeguarding, child-protection or family case information, even if it appears in source material.
-- Keep every bullet under 32 words.
+- Keep every domain bullet, support and next step under 32 words. This limit does not apply to the three learner-profile narrative segments.
 
 ACTIVE FRAMEWORK AREAS
 ${JSON.stringify(activeFramework.areaDefinitions.map((area) => area.name))}
