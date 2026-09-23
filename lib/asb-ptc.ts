@@ -16,32 +16,88 @@ export const ASB_PTC_DOMAINS: Array<{
   title: string;
   subtitle: string;
   areaTerms: string[];
+  evidenceFocus: string[];
 }> = [
   {
     key: "managingComplexity",
     title: "Managing Complexity",
     subtitle: "Self-management skills",
-    areaTerms: ["managing complexity", "self-management"],
+    areaTerms: [
+      "managing complexity",
+      "self-management",
+      "self management",
+    ],
+    evidenceFocus: [
+      "independence in routines, transitions and caring for materials or belongings",
+      "following familiar multi-step directions and organising an approach",
+      "expressing and regulating emotions, seeking help and responding to support",
+      "persistence, flexibility and responsibility when something becomes difficult",
+    ],
   },
   {
     key: "collaborationSocial",
     title: "Collaboration & Social Skills",
     subtitle: "Communication skills",
-    areaTerms: ["collaboration", "social skills"],
+    areaTerms: [
+      "collaboration",
+      "social skills",
+      "communication skills",
+      "communication",
+      "emergent literacy",
+      "literacy",
+    ],
+    evidenceFocus: [
+      "forming relationships, entering and sustaining play, turn-taking and contributing to a group",
+      "listening, responding, asking questions and exchanging ideas with children or adults",
+      "using talk, gesture, mark-making, drawing, role-play or other modes to communicate meaning",
+      "emergent reading and writing behaviours when they are explicitly present in the evidence",
+    ],
   },
   {
     key: "physical",
     title: "Physical Growth and Fine Motor Skills",
     subtitle: "Gross and fine motor development",
     areaTerms: ["physical", "gross motor", "fine motor"],
+    evidenceFocus: [
+      "purposeful movement, balance, coordination and control while navigating space",
+      "using balls, equipment or movement sequences with increasing control",
+      "hand strength, dexterity, grip and precise manipulation of tools or materials",
+      "drawing, writing, cutting, construction or self-care actions that show fine-motor control",
+    ],
   },
   {
     key: "criticalThinking",
     title: "Critical Thinking",
     subtitle: "Research and thinking skills",
-    areaTerms: ["critical thinking", "research skills"],
+    areaTerms: [
+      "critical thinking",
+      "research skills",
+      "thinking skills",
+      "emergent math",
+      "mathematics",
+      "creativity",
+      "innovation",
+    ],
+    evidenceFocus: [
+      "questioning, observing, comparing, sorting, categorising and noticing significant detail",
+      "counting, quantity, number, pattern, shape, space or mathematical problem-solving",
+      "planning, testing, adapting, persevering and explaining a strategy or conclusion",
+      "researching or documenting ideas through construction, art, movement, media or another purposeful mode",
+    ],
   },
 ];
+
+export function getAsbPtcDomainKey(areaName: string | null | undefined) {
+  if (!areaName) return null;
+
+  const comparableName = areaName.toLowerCase();
+
+  return (
+    ASB_PTC_DOMAINS.find((domain) =>
+      domain.areaTerms.some((term) => comparableName.includes(term))
+    )?.key ?? null
+  );
+}
 
 export type AsbPtcEvidencePoint = {
   text: string;

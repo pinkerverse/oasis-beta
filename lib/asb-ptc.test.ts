@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   ASB_PTC_SCHOOL_ID,
   asbPtcLearnerNarrative,
+  getAsbPtcDomainKey,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
 } from "./asb-ptc.ts";
@@ -37,6 +38,34 @@ test("the school PTC template is restricted to the ASB school record", () => {
   assert.equal(getPtcTemplateForSchool(ASB_PTC_SCHOOL_ID), "asb_pre_k");
   assert.equal(getPtcTemplateForSchool("another-school"), null);
   assert.equal(getPtcTemplateForSchool(null), null);
+});
+
+test("the ASB framework areas feed the four school PTC lenses", () => {
+  assert.equal(
+    getAsbPtcDomainKey("Managing Complexity (Self-management skills)"),
+    "managingComplexity"
+  );
+  assert.equal(
+    getAsbPtcDomainKey("Collaboration & Social Skills"),
+    "collaborationSocial"
+  );
+  assert.equal(
+    getAsbPtcDomainKey("Communication Skills (Emergent Literacy)"),
+    "collaborationSocial"
+  );
+  assert.equal(getAsbPtcDomainKey("Physical"), "physical");
+  assert.equal(
+    getAsbPtcDomainKey("Thinking Skills (Emergent Math)"),
+    "criticalThinking"
+  );
+  assert.equal(
+    getAsbPtcDomainKey("Critical Thinking (Research Skills)"),
+    "criticalThinking"
+  );
+  assert.equal(
+    getAsbPtcDomainKey("Creativity & Innovation"),
+    "criticalThinking"
+  );
 });
 
 test("PTC evidence and next steps remain balanced", () => {

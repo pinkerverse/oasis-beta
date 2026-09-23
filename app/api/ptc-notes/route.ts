@@ -2,6 +2,7 @@ import OpenAI from "openai";
 
 import {
   ASB_PTC_DOMAINS,
+  getAsbPtcDomainKey,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
 } from "@/lib/asb-ptc";
@@ -56,18 +57,6 @@ function evidenceMomentKey(entry: {
     entry.observation_date ?? entry.created_at,
     10
   )}|${normaliseText(entry.observation).toLowerCase()}`;
-}
-
-function getDomainKey(areaName: string | null) {
-  if (!areaName) return null;
-
-  const comparableName = areaName.toLowerCase();
-
-  return (
-    ASB_PTC_DOMAINS.find((domain) =>
-      domain.areaTerms.some((term) => comparableName.includes(term))
-    )?.key ?? null
-  );
 }
 
 export async function POST(request: Request) {
@@ -244,7 +233,7 @@ export async function POST(request: Request) {
 
               return {
                 area,
-                ptcDomain: getDomainKey(area),
+                ptcDomain: getAsbPtcDomainKey(area),
                 statementMatches: Array.isArray(match.statementMatches)
                   ? match.statementMatches.map(
                       (statement: Record<string, unknown>) => ({
@@ -312,7 +301,7 @@ You are an experienced Pre-K pedagogical documentation lead preparing concise pa
 Use only the supplied OASIS observations. The learner identifier is initials, and you must use only ${learnerInitials}. Never infer or include a full name, parent name, diagnosis, personality label, family detail, medical information, safeguarding information, or unsupported developmental claim.
 
 PURPOSE
-Create an evidence-grounded draft that follows this school's conference structure while remaining easy for the teacher to copy into the official document.
+Create an evidence-grounded draft that follows this school's conference structure while remaining easy for the teacher to copy into the official document. The four domain sections should read as a concise developmental snapshot: what the learner can currently do, followed by the most relevant next step.
 
 WRITING RULES
 - Use warm, clear, parent-friendly language and observable verbs.
@@ -326,8 +315,11 @@ WRITING RULES
 - Use varied, natural sentences and UK English. Prefer phrases such as "is beginning to", "has grown in confidence", "responds well to" and "would benefit from" when the evidence supports them.
 - End the profile with a specific, optimistic view of the learner's continued growth. Avoid generic praise, repeated stock openings and claims that are not supported by evidence.
 - Use ${learnerInitials} only in the opening sentence and use they/their afterwards. Do not infer gender or use he/she.
+- Keep the profile recognisably individual. Anchor it in two or three particular interests, choices, relationships, creations, questions or ways of approaching learning that appear in the evidence; do not produce a generic learner description that could fit the whole class.
+- For every domain, select the strongest two or three current capabilities supported by evidence across more than one moment where possible. Write them as concise, observable developmental indicators, not broad praise, scores or attainment labels.
+- Prefer concrete formulations such as "Follows...", "Uses...", "Listens and responds...", "Counts...", "Compares...", "Coordinates..." or "Is beginning to..." when they accurately reflect the evidence. Retain the meaningful context that makes the statement specific to this learner.
 - Every next step must link by zero-based index to one evidence segment in the same section. Provide exactly one next step for every evidence segment.
-- A next step should extend the demonstrated learning or address the specific emerging capability described in its linked evidence bullet.
+- A next step should be practical, observable and one achievable developmental step beyond the linked evidence bullet. It must extend demonstrated learning or address the specific emerging capability, rather than merely restating it.
 - Do not repeat the same claim or next step across sections.
 - For Physical Growth, use only evidence explicitly connected to gross or fine motor development.
 - Supports to aid success are optional. Include them only when the observations explicitly show that a particular prompt, resource, routine or environmental condition helped the learner participate or succeed. Otherwise return an empty array.
@@ -338,6 +330,25 @@ WRITING RULES
 
 ACTIVE FRAMEWORK AREAS
 ${JSON.stringify(activeFramework.areaDefinitions.map((area) => area.name))}
+
+SCHOOL PTC LENSES
+${JSON.stringify(
+  ASB_PTC_DOMAINS.map((domain) => ({
+    key: domain.key,
+    heading: domain.title,
+    atlLens: domain.subtitle,
+    evidenceToConsider: domain.evidenceFocus,
+  })),
+  null,
+  2
+)}
+
+DOMAIN CURATION
+- Managing Complexity draws on self-management and intrapersonal evidence.
+- Collaboration & Social Skills also includes relevant communication and emergent-literacy evidence.
+- Physical Growth and Fine Motor Skills includes only explicit gross-motor, coordination, tool-use or fine-motor evidence.
+- Critical Thinking also includes relevant research, emergent-mathematics, creativity and innovation evidence.
+- Use the lenses to curate the evidence; do not force a metric when the observations do not support it.
 
 EVIDENCE
 ${JSON.stringify(entries, null, 2)}
