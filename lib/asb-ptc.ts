@@ -11,12 +11,36 @@ export type AsbPtcDomainKey =
   | "physical"
   | "criticalThinking";
 
+export const ASB_PTC_WRITING_PROFILE = {
+  learnerPortrait: [
+    "Open with two or three evidence-backed qualities that describe how the learner approaches school, play or new experiences.",
+    "Make the portrait recognisably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning.",
+    "Show a balanced picture across engagement, relationships and approaches to learning, with one gently framed area of continued growth when the evidence supports it.",
+  ],
+  developmentalCalibration: [
+    "Describe the learner's current level of independence only when it is visible in the evidence: with support, with a reminder, with minimal support or independently.",
+    "Use developmental wording such as beginning to, growing in confidence, increasingly or consistently only when the observation history supports that degree of progress.",
+    "Keep current capabilities separate from future goals. Do not turn a status label or a single isolated moment into a fixed description of the learner.",
+  ],
+  evidenceBullets: [
+    "Write one observable capability per bullet, retaining the activity or context that makes it meaningful.",
+    "Prefer concrete behaviour over praise: what the learner initiates, sustains, communicates, coordinates, revisits, compares, creates or manages.",
+    "Select the most useful two or three capabilities rather than trying to mention every observation.",
+  ],
+  nextSteps: [
+    "Pair every current capability with one direct, achievable extension in a familiar Pre-K context.",
+    "Move one step forward in independence, complexity, duration, precision, reflection or collaboration; do not simply rephrase the current capability.",
+    "Make the intended practice visible enough that a teacher or family can understand what progress would look like.",
+  ],
+} as const;
+
 export const ASB_PTC_DOMAINS: Array<{
   key: AsbPtcDomainKey;
   title: string;
   subtitle: string;
   areaTerms: string[];
   evidenceFocus: string[];
+  progressionFocus: string[];
 }> = [
   {
     key: "managingComplexity",
@@ -32,6 +56,11 @@ export const ASB_PTC_DOMAINS: Array<{
       "following familiar multi-step directions and organising an approach",
       "expressing and regulating emotions, seeking help and responding to support",
       "persistence, flexibility and responsibility when something becomes difficult",
+    ],
+    progressionFocus: [
+      "move from reminders towards greater independence in routines, belongings or multi-step directions",
+      "move from recognising feelings towards communicating them and choosing a useful regulation strategy",
+      "move from attempting a challenge towards sustaining attention, adapting a plan or recovering after difficulty",
     ],
   },
   {
@@ -52,6 +81,11 @@ export const ASB_PTC_DOMAINS: Array<{
       "using talk, gesture, mark-making, drawing, role-play or other modes to communicate meaning",
       "emergent reading and writing behaviours when they are explicitly present in the evidence",
     ],
+    progressionFocus: [
+      "move from entering a group towards sustaining shared play or contributing to a joint idea",
+      "move from listening or responding towards exchanging ideas, asking relevant questions or building on another person's contribution",
+      "move from supported turn-taking towards sharing resources, negotiating or resolving a simple disagreement",
+    ],
   },
   {
     key: "physical",
@@ -63,6 +97,11 @@ export const ASB_PTC_DOMAINS: Array<{
       "using balls, equipment or movement sequences with increasing control",
       "hand strength, dexterity, grip and precise manipulation of tools or materials",
       "drawing, writing, cutting, construction or self-care actions that show fine-motor control",
+    ],
+    progressionFocus: [
+      "extend balance, coordination or control through a slightly more complex movement or sequence",
+      "extend fine-motor strength, precision or stamina through familiar tools and materials",
+      "move from participating in a physical or self-care action towards completing it with greater independence and control",
     ],
   },
   {
@@ -83,6 +122,11 @@ export const ASB_PTC_DOMAINS: Array<{
       "counting, quantity, number, pattern, shape, space or mathematical problem-solving",
       "planning, testing, adapting, persevering and explaining a strategy or conclusion",
       "researching or documenting ideas through construction, art, movement, media or another purposeful mode",
+    ],
+    progressionFocus: [
+      "move from generating an idea towards testing, adapting, explaining or reflecting on it",
+      "move from completing an inquiry towards sustaining it, revisiting it or making a connection across experiences",
+      "extend an observed number, pattern, shape, spatial or problem-solving strategy by one manageable level of complexity",
     ],
   },
 ];

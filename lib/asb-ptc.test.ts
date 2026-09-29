@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   ASB_PTC_SCHOOL_ID,
+  ASB_PTC_DOMAINS,
+  ASB_PTC_WRITING_PROFILE,
   asbPtcLearnerNarrative,
   getAsbPtcDomainKey,
   getPtcTemplateForSchool,
@@ -66,6 +68,24 @@ test("the ASB framework areas feed the four school PTC lenses", () => {
     getAsbPtcDomainKey("Creativity & Innovation"),
     "criticalThinking"
   );
+});
+
+test("the private ASB writing profile provides evidence and progression guidance", () => {
+  assert.ok(ASB_PTC_WRITING_PROFILE.learnerPortrait.length >= 3);
+  assert.ok(ASB_PTC_WRITING_PROFILE.developmentalCalibration.length >= 3);
+  assert.ok(ASB_PTC_WRITING_PROFILE.nextSteps.length >= 3);
+
+  for (const domain of ASB_PTC_DOMAINS) {
+    assert.ok(domain.evidenceFocus.length >= 3);
+    assert.ok(domain.progressionFocus.length >= 3);
+  }
+
+  const profileText = JSON.stringify({
+    profile: ASB_PTC_WRITING_PROFILE,
+    domains: ASB_PTC_DOMAINS,
+  });
+
+  assert.doesNotMatch(profileText, /parent names?|teacher name|phone|email/i);
 });
 
 test("PTC evidence and next steps remain balanced", () => {

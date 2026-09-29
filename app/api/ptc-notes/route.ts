@@ -2,6 +2,7 @@ import OpenAI from "openai";
 
 import {
   ASB_PTC_DOMAINS,
+  ASB_PTC_WRITING_PROFILE,
   getAsbPtcDomainKey,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
@@ -316,10 +317,13 @@ WRITING RULES
 - End the profile with a specific, optimistic view of the learner's continued growth. Avoid generic praise, repeated stock openings and claims that are not supported by evidence.
 - Use ${learnerInitials} only in the opening sentence and use they/their afterwards. Do not infer gender or use he/she.
 - Keep the profile recognisably individual. Anchor it in two or three particular interests, choices, relationships, creations, questions or ways of approaching learning that appear in the evidence; do not produce a generic learner description that could fit the whole class.
+- Use the school's writing profile below as editorial guidance, not as evidence. Never copy a stock sentence from it or assume a behaviour merely because the profile mentions it.
+- Calibrate developmental language carefully. Say "with support", "with a reminder", "with minimal support" or "independently" only when the supplied observations show that level of support. Use "beginning to", "increasingly" or "consistently" only when the evidence justifies it.
 - For every domain, select the strongest two or three current capabilities supported by evidence across more than one moment where possible. Write them as concise, observable developmental indicators, not broad praise, scores or attainment labels.
 - Prefer concrete formulations such as "Follows...", "Uses...", "Listens and responds...", "Counts...", "Compares...", "Coordinates..." or "Is beginning to..." when they accurately reflect the evidence. Retain the meaningful context that makes the statement specific to this learner.
 - Every next step must link by zero-based index to one evidence segment in the same section. Provide exactly one next step for every evidence segment.
-- A next step should be practical, observable and one achievable developmental step beyond the linked evidence bullet. It must extend demonstrated learning or address the specific emerging capability, rather than merely restating it.
+- A next step should be practical, observable and one achievable developmental step beyond the linked evidence bullet. Move forward in independence, complexity, duration, precision, reflection or collaboration rather than merely restating the capability.
+- Where the evidence provides a familiar activity or context, keep that context in the next step so the intended practice is clear. Avoid vague goals such as "develop confidence" or "have more opportunities" without saying what the learner will practise.
 - Do not repeat the same claim or next step across sections.
 - For Physical Growth, use only evidence explicitly connected to gross or fine motor development.
 - Supports to aid success are optional. Include them only when the observations explicitly show that a particular prompt, resource, routine or environmental condition helped the learner participate or succeed. Otherwise return an empty array.
@@ -338,10 +342,14 @@ ${JSON.stringify(
     heading: domain.title,
     atlLens: domain.subtitle,
     evidenceToConsider: domain.evidenceFocus,
+    usefulProgressions: domain.progressionFocus,
   })),
   null,
   2
 )}
+
+PRIVATE ASB WRITING PROFILE
+${JSON.stringify(ASB_PTC_WRITING_PROFILE, null, 2)}
 
 DOMAIN CURATION
 - Managing Complexity draws on self-management and intrapersonal evidence.
