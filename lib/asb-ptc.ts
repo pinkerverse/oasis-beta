@@ -385,18 +385,25 @@ export function normaliseGeneratedAsbPtcReport({
     learnerProfile.length,
     3
   );
-  const balancedOverallNextSteps =
-    overallNextSteps.length === learnerProfile.length
+  const parentFriendlyNextSteps =
+    overallNextSteps.length >= 2
       ? overallNextSteps
-      : learnerProfile.map((_, index) => ({
-          text:
-            index === 0
-              ? `Notice what ${learnerInitials} chooses, sustains and revisits during familiar play and routines.`
-              : index === 1
-                ? "Record what remains consistent and what changes across a second context or after one brief prompt."
-                : "Revisit a familiar learning moment and notice whether the learner transfers the same approach independently.",
-          linkedObservationIndex: index,
-        }));
+      : [
+          {
+            text: `Invite ${learnerInitials} to choose a familiar activity and talk about what they would like to make, try or find out.`,
+            linkedObservationIndex: 0,
+          },
+          {
+            text:
+              "During shared play or everyday routines, encourage them to listen, take turns and add one of their own ideas.",
+            linkedObservationIndex: 1,
+          },
+          {
+            text:
+              "Offer a simple two- or three-step task and give them time to complete as much of it independently as possible.",
+            linkedObservationIndex: 2,
+          },
+        ];
   const rawDomains =
     candidate.domains && typeof candidate.domains === "object"
       ? (candidate.domains as Record<string, unknown>)
@@ -407,7 +414,7 @@ export function normaliseGeneratedAsbPtcReport({
     learnerInitials,
     generatedAt,
     learnerProfile,
-    overallNextSteps: balancedOverallNextSteps,
+    overallNextSteps: parentFriendlyNextSteps,
     domains: {
       managingComplexity: normaliseDomain(
         rawDomains.managingComplexity,

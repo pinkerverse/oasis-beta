@@ -317,6 +317,9 @@ WRITING RULES
 - End the profile with a specific, optimistic view of the learner's continued growth. Avoid generic praise, repeated stock openings and claims that are not supported by evidence.
 - Use ${learnerInitials} only in the opening sentence and use they/their afterwards. Do not infer gender or use he/she.
 - Keep the profile recognisably individual. Anchor it in two or three particular interests, choices, relationships, creations, questions or ways of approaching learning that appear in the evidence; do not produce a generic learner description that could fit the whole class.
+- After the learner profile, provide two or three parent-friendly overall next steps. Write these in warm, everyday language that a family can understand immediately, while remaining useful to the teacher.
+- Make each overall next step concrete and manageable. Name a familiar activity, routine, conversation or playful way to practise. Avoid formal phrases such as "foster verbal confidence", "deepen collaboration skills" or "strengthen organisational skills" when a simpler description of what the learner can practise will do.
+- These overall next steps may draw together learning across the profile, but must remain evidence-grounded. They are separate from the more professional, ATL-linked next steps inside the four domain sections below.
 - Use the school's writing profile below as editorial guidance, not as evidence. Never copy a stock sentence from it or assume a behaviour merely because the profile mentions it.
 - Calibrate developmental language carefully. Say "with support", "with a reminder", "with minimal support" or "independently" only when the supplied observations show that level of support. Use "beginning to", "increasingly" or "consistently" only when the evidence justifies it.
 - For every domain, select the strongest two or three current capabilities supported by evidence across more than one moment where possible. Write them as concise, observable developmental indicators, not broad praise, scores or attainment labels.
@@ -395,7 +398,7 @@ ${JSON.stringify(entries, null, 2)}
               },
               overallNextSteps: {
                 type: "array",
-                minItems: 3,
+                minItems: 2,
                 maxItems: 3,
                 items: {
                   type: "object",

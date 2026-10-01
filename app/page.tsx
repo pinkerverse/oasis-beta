@@ -19,6 +19,7 @@ import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
 } from "@/lib/focus-guidance";
+import { canStartSnapshotAreaFromObservation } from "@/lib/assessment-snapshot";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import {
   getAcademicYearReadiness,
@@ -1258,10 +1259,14 @@ const historyByArea = new Map<
     currentLevel: number;
     currentLabel: string;
     hasEvidenceAfterFrom: boolean;
+    firstEvidenceAt: number | null;
   }
 >();
 
-if (learnerBaseline) {
+if (
+  learnerBaseline &&
+  snapshotFrom !== "First Evidence"
+) {
     for (
       const item of
       learnerBaseline.assessment_data
@@ -1294,6 +1299,7 @@ historyByArea.set(area, {
   currentLevel: levelNumber,
   currentLabel: displayLabel,
   hasEvidenceAfterFrom: false,
+  firstEvidenceAt: null,
 });
     }
   }
@@ -1340,6 +1346,8 @@ historyByArea.set(area, {
       !snapshotFromCutoff ||
       entryDate <=
         snapshotFromCutoff;
+    const isFirstEvidenceComparison =
+      snapshotFrom === "First Evidence";
 
     const frameworkMatches =
       Array.isArray(
@@ -1388,14 +1396,16 @@ historyByArea.set(area, {
         historyByArea.get(area);
 
 if (!existing) {
-  // Never invent a baseline from later observation evidence.
-  if (snapshotFrom === "Baseline") {
-    continue;
-  }
-
-  // For term-based comparisons, the area must already
-  // have evidence by the selected starting checkpoint.
-  if (!isAtOrBeforeFromCutoff) {
+  // Term comparisons require evidence by their checkpoint,
+  // while "First Evidence" starts independently per area.
+  // Baseline comparisons only use explicitly saved baselines.
+  if (
+    !canStartSnapshotAreaFromObservation({
+      fromSelection: snapshotFrom,
+      isAtOrBeforeCutoff:
+        isAtOrBeforeFromCutoff,
+    })
+  ) {
     continue;
   }
 
@@ -1409,12 +1419,11 @@ historyByArea.set(
     currentLevel:
       developmentalLevel,
     currentLabel: label,
-    hasEvidenceAfterFrom:
-      Boolean(
-        snapshotFromCutoff &&
-          entryDate >
-            snapshotFromCutoff
-      ),
+    hasEvidenceAfterFrom: false,
+    firstEvidenceAt:
+      isFirstEvidenceComparison
+        ? entryDate.getTime()
+        : null,
   }
 );
 
@@ -1422,8 +1431,8 @@ historyByArea.set(
       }
 
       if (
-        snapshotFrom !==
-          "Baseline" &&
+        !isFirstEvidenceComparison &&
+        snapshotFrom !== "Baseline" &&
         isAtOrBeforeFromCutoff
       ) {
         existing.baselineLevel =
@@ -1432,12 +1441,19 @@ historyByArea.set(
         existing.baselineLabel =
           label;
       }
-if (
+if (isFirstEvidenceComparison) {
+  if (
+    existing.firstEvidenceAt !== null &&
+    entryDate.getTime() >
+      existing.firstEvidenceAt
+  ) {
+    existing.hasEvidenceAfterFrom = true;
+  }
+} else if (
   snapshotFromCutoff &&
   entryDate > snapshotFromCutoff
 ) {
-  existing.hasEvidenceAfterFrom =
-    true;
+  existing.hasEvidenceAfterFrom = true;
 }
       existing.currentLevel =
         developmentalLevel;

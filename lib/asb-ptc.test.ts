@@ -6,6 +6,7 @@ import {
   ASB_PTC_DOMAINS,
   ASB_PTC_WRITING_PROFILE,
   asbPtcLearnerNarrative,
+  asbPtcReportToPlainText,
   getAsbPtcDomainKey,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
@@ -93,7 +94,16 @@ test("PTC evidence and next steps remain balanced", () => {
   const report = normaliseGeneratedAsbPtcReport({
     value: {
       learnerProfile: domain.observations,
-      overallNextSteps: domain.nextSteps,
+      overallNextSteps: [
+        {
+          text: "Invite AB to explain their plan before starting.",
+          linkedObservationIndex: 0,
+        },
+        {
+          text: "During a familiar activity, ask what they might try next.",
+          linkedObservationIndex: 1,
+        },
+      ],
       domains: {
         managingComplexity: domain,
         collaborationSocial: domain,
@@ -108,8 +118,6 @@ test("PTC evidence and next steps remain balanced", () => {
     generatedAt: "2026-09-18T00:00:00.000Z",
   });
 
-  assert.equal(report.learnerProfile.length, report.overallNextSteps.length);
-
   for (const content of Object.values(report.domains)) {
     assert.equal(content.observations.length, content.nextSteps.length);
     assert.deepEqual(
@@ -117,6 +125,13 @@ test("PTC evidence and next steps remain balanced", () => {
       [0, 1]
     );
   }
+
+  const plainText = asbPtcReportToPlainText(report);
+  const learnerPortraitSection = plainText.split("Managing Complexity")[0];
+
+  assert.match(learnerPortraitSection, /Next steps/);
+  assert.equal(report.overallNextSteps.length, 2);
+  assert.equal(plainText.match(/^Next steps$/gm)?.length, 5);
 });
 
 test("unsupported claims are replaced with an honest evidence-needed section", () => {
@@ -142,7 +157,7 @@ test("unsupported claims are replaced with an honest evidence-needed section", (
   );
 });
 
-test("three profile points receive three fallback next steps", () => {
+test("missing overall next steps receive parent-friendly fallbacks", () => {
   const report = normaliseGeneratedAsbPtcReport({
     value: {
       learnerProfile: [
@@ -159,11 +174,15 @@ test("three profile points receive three fallback next steps", () => {
     validEntryIds,
   });
 
-  assert.equal(report.learnerProfile.length, 3);
   assert.equal(report.overallNextSteps.length, 3);
   assert.deepEqual(
     report.overallNextSteps.map((step) => step.linkedObservationIndex),
     [0, 1, 2]
+  );
+  assert.match(report.overallNextSteps[0].text, /familiar activity/i);
+  assert.doesNotMatch(
+    report.overallNextSteps.map((step) => step.text).join(" "),
+    /record what remains consistent/i
   );
 });
 
@@ -183,7 +202,6 @@ test("the learner profile becomes one flowing narrative", () => {
       overallNextSteps: [
         { text: "Offer a new material.", linkedObservationIndex: 0 },
         { text: "Invite a follow-up question.", linkedObservationIndex: 1 },
-        { text: "Ask for a brief explanation.", linkedObservationIndex: 2 },
       ],
       domains: {},
       supports: [],
@@ -224,7 +242,6 @@ test("internal evidence IDs never appear in report prose", () => {
           linkedObservationIndex: 0,
         },
         { text: "Invite a shared plan.", linkedObservationIndex: 1 },
-        { text: "Compare two attempts.", linkedObservationIndex: 2 },
       ],
       domains: {},
       supports: [],
