@@ -309,14 +309,19 @@ WRITING RULES
 - Use appropriate approaches-to-learning language when supported: cognitive, intrapersonal, interpersonal, self-management, communication, research and thinking skills.
 - Treat assessment statuses as judgements about individual evidence, not fixed labels for the learner.
 - Each evidence point must cite one or more supplied evidence entry IDs in its evidenceEntryIds field only. Never place an ID, UUID, citation, bracketed reference or source reference inside any prose text.
-- Write the learner profile as exactly three connected narrative segments of 40-50 words each. OASIS will join them into one flowing paragraph of roughly 120-150 words, so each segment must continue naturally from the previous one rather than read like a bullet.
+- Write the learner profile as exactly three connected narrative segments that OASIS will join into one flowing paragraph. Together they must contain exactly four or five sentences and roughly 90-115 words: use two sentences in the first segment, one or two in the second, and one in the third.
 - Begin with a warm but evidence-grounded picture of the learner's disposition, then include something recognisably personal from the observations: an interest, friendship, question, creation, classroom contribution or characteristic way of approaching play and learning.
 - Let the second segment show relationships, communication or collaboration. Let the third show independence, self-management, thinking or research behaviours and one gently framed area of growth.
 - Weave ATL language naturally into the prose. Do not list ATL categories or turn the paragraph into assessment jargon.
-- Use varied, natural sentences and UK English. Prefer phrases such as "is beginning to", "has grown in confidence", "responds well to" and "would benefit from" when the evidence supports them.
+- Use varied, natural sentence structures and UK English. Prefer phrases such as "is beginning to", "has grown in confidence", "responds well to" and "would benefit from" when the evidence supports them.
+- Vary how sentences begin. After the opening, use at least two context-led openings grounded in the supplied observations, for example a sentence beginning with "During...", "When...", "In...", "While..." or "Through..." followed by the real routine, space, discussion, material or play context. Treat these only as structural examples; never invent a context or copy a stock sentence.
+- Do not begin consecutive sentences with the same word. No more than one sentence after the opening may begin with "They" or "Their".
 - End the profile with a specific, optimistic view of the learner's continued growth. Avoid generic praise, repeated stock openings and claims that are not supported by evidence.
-- Use ${learnerInitials} only in the opening sentence and use they/their afterwards. Do not infer gender or use he/she.
+- Use ${learnerInitials} only in the opening sentence. Afterwards, refer to the learner with they/their, but place the pronoun naturally within varied sentences rather than always at the beginning. Do not infer gender or use he/she.
 - Keep the profile recognisably individual. Anchor it in two or three particular interests, choices, relationships, creations, questions or ways of approaching learning that appear in the evidence; do not produce a generic learner description that could fit the whole class.
+- After the learner profile, provide two or three parent-friendly overall next steps. Write these in warm, everyday language that a family can understand immediately, while remaining useful to the teacher.
+- Make each overall next step concrete and manageable. Name a familiar activity, routine, conversation or playful way to practise. Avoid formal phrases such as "foster verbal confidence", "deepen collaboration skills" or "strengthen organisational skills" when a simpler description of what the learner can practise will do.
+- These overall next steps may draw together learning across the profile, but must remain evidence-grounded. They are separate from the more professional, ATL-linked next steps inside the four domain sections below.
 - Use the school's writing profile below as editorial guidance, not as evidence. Never copy a stock sentence from it or assume a behaviour merely because the profile mentions it.
 - Calibrate developmental language carefully. Say "with support", "with a reminder", "with minimal support" or "independently" only when the supplied observations show that level of support. Use "beginning to", "increasingly" or "consistently" only when the evidence justifies it.
 - For every domain, select the strongest two or three current capabilities supported by evidence across more than one moment where possible. Write them as concise, observable developmental indicators, not broad praise, scores or attainment labels.
@@ -330,7 +335,7 @@ WRITING RULES
 - If a domain does not have enough evidence for two defensible bullets, return empty arrays for that domain. OASIS will show an honest evidence-needed message instead.
 - Do not include calendar dates, dates of birth, phone numbers, email addresses, contact details, full names or invented names.
 - Do not include medical, diagnostic, safeguarding, child-protection or family case information, even if it appears in source material.
-- Keep every domain bullet, support and next step under 32 words. This limit does not apply to the three learner-profile narrative segments.
+- Keep every domain bullet, support and next step under 32 words. This limit does not apply to the learner-profile paragraph, which follows its separate four-to-five-sentence and 90-115-word limit.
 
 ACTIVE FRAMEWORK AREAS
 ${JSON.stringify(activeFramework.areaDefinitions.map((area) => area.name))}
@@ -395,7 +400,7 @@ ${JSON.stringify(entries, null, 2)}
               },
               overallNextSteps: {
                 type: "array",
-                minItems: 3,
+                minItems: 2,
                 maxItems: 3,
                 items: {
                   type: "object",

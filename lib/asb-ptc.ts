@@ -15,6 +15,8 @@ export const ASB_PTC_WRITING_PROFILE = {
   learnerPortrait: [
     "Open with two or three evidence-backed qualities that describe how the learner approaches school, play or new experiences.",
     "Make the portrait recognisably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning.",
+    "Shape the portrait as four or five sentences of roughly 90-115 words, keeping only the most revealing details rather than trying to summarise every observation.",
+    "Vary sentence openings. After naming the learner once, lead naturally from evidence-grounded contexts such as a classroom routine, shared discussion, exploration, story, material or play episode instead of repeatedly starting with They or Their.",
     "Show a balanced picture across engagement, relationships and approaches to learning, with one gently framed area of continued growth when the evidence supports it.",
   ],
   developmentalCalibration: [
@@ -173,6 +175,27 @@ export function asbPtcLearnerNarrative(report: AsbPtcReport) {
     .map((item) => item.text.trim())
     .filter(Boolean)
     .join(" ");
+}
+
+function limitLearnerProfileSentences(
+  profile: AsbPtcEvidencePoint[]
+) {
+  const sentenceLimits = [2, 2, 1];
+
+  return profile.map((item, index) => {
+    const sentences =
+      item.text
+        .match(/[^.!?]+(?:[.!?]+|$)/g)
+        ?.map((sentence) => sentence.trim())
+        .filter(Boolean) ?? [];
+
+    return {
+      ...item,
+      text: sentences
+        .slice(0, sentenceLimits[index] ?? 1)
+        .join(" "),
+    };
+  });
 }
 
 export function getPtcTemplateForSchool(
@@ -362,21 +385,21 @@ export function normaliseGeneratedAsbPtcReport({
   );
   const learnerProfile =
     profile.length === 3
-      ? profile
+      ? limitLearnerProfileSentences(profile)
       : [
           {
             text:
-              "The current evidence offers a partial view of this learner across familiar routines and play, including moments when they choose how to begin and sustain an activity.",
+              "The current evidence offers a partial view of this learner across familiar routines and play, including moments when they choose how to begin and sustain an activity. Across further observations, OASIS can build a clearer picture of the interests and materials they revisit.",
             evidenceEntryIds: [],
           },
           {
             text:
-              "There is not yet enough documented evidence to describe their relationships, communication and participation with confidence.",
+              "During shared play and conversation, more evidence is needed to describe their relationships, communication and participation with confidence.",
             evidenceEntryIds: [],
           },
           {
             text:
-              "Further observations across different contexts will help build a warmer and more dependable picture of their interests, approaches to learning and developing independence.",
+              "As their documented journey grows, the portrait can describe their approaches to learning and developing independence more confidently.",
             evidenceEntryIds: [],
           },
         ];
@@ -385,18 +408,25 @@ export function normaliseGeneratedAsbPtcReport({
     learnerProfile.length,
     3
   );
-  const balancedOverallNextSteps =
-    overallNextSteps.length === learnerProfile.length
+  const parentFriendlyNextSteps =
+    overallNextSteps.length >= 2
       ? overallNextSteps
-      : learnerProfile.map((_, index) => ({
-          text:
-            index === 0
-              ? `Notice what ${learnerInitials} chooses, sustains and revisits during familiar play and routines.`
-              : index === 1
-                ? "Record what remains consistent and what changes across a second context or after one brief prompt."
-                : "Revisit a familiar learning moment and notice whether the learner transfers the same approach independently.",
-          linkedObservationIndex: index,
-        }));
+      : [
+          {
+            text: `Invite ${learnerInitials} to choose a familiar activity and talk about what they would like to make, try or find out.`,
+            linkedObservationIndex: 0,
+          },
+          {
+            text:
+              "During shared play or everyday routines, encourage them to listen, take turns and add one of their own ideas.",
+            linkedObservationIndex: 1,
+          },
+          {
+            text:
+              "Offer a simple two- or three-step task and give them time to complete as much of it independently as possible.",
+            linkedObservationIndex: 2,
+          },
+        ];
   const rawDomains =
     candidate.domains && typeof candidate.domains === "object"
       ? (candidate.domains as Record<string, unknown>)
@@ -407,7 +437,7 @@ export function normaliseGeneratedAsbPtcReport({
     learnerInitials,
     generatedAt,
     learnerProfile,
-    overallNextSteps: balancedOverallNextSteps,
+    overallNextSteps: parentFriendlyNextSteps,
     domains: {
       managingComplexity: normaliseDomain(
         rawDomains.managingComplexity,

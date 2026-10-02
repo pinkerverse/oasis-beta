@@ -26,9 +26,14 @@ const report: AsbPtcReport = {
     },
   ],
   overallNextSteps: [
-    { text: "Offer a slightly more complex version.", linkedObservationIndex: 0 },
-    { text: "Invite a comparison of two strategies.", linkedObservationIndex: 1 },
-    { text: "Ask what changed after another attempt.", linkedObservationIndex: 2 },
+    {
+      text: "Invite AB to explain what they would like to make before choosing materials.",
+      linkedObservationIndex: 0,
+    },
+    {
+      text: "During shared play, encourage them to listen and add one idea of their own.",
+      linkedObservationIndex: 1,
+    },
   ],
   domains: {
     managingComplexity: {
