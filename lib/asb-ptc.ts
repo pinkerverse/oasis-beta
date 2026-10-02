@@ -13,11 +13,12 @@ export type AsbPtcDomainKey =
 
 export const ASB_PTC_WRITING_PROFILE = {
   learnerPortrait: [
-    "Open with two or three evidence-backed qualities that describe how the learner approaches school, play or new experiences.",
-    "Make the portrait recognisably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning.",
-    "Shape the portrait as four or five sentences of roughly 90-115 words, keeping only the most revealing details rather than trying to summarise every observation.",
-    "Vary sentence openings. After naming the learner once, lead naturally from evidence-grounded contexts such as a classroom routine, shared discussion, exploration, story, material or play episode instead of repeatedly starting with They or Their.",
-    "Show a balanced picture across engagement, relationships and approaches to learning, with one gently framed area of continued growth when the evidence supports it.",
+    "Open directly with two or three evidence-backed qualities, using the natural pattern '[initials] is a curious, independent learner' rather than an abstract assessment-style introduction.",
+    "Write in a warm teacher voice to the family. When supported by the observations, use natural phrases such as our classroom, our space, our learning environment or our community.",
+    "Make the portrait recognizably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning, followed by a concrete example of what the learner does there.",
+    "Shape the portrait as four or five sentences of roughly 85-110 words, keeping only the most revealing details rather than trying to summarize every observation.",
+    "Vary sentence openings naturally. Use at least one evidence-grounded context opening such as During group time, When exploring materials or In our classroom, but do not force every sentence into that pattern.",
+    "Keep the portrait strength-led and descriptive. Close with a genuine interest, contribution, relationship or approach to learning; place development targets in the separate next-steps section rather than ending the portrait with a formal target.",
   ],
   developmentalCalibration: [
     "Describe the learner's current level of independence only when it is visible in the evidence: with support, with a reminder, with minimal support or independently.",
@@ -26,7 +27,7 @@ export const ASB_PTC_WRITING_PROFILE = {
   ],
   evidenceBullets: [
     "Write one observable capability per bullet, retaining the activity or context that makes it meaningful.",
-    "Prefer concrete behaviour over praise: what the learner initiates, sustains, communicates, coordinates, revisits, compares, creates or manages.",
+    "Prefer concrete behavior over praise: what the learner initiates, sustains, communicates, coordinates, revisits, compares, creates or manages.",
     "Select the most useful two or three capabilities rather than trying to mention every observation.",
   ],
   nextSteps: [
@@ -55,13 +56,13 @@ export const ASB_PTC_DOMAINS: Array<{
     ],
     evidenceFocus: [
       "independence in routines, transitions and caring for materials or belongings",
-      "following familiar multi-step directions and organising an approach",
+      "following familiar multi-step directions and organizing an approach",
       "expressing and regulating emotions, seeking help and responding to support",
       "persistence, flexibility and responsibility when something becomes difficult",
     ],
     progressionFocus: [
       "move from reminders towards greater independence in routines, belongings or multi-step directions",
-      "move from recognising feelings towards communicating them and choosing a useful regulation strategy",
+      "move from recognizing feelings towards communicating them and choosing a useful regulation strategy",
       "move from attempting a challenge towards sustaining attention, adapting a plan or recovering after difficulty",
     ],
   },
@@ -81,7 +82,7 @@ export const ASB_PTC_DOMAINS: Array<{
       "forming relationships, entering and sustaining play, turn-taking and contributing to a group",
       "listening, responding, asking questions and exchanging ideas with children or adults",
       "using talk, gesture, mark-making, drawing, role-play or other modes to communicate meaning",
-      "emergent reading and writing behaviours when they are explicitly present in the evidence",
+      "emergent reading and writing behaviors when they are explicitly present in the evidence",
     ],
     progressionFocus: [
       "move from entering a group towards sustaining shared play or contributing to a joint idea",
@@ -120,7 +121,7 @@ export const ASB_PTC_DOMAINS: Array<{
       "innovation",
     ],
     evidenceFocus: [
-      "questioning, observing, comparing, sorting, categorising and noticing significant detail",
+      "questioning, observing, comparing, sorting, categorizing and noticing significant detail",
       "counting, quantity, number, pattern, shape, space or mathematical problem-solving",
       "planning, testing, adapting, persevering and explaining a strategy or conclusion",
       "researching or documenting ideas through construction, art, movement, media or another purposeful mode",
