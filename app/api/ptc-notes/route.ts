@@ -4,6 +4,7 @@ import {
   ASB_PTC_DOMAINS,
   ASB_PTC_WRITING_PROFILE,
   getAsbPtcDomainKey,
+  getAsbPtcOpeningDirection,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
 } from "@/lib/asb-ptc";
@@ -310,7 +311,9 @@ WRITING RULES
 - Treat assessment statuses as judgments about individual evidence, not fixed labels for the learner.
 - Each evidence point must cite one or more supplied evidence entry IDs in its evidenceEntryIds field only. Never place an ID, UUID, citation, bracketed reference or source reference inside any prose text.
 - Write the learner profile as exactly three connected narrative segments that OASIS will join into one flowing paragraph. Together they must contain exactly four or five sentences and roughly 85-110 words: use two sentences in the first segment, one or two in the second, and one in the third.
-- Begin directly with two or three evidence-backed qualities in a natural teacher-written sentence, such as "${learnerInitials} is a curious and independent learner." Treat that sentence only as a structural example and choose qualities from the real evidence.
+- Make the first sentence recognizably specific to this learner. Do not default to a generic list of positive adjectives or repeatedly use the same adjective pairing across learners.
+- Do not treat curious, independent or enthusiastic as default descriptors. Use any of these only when it is among the clearest and most distinctive patterns in this learner's evidence.
+- Follow the learner-specific opening direction below. It controls sentence structure only and is not evidence; every claim must still come from the supplied observations.
 - Write as the learner's teacher speaking warmly to the family. When the observations support the context, use natural phrases such as "in our classroom," "in our space," "in our learning environment" or "in our community."
 - Move from the opening description into the learner's preferred activities, materials or spaces, then give a concrete example of what they do. Include how they participate with others or contribute during group learning when the evidence supports it.
 - Let the second segment show one or two specific interests, experiences or relationships. Let the third show another clear strength in participation, communication, independence, self-management, thinking or research.
@@ -342,6 +345,9 @@ WRITING RULES
 
 ACTIVE FRAMEWORK AREAS
 ${JSON.stringify(activeFramework.areaDefinitions.map((area) => area.name))}
+
+LEARNER-SPECIFIC OPENING DIRECTION
+${getAsbPtcOpeningDirection(learner.id)}
 
 SCHOOL PTC LENSES
 ${JSON.stringify(
