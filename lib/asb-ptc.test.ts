@@ -4,10 +4,12 @@ import test from "node:test";
 import {
   ASB_PTC_SCHOOL_ID,
   ASB_PTC_DOMAINS,
+  ASB_PTC_OPENING_DIRECTIONS,
   ASB_PTC_WRITING_PROFILE,
   asbPtcLearnerNarrative,
   asbPtcReportToPlainText,
   getAsbPtcDomainKey,
+  getAsbPtcOpeningDirection,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
 } from "./asb-ptc.ts";
@@ -86,6 +88,10 @@ test("the private ASB writing profile provides evidence and progression guidance
   );
   assert.match(
     ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /do not treat curious, independent or enthusiastic as default descriptors/i
+  );
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
     /our classroom.*our space.*our learning environment.*our community/i
   );
   assert.match(
@@ -108,6 +114,31 @@ test("the private ASB writing profile provides evidence and progression guidance
     profileText,
     /recognis|behaviour|organis|categoris|summarise|practise/i
   );
+});
+
+test("PTC learner openings receive stable, varied structural directions", () => {
+  const learnerKeys = [
+    "learner-a",
+    "learner-b",
+    "learner-c",
+    "learner-d",
+    "learner-e",
+    "learner-f",
+    "learner-g",
+    "learner-h",
+  ];
+  const directions = learnerKeys.map(getAsbPtcOpeningDirection);
+
+  assert.ok(
+    directions.every((direction) =>
+      ASB_PTC_OPENING_DIRECTIONS.includes(direction)
+    )
+  );
+  assert.equal(
+    getAsbPtcOpeningDirection(learnerKeys[0]),
+    getAsbPtcOpeningDirection(learnerKeys[0])
+  );
+  assert.ok(new Set(directions).size >= 4);
 });
 
 test("PTC evidence and next steps remain balanced", () => {
