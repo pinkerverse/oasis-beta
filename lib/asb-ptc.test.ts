@@ -84,6 +84,14 @@ test("the private ASB writing profile provides evidence and progression guidance
     ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
     /vary sentence openings/i
   );
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /our classroom.*our space.*our learning environment.*our community/i
+  );
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /development targets.*next-steps section/i
+  );
 
   for (const domain of ASB_PTC_DOMAINS) {
     assert.ok(domain.evidenceFocus.length >= 3);
@@ -96,6 +104,10 @@ test("the private ASB writing profile provides evidence and progression guidance
   });
 
   assert.doesNotMatch(profileText, /parent names?|teacher name|phone|email/i);
+  assert.doesNotMatch(
+    profileText,
+    /recognis|behaviour|organis|categoris|summarise|practise/i
+  );
 });
 
 test("PTC evidence and next steps remain balanced", () => {
