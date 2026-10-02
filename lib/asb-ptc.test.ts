@@ -76,6 +76,15 @@ test("the private ASB writing profile provides evidence and progression guidance
   assert.ok(ASB_PTC_WRITING_PROFILE.developmentalCalibration.length >= 3);
   assert.ok(ASB_PTC_WRITING_PROFILE.nextSteps.length >= 3);
 
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /four or five sentences/i
+  );
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /vary sentence openings/i
+  );
+
   for (const domain of ASB_PTC_DOMAINS) {
     assert.ok(domain.evidenceFocus.length >= 3);
     assert.ok(domain.progressionFocus.length >= 3);
@@ -215,6 +224,43 @@ test("the learner profile becomes one flowing narrative", () => {
     asbPtcLearnerNarrative(report),
     "AB approaches familiar play with curiosity. They listen to friends and add ideas during shared construction. They are growing in confidence when explaining a chosen strategy."
   );
+});
+
+test("the learner profile is capped at five sentences", () => {
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: [
+        evidencePoint(
+          "AB approaches exploration with curiosity. During construction, they plan detailed models. A third opening sentence should be removed."
+        ),
+        evidencePoint(
+          "When friends join, they listen and exchange ideas. In group discussions, they explain their thinking clearly. A third middle sentence should be removed.",
+          "evidence-2"
+        ),
+        evidencePoint(
+          "Through familiar routines, they are becoming more independent. A sixth overall sentence should be removed."
+        ),
+      ],
+      overallNextSteps: [
+        { text: "Offer a new material.", linkedObservationIndex: 0 },
+        { text: "Invite a follow-up question.", linkedObservationIndex: 1 },
+      ],
+      domains: {},
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+
+  const narrative = asbPtcLearnerNarrative(report);
+
+  assert.equal(narrative.match(/[.!?]+(?:\s|$)/g)?.length, 5);
+  assert.doesNotMatch(narrative, /should be removed/i);
+  assert.match(narrative, /During construction/);
+  assert.match(narrative, /When friends join/);
+  assert.match(narrative, /In group discussions/);
+  assert.match(narrative, /Through familiar routines/);
 });
 
 test("internal evidence IDs never appear in report prose", () => {
