@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import JSZip from "jszip";
 
 import {
   createAsbPtcDocx,
@@ -90,4 +91,16 @@ test("PTC downloads are genuine PDF and DOCX files", async () => {
   assert.equal(docx.subarray(0, 2).toString("ascii"), "PK");
   assert.ok(pdf.length > 1_000);
   assert.ok(docx.length > 1_000);
+});
+
+test("DOCX report boxes use visible white Arial 10 text", async () => {
+  const docx = await createAsbPtcDocx([report]);
+  const archive = await JSZip.loadAsync(docx);
+  const documentXml = await archive.file("word/document.xml")?.async("text");
+
+  assert.ok(documentXml);
+  assert.match(documentXml, /w:fill="1F1F1F"/);
+  assert.match(documentXml, /w:color w:val="FFFFFF"/);
+  assert.match(documentXml, /w:rFonts w:ascii="Arial"[^>]*w:hAnsi="Arial"/);
+  assert.match(documentXml, /w:sz w:val="20"/);
 });

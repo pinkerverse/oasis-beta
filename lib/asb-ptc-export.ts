@@ -24,6 +24,8 @@ import {
 const LIGHT_BORDER = "D9D9D9";
 const TEXT_COLOUR = "172033";
 const MUTED_COLOUR = "4F5F72";
+const DOCX_CONTENT_FILL = "1F1F1F";
+const DOCX_CONTENT_TEXT_COLOUR = "FFFFFF";
 const LEFT_FILL = "FFF4CF";
 const RIGHT_FILL = "E3F1DF";
 const NEUTRAL_FILL = "F2F5F8";
@@ -54,7 +56,7 @@ function docxBullet(text: string) {
         text,
         font: "Arial",
         size: 20,
-        color: TEXT_COLOUR,
+        color: DOCX_CONTENT_TEXT_COLOUR,
       }),
     ],
   });
@@ -68,7 +70,7 @@ function docxNarrative(text: string) {
         text,
         font: "Arial",
         size: 20,
-        color: TEXT_COLOUR,
+        color: DOCX_CONTENT_TEXT_COLOUR,
       }),
     ],
   });
@@ -152,8 +154,8 @@ function docxPairedTable({
       new TableRow({
         cantSplit: true,
         children: [
-          docxCell(leftItems.map(docxBullet)),
-          docxCell(rightItems.map(docxBullet)),
+          docxCell(leftItems.map(docxBullet), { fill: DOCX_CONTENT_FILL }),
+          docxCell(rightItems.map(docxBullet), { fill: DOCX_CONTENT_FILL }),
         ],
       }),
     ],
@@ -189,7 +191,7 @@ function docxFullWidthTable({
             asNarrative
               ? [docxNarrative(items.join(" "))]
               : items.map(docxBullet),
-            { width: 100 }
+            { fill: DOCX_CONTENT_FILL, width: 100 }
           ),
         ],
       }),
@@ -278,6 +280,7 @@ function docxReportChildren(report: AsbPtcReport, index: number) {
             cantSplit: true,
             children: [
               docxCell(report.supports.map((item) => docxBullet(item.text)), {
+                fill: DOCX_CONTENT_FILL,
                 width: 100,
               }),
             ],
