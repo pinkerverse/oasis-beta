@@ -79,12 +79,12 @@ export type AsbPtcDomainKey =
   | "criticalThinking";
 
 export const ASB_PTC_OPENING_DIRECTIONS = [
-  "Lead with the learner's initials and one distinctive, evidenced way they participate in classroom life. Prefer an active verb to a list of adjectives.",
-  "Lead with a real classroom context, such as a routine, shared discussion or exploration, and place the learner's initials naturally within that sentence.",
-  "Lead with a specific, evidenced interest, material, question or creation, then connect it to how the learner approaches learning.",
-  "Lead with a specific contribution the learner makes to relationships, shared play or group learning.",
-  "Lead with an evidenced example of how the learner responds to a challenge, develops an idea or persists with an activity.",
-  "Lead with a familiar learning space or routine and the purposeful choice the learner makes there.",
+  "Lead with the learner's initials and an evidenced description of their overall approach to learning and classroom life.",
+  "Lead with the learner's initials and how confidently or comfortably they have settled into the Pre-K environment, when the evidence supports it.",
+  "Lead with the learner's initials and their evidenced social presence, relationships or sense of belonging in the class community.",
+  "Lead with the learner's initials and their evidenced attitude toward new experiences, participation or challenge.",
+  "Lead with the learner's initials and an evidenced pattern of independence, persistence or self-management as a learner.",
+  "Lead with the learner's initials and how they navigate, participate in or connect across the classroom learning environment.",
 ] as const;
 
 export function getAsbPtcOpeningDirection(stableLearnerKey: string) {
@@ -98,12 +98,34 @@ export function getAsbPtcOpeningDirection(stableLearnerKey: string) {
   ];
 }
 
+const ASB_PTC_ACTIVITY_LED_OPENING =
+  /^(?:enjoys?|likes?|loves?|prefers?|gravitates?|explores?|builds?|constructs?|creates?|counts?|writes?|draws?|paints?|sorts?|measures?|uses?|plays?|experiments?)\b/i;
+
+export function isAsbPtcActivityLedOpening(
+  narrative: string,
+  learnerInitials: string
+) {
+  const firstSentence =
+    narrative.match(/^[^.!?]+[.!?]?/)?.[0]?.trim() ?? "";
+  const escapedInitials = learnerInitials.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+  const afterInitials = firstSentence
+    .replace(new RegExp(`^${escapedInitials}(?:'s)?\\s+`, "i"), "")
+    .trim();
+
+  return ASB_PTC_ACTIVITY_LED_OPENING.test(afterInitials);
+}
+
 export const ASB_PTC_WRITING_PROFILE = {
   learnerPortrait: [
-    "Make the first sentence specific to the learner rather than repeatedly opening with a list of familiar adjectives. It may lead with an evidenced disposition, classroom context, interest, contribution or approach to challenge.",
+    "Begin with the child as a whole learner: an evidenced learning disposition, how they have settled, their social presence, or their attitude toward classroom life. Do not begin with a favorite activity, material, academic skill or isolated observation.",
+    "Keep the first sentence at overview level. Introduce the learner before moving into shapes, numbers, writing, painting, construction, puzzles or any other specific content.",
     "Do not treat curious, independent or enthusiastic as default descriptors. Use any quality only when it is one of the clearest and most distinctive patterns in that learner's evidence.",
     "Write in a warm teacher voice to the family. When supported by the observations, use natural phrases such as our classroom, our space, our learning environment or our community.",
-    "Make the portrait recognizably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning, followed by a concrete example of what the learner does there.",
+    "After the whole-child introduction, make the portrait recognizably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning, followed by a concrete example of what the learner does there.",
+    "Describe participation, belonging, relationships or group learning before narrower academic details whenever the evidence supports that order.",
     "Shape the portrait as four or five sentences of roughly 85-110 words, keeping only the most revealing details rather than trying to summarize every observation.",
     "Vary sentence openings naturally. Use at least one evidence-grounded context opening such as During group time, When exploring materials or In our classroom, but do not force every sentence into that pattern.",
     "Keep the portrait strength-led and descriptive. Close with a genuine interest, contribution, relationship or approach to learning; place development targets in the separate next-steps section rather than ending the portrait with a formal target.",
