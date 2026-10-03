@@ -13,11 +13,7 @@ export const ASB_PTC_NEXT_STEP_STARTERS = [
   "Will begin to",
   "Will continue to",
   "Will start to",
-  "Encourage",
-  "Give opportunities to",
-  "Provide opportunities",
-  "Provide tasks",
-  "Offer tasks",
+  "Will",
 ] as const;
 
 export function isAsbPreKEmergentMathArea(
@@ -128,7 +124,8 @@ export const ASB_PTC_WRITING_PROFILE = {
     "Pair every domain capability with one direct, achievable extension from the active GOLD progression in a familiar Pre-K context.",
     "Move one step forward in independence, complexity, duration, precision, reflection or collaboration; do not simply rephrase the current capability.",
     "Make the intended practice visible enough that a teacher or family can understand what progress would look like.",
-    "Use a consistent action-led opening such as Will begin to, Will continue to, Encourage, Give opportunities to, Provide tasks or Offer tasks.",
+    "Make the learner the implied subject of every next step. Use Will, Will begin to, Will continue to or Will start to followed directly by the learner's action.",
+    "Never place a teacher action after Will. Write Will build vocabulary by discussing shared experiences, not Will continue to encourage the learner to build vocabulary.",
     "Keep every next step to one short clause of no more than 18 words.",
     "For Thinking Skills (Emergent Math), treat three-star descriptors as the Pre-K4 target ceiling. Four-star descriptors are later-stage Kindergarten context, not automatic next steps.",
     "When a learner is working within or above the three-star Emergent Math level, deepen mastery through varied materials, contexts, explanation, independence and consistency rather than advancing to four-star content.",
@@ -270,6 +267,134 @@ export type AsbPtcReport = {
   supports: AsbPtcEvidencePoint[];
 };
 
+export type AsbPtcNextStepOverlap = {
+  overallIndex: number;
+  domainKey: AsbPtcDomainKey;
+  domainIndex: number;
+  overallText: string;
+  domainText: string;
+};
+
+const NEXT_STEP_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "for",
+  "in",
+  "of",
+  "on",
+  "or",
+  "the",
+  "their",
+  "them",
+  "they",
+  "to",
+  "with",
+  "will",
+  "begin",
+  "continue",
+  "start",
+  "encourage",
+  "give",
+  "opportunities",
+  "provide",
+  "offer",
+  "tasks",
+  "learner",
+]);
+
+const NEXT_STEP_CONCEPTS: Array<[string, RegExp]> = [
+  ["share_ideas", /\b(?:share|express|communicat|explain|describe)\w*\b.{0,28}\b(?:idea|thought|choice|plan)\w*\b|\b(?:idea|thought|choice|plan)\w*\b.{0,28}\b(?:share|express|communicat|explain|describe)\w*\b/i],
+  ["listen_turns", /\b(?:listen|turn[- ]?tak|wait(?:ing)? for (?:a|their) turn|respond to (?:a )?(?:peer|friend))\w*\b/i],
+  ["shared_play", /\b(?:join|enter|invite|sustain|extend|negotiate)\w*\b.{0,28}\b(?:play|group|peer|friend)\w*\b|\b(?:shared|cooperative|collaborative)\s+(?:play|activity|project)\b/i],
+  ["planning", /\b(?:plan|organize|sequence|multi[- ]?step|two[- ]?step|three[- ]?step|follow\w* directions?)\b/i],
+  ["routine_independence", /\b(?:independen|routine|transition|belonging|self[- ]?care)\w*\b/i],
+  ["persistence", /\b(?:persist|persever|challenge|adapt|revisit|try again|sustain attention)\w*\b/i],
+  ["emotional_regulation", /\b(?:emotion|feeling|regulat|calm|strategy for feelings?)\w*\b/i],
+  ["fine_motor", /\b(?:fine motor|grip|scissor|cutting|hand strength|finger|letter formation|writing control|draw\w*|manipulat)\b/i],
+  ["gross_motor", /\b(?:gross motor|balance|coordinat|movement sequence|throw|catch|jump|climb)\w*\b/i],
+  ["number", /\b(?:count|number|quantity|addition|subtraction|numeral)\w*\b/i],
+  ["measurement", /\b(?:measure|length|height|weight|volume|unit|longer|shorter|taller|order objects?)\w*\b/i],
+  ["classification", /\b(?:sort|classif|categor|group objects?|regroup)\w*\b/i],
+  ["spatial", /\b(?:shape|spatial|position|puzzle|mandala|beside|between|under|over)\w*\b/i],
+  ["inquiry", /\b(?:question|investigat|research|observe closely|record a discovery)\w*\b/i],
+  ["problem_solving", /\b(?:problem[- ]?solv|test\w*.{0,20}\bidea|(?:compare|explain|reflect on|evaluate)\w*.{0,24}\bstrateg)\w*\b/i],
+  ["creative_construction", /\b(?:creat|imagin|construct|build|model|design)\w*\b/i],
+];
+
+function nextStepTokens(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, " ")
+      .split(/\s+/)
+      .map((token) =>
+        token
+          .replace(/ies$/i, "y")
+          .replace(/(?:ing|ed|es|s)$/i, "")
+          .replace(/-+/g, "")
+      )
+      .filter(
+        (token) => token.length >= 4 && !NEXT_STEP_STOP_WORDS.has(token)
+      )
+  );
+}
+
+function nextStepConcepts(value: string) {
+  return new Set(
+    NEXT_STEP_CONCEPTS.flatMap(([concept, pattern]) =>
+      pattern.test(value) ? [concept] : []
+    )
+  );
+}
+
+function nextStepsOverlap(first: string, second: string) {
+  const firstConcepts = nextStepConcepts(first);
+  const secondConcepts = nextStepConcepts(second);
+
+  if ([...firstConcepts].some((concept) => secondConcepts.has(concept))) {
+    return true;
+  }
+
+  const firstTokens = nextStepTokens(first);
+  const secondTokens = nextStepTokens(second);
+  const sharedTokens = [...firstTokens].filter((token) =>
+    secondTokens.has(token)
+  );
+  const smallerTokenCount = Math.min(firstTokens.size, secondTokens.size);
+
+  return (
+    sharedTokens.length >= 2 &&
+    smallerTokenCount > 0 &&
+    sharedTokens.length / smallerTokenCount >= 0.5
+  );
+}
+
+export function findAsbPtcNextStepOverlaps(report: AsbPtcReport) {
+  const overlaps: AsbPtcNextStepOverlap[] = [];
+
+  report.overallNextSteps.forEach((overallStep, overallIndex) => {
+    for (const [domainKey, domain] of Object.entries(report.domains) as Array<
+      [AsbPtcDomainKey, AsbPtcDomainReport]
+    >) {
+      domain.nextSteps.forEach((domainStep, domainIndex) => {
+        if (nextStepsOverlap(overallStep.text, domainStep.text)) {
+          overlaps.push({
+            overallIndex,
+            domainKey,
+            domainIndex,
+            overallText: overallStep.text,
+            domainText: domainStep.text,
+          });
+        }
+      });
+    }
+  });
+
+  return overlaps;
+}
+
 export function asbPtcLearnerNarrative(report: AsbPtcReport) {
   return report.learnerProfile
     .map((item) => item.text.trim())
@@ -386,24 +511,117 @@ function limitWords(value: string, maximumWords: number) {
     .replace(/[,;:.!?]+$/, "")}.`;
 }
 
-function normaliseNextStepText(value: unknown, maximumWords: number) {
+function toBaseVerb(value: string) {
+  const lowerValue = value.toLowerCase();
+  const irregularGerunds: Record<string, string> = {
+    beginning: "begin",
+    building: "build",
+    choosing: "choose",
+    discussing: "discuss",
+    exchanging: "exchange",
+    giving: "give",
+    making: "make",
+    organizing: "organize",
+    practicing: "practice",
+    providing: "provide",
+    sharing: "share",
+    sustaining: "sustain",
+    taking: "take",
+    using: "use",
+    writing: "write",
+  };
+  let baseVerb = irregularGerunds[lowerValue];
+
+  if (!baseVerb && lowerValue.endsWith("ying")) {
+    baseVerb = `${lowerValue.slice(0, -4)}y`;
+  }
+
+  if (!baseVerb && lowerValue.endsWith("ing")) {
+    baseVerb = lowerValue
+      .slice(0, -3)
+      .replace(/([b-df-hj-np-tv-z])\1$/, "$1");
+  }
+
+  return baseVerb ?? lowerValue;
+}
+
+function toBaseVerbPhrase(value: string) {
+  const [firstWord, ...remainingWords] = value.trim().split(/\s+/);
+  const remainingPhrase = remainingWords
+    .join(" ")
+    .replace(/\band\s+([a-z]+ing)\b/gi, (_match, gerund: string) =>
+      `and ${toBaseVerb(gerund)}`
+    );
+
+  return [toBaseVerb(firstWord), remainingPhrase].filter(Boolean).join(" ");
+}
+
+function makeLearnerActiveNextStep(
+  value: string,
+  learnerInitials: string
+) {
+  const escapedInitials = learnerInitials.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+  const learnerReference = `(?:${escapedInitials}|the learner|[A-Z]{1,4})`;
+  const phasedTeacherAction = new RegExp(
+    `^Will\\s+(?:(begin|continue|start)\\s+to\\s+)?(?:encourage|support|invite)\\s+${learnerReference}\\s+(?:to|in)\\s+(.+)$`,
+    "i"
+  );
+  const phasedOpportunity = new RegExp(
+    `^Will\\s+(?:(begin|continue|start)\\s+to\\s+)?(?:provide|give|offer)\\s+(?:opportunities|chances|tasks)(?:\\s+for)?\\s+${learnerReference}\\s+to\\s+(.+)$`,
+    "i"
+  );
+  const directTeacherAction = new RegExp(
+    `^(?:Encourage|Support|Invite)\\s+${learnerReference}\\s+(?:to|in)\\s+(.+)$`,
+    "i"
+  );
+  const directOpportunity = new RegExp(
+    `^(?:Provide|Give|Offer)\\s+(?:opportunities|chances|tasks)(?:\\s+for)?\\s+${learnerReference}\\s+to\\s+(.+)$`,
+    "i"
+  );
+  const phasedMatch =
+    value.match(phasedTeacherAction) ?? value.match(phasedOpportunity);
+
+  if (phasedMatch) {
+    const [, phase, action] = phasedMatch;
+    const phasePrefix = phase ? `${phase.toLowerCase()} to ` : "";
+
+    return `Will ${phasePrefix}${toBaseVerbPhrase(action)}`;
+  }
+
+  const directMatch =
+    value.match(directTeacherAction) ?? value.match(directOpportunity);
+
+  if (directMatch) {
+    return `Will ${toBaseVerbPhrase(directMatch[1])}`;
+  }
+
+  return value;
+}
+
+function normaliseNextStepText(
+  value: unknown,
+  maximumWords: number,
+  learnerInitials: string
+) {
   const text = normaliseText(value);
 
   if (!text) return "";
 
-  const hasApprovedStarter = ASB_PTC_NEXT_STEP_STARTERS.some((starter) =>
-    text.toLowerCase().startsWith(starter.toLowerCase())
+  const learnerActiveText = makeLearnerActiveNextStep(
+    text,
+    learnerInitials
   );
-  let actionLedText = text;
+
+  const hasApprovedStarter = ASB_PTC_NEXT_STEP_STARTERS.some((starter) =>
+    learnerActiveText.toLowerCase().startsWith(starter.toLowerCase())
+  );
+  let actionLedText = learnerActiveText;
 
   if (!hasApprovedStarter) {
-    actionLedText = text
-      .replace(/^Support\s+(.+?)\s+to\s+/i, "Provide opportunities for $1 to ")
-      .replace(/^Invite\s+(.+?)\s+to\s+/i, "Encourage $1 to ");
-
-    if (actionLedText === text) {
-      actionLedText = `Will continue to ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
-    }
+    actionLedText = `Will continue to ${learnerActiveText.charAt(0).toLowerCase()}${learnerActiveText.slice(1)}`;
   }
 
   return limitWords(actionLedText, maximumWords);
@@ -446,7 +664,8 @@ function normaliseNextSteps(
   value: unknown,
   observationCount: number,
   maximumItems: number,
-  maximumWords: number
+  maximumWords: number,
+  learnerInitials: string
 ) {
   if (!Array.isArray(value) || observationCount < 1) return [];
 
@@ -457,7 +676,11 @@ function normaliseNextSteps(
       if (!candidate || typeof candidate !== "object") return [];
 
       const item = candidate as Partial<AsbPtcNextStep>;
-      const text = normaliseNextStepText(item.text, maximumWords);
+      const text = normaliseNextStepText(
+        item.text,
+        maximumWords,
+        learnerInitials
+      );
       const linkedObservationIndex = Number(item.linkedObservationIndex);
 
       if (
@@ -525,7 +748,8 @@ function normaliseDomain(
     candidate.nextSteps,
     observations.length,
     3,
-    18
+    18,
+    learnerInitials
   );
 
   if (
@@ -588,7 +812,8 @@ export function normaliseGeneratedAsbPtcReport({
     candidate.overallNextSteps,
     learnerProfile.length,
     3,
-    18
+    18,
+    learnerInitials
   );
   const schoolBasedNextSteps =
     overallNextSteps.length >= 2

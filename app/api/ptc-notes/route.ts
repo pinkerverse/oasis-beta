@@ -4,6 +4,7 @@ import {
   ASB_PTC_DOMAINS,
   ASB_PTC_NEXT_STEP_STARTERS,
   ASB_PTC_WRITING_PROFILE,
+  findAsbPtcNextStepOverlaps,
   getAsbPreKProgressionGuidance,
   getAsbPtcDomainKey,
   getAsbPtcOpeningDirection,
@@ -341,9 +342,14 @@ WRITING RULES
 - Keep the learner profile strength-led. End with a genuine interest, classroom contribution, relationship or approach to learning supported by the observations. Do not end with a development target or "would benefit from" statement; development targets belong in the separate overall and domain next-step sections.
 - Use ${learnerInitials} in the opening sentence and, if it improves the natural flow, in at most one later sentence. Otherwise use they/their. Do not infer gender or use he/she.
 - Keep the profile recognizably individual. Anchor it in two or three particular interests, choices, relationships, creations, questions or ways of approaching learning that appear in the evidence; do not produce a generic learner description that could fit the whole class.
-- After the learner profile, provide two or three concise overall next steps owned by the school team. They describe what the learner will work on at school, not activities for parents, siblings or family routines at home.
-- Ground these overall next steps in the learner's strongest ATL patterns and relevant GOLD evidence, but synthesize across the learner as a whole. They must not repeat the narrower domain-specific targets below.
-- Keep each overall next step to one short clause of no more than 18 words. Begin it with one of these exact action-led starters: ${ASB_PTC_NEXT_STEP_STARTERS.join(", ")}.
+- Draft the four domain sections first. Only then write two or three concise overall next steps owned by the school team.
+- Treat the overall next steps as a separate layer: choose broader ATL priorities that remain after the four domain targets have been assigned. They must use a different skill, action and intended outcome from every domain next step below.
+- Never restate, broaden, paraphrase or rename a domain target in the overall next steps. For example, if a domain target covers sharing ideas, turn-taking, planning steps, fine-motor control or measurement, none of those may also appear as a top next step.
+- The overall next steps describe what the learner will work on at school, not activities for parents, siblings or family routines at home.
+- Make the learner the implied subject of every next-step bullet. Begin with ${ASB_PTC_NEXT_STEP_STARTERS.join(", ")} followed directly by something the learner will do.
+- Write "Will build vocabulary by discussing shared experiences" or "Will continue to sustain longer conversations." Never write "Will encourage/support ${learnerInitials}" or "Will provide opportunities for ${learnerInitials}" because those make the teacher the subject.
+- Do not include ${learnerInitials} in a next-step bullet; the selected learner is already clear from the report.
+- Keep each overall next step to one short clause of no more than 18 words.
 - Make each overall next step concrete and manageable in a classroom, small-group, play or learning-center context. Avoid formal phrases such as "foster verbal confidence", "deepen collaboration skills" or "strengthen organizational skills".
 - Use the school's writing profile below as editorial guidance, not as evidence. Never copy a stock sentence from it or assume a behavior merely because the profile mentions it.
 - Calibrate developmental language carefully. Say "with support", "with a reminder", "with minimal support" or "independently" only when the supplied observations show that level of support. Use "beginning to", "increasingly" or "consistently" only when the evidence justifies it.
@@ -352,7 +358,7 @@ WRITING RULES
 - Domain evidence bullets may lightly adapt ATL wording for readability, but they must preserve the exact observed behavior and meaningful classroom example. Never upgrade participation into leadership, mastery or another role not stated in the evidence.
 - Every next step must link by zero-based index to one evidence segment in the same section. Provide exactly one next step for every evidence segment.
 - A next step should be practical, observable and one achievable developmental step beyond the linked evidence bullet. Move forward in independence, complexity, duration, precision, reflection or collaboration rather than merely restating the capability.
-- Domain next steps are professional in-school targets drawn from the active GOLD progression. Keep each to one short clause of no more than 18 words and use the same approved action-led starters.
+- Domain next steps are professional in-school targets drawn from the active GOLD progression. Keep each to one short clause of no more than 18 words and use the same learner-active sentence structure.
 - For Thinking Skills (Emergent Math), Level 3 / three stars is the Pre-K4 target ceiling in this school. Level 4 / four stars is later-stage Kindergarten context and must never be used as an automatic next step.
 - If evidence is already at Level 3 or above in Emergent Math, consolidate and broaden Level 3 through new materials, settings, explanations, independence, consistency or repeated application. Do not advance to Level 4 content.
 - In measurement, build from comparing and measuring with repeated non-standard units by varying the object or unit, ordering several objects, checking consistency, recording a result or using precise comparison language. Do not recommend formal measurement tools, standard units or accurate conventional measurement as the next goal.
@@ -612,19 +618,79 @@ ${JSON.stringify(entries, null, 2)}
         );
       }
 
+      const repeatedNextSteps = findAsbPtcNextStepOverlaps(report);
+
+      if (repeatedNextSteps.length > 0) {
+        issues.push(
+          `The top next steps repeated domain targets. Rewrite only the top-level priorities around genuinely different skills. Repeated pairs: ${repeatedNextSteps
+            .map(
+              (overlap) =>
+                `top "${overlap.overallText}" / ${overlap.domainKey} "${overlap.domainText}"`
+            )
+            .join("; ")}`
+        );
+      }
+
+      const teacherLedNextSteps = [
+        ...report.overallNextSteps,
+        ...Object.values(report.domains).flatMap(
+          (domain) => domain.nextSteps
+        ),
+      ].filter((step) =>
+        /^Will\s+(?:(?:begin|continue|start)\s+to\s+)?(?:encourage|support|invite|provide|give|offer)\b/i.test(
+          step.text
+        )
+      );
+
+      if (teacherLedNextSteps.length > 0) {
+        issues.push(
+          `Next steps described teacher actions instead of learner actions: ${teacherLedNextSteps
+            .map((step) => `"${step.text}"`)
+            .join(", ")}`
+        );
+      }
+
+      const learnerInitialsPattern = new RegExp(
+        `\\b${learnerInitials.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "i"
+      );
+      const namedNextSteps = [
+        ...report.overallNextSteps,
+        ...Object.values(report.domains).flatMap(
+          (domain) => domain.nextSteps
+        ),
+      ].filter((step) => learnerInitialsPattern.test(step.text));
+
+      if (namedNextSteps.length > 0) {
+        issues.push(
+          "Next-step bullets named the learner instead of using the learner as the implied subject."
+        );
+      }
+
       return issues;
     }
 
     let report = await generatePtcReport(ptcPrompt);
-    const writingContractIssues = reviewPtcWritingContract(report);
+    let writingContractIssues = reviewPtcWritingContract(report);
 
-    if (writingContractIssues.length > 0) {
+    for (
+      let correctionAttempt = 0;
+      writingContractIssues.length > 0 && correctionAttempt < 2;
+      correctionAttempt += 1
+    ) {
       report = await generatePtcReport(`${ptcPrompt}
 
 WRITING CONTRACT CORRECTION
-The first draft was rejected for these reasons:
+The previous draft was rejected for these reasons:
 ${writingContractIssues.map((issue) => `- ${issue}`).join("\n")}
-Return a fresh draft that keeps the same evidence priorities and strictly follows the fixed report contract.`);
+Keep the evidence priorities and valid targets stable. Rewrite only invalid bullets; when targets overlap, replace the top overall goal. Strictly follow the fixed report contract.`);
+      writingContractIssues = reviewPtcWritingContract(report);
+    }
+
+    if (writingContractIssues.length > 0) {
+      throw new Error(
+        `The PTC writing contract could not be satisfied: ${writingContractIssues.join(" ")}`
+      );
     }
 
     let outputPrivacyReview = reviewPtcReport(report);
