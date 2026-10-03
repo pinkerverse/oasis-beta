@@ -16,6 +16,7 @@ import {
   getAsbPreKProgressionGuidance,
   getAsbPreKTargetLevelMaximum,
   getPtcTemplateForSchool,
+  isAsbPtcActivityLedOpening,
   normaliseGeneratedAsbPtcReport,
 } from "./asb-ptc.ts";
 
@@ -154,6 +155,14 @@ test("the private ASB writing profile provides evidence and progression guidance
     ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
     /development targets.*next-steps section/i
   );
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /child as a whole learner/i
+  );
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.learnerPortrait.join(" "),
+    /do not begin with a favorite activity, material, academic skill or isolated observation/i
+  );
 
   for (const domain of ASB_PTC_DOMAINS) {
     assert.ok(domain.evidenceFocus.length >= 3);
@@ -195,6 +204,43 @@ test("PTC learner openings receive stable, varied structural directions", () => 
     getAsbPtcOpeningDirection(learnerKeys[0])
   );
   assert.ok(new Set(directions).size >= 4);
+  assert.ok(
+    directions.every(
+      (direction) =>
+        !/lead with (?:a real classroom context|a specific)/i.test(direction)
+    )
+  );
+});
+
+test("PTC learner portraits cannot open with a specific activity", () => {
+  assert.equal(
+    isAsbPtcActivityLedOpening(
+      "AB enjoys exploring shapes and building with magnetic pieces. During group time, they listen carefully.",
+      "AB"
+    ),
+    true
+  );
+  assert.equal(
+    isAsbPtcActivityLedOpening(
+      "AB builds detailed structures and explains each choice. They share ideas with friends.",
+      "AB"
+    ),
+    true
+  );
+  assert.equal(
+    isAsbPtcActivityLedOpening(
+      "AB approaches school with warmth and positive energy. During construction, they develop detailed ideas.",
+      "AB"
+    ),
+    false
+  );
+  assert.equal(
+    isAsbPtcActivityLedOpening(
+      "AB is a thoughtful and increasingly confident member of our classroom community. When exploring shapes, they compare their designs.",
+      "AB"
+    ),
+    false
+  );
 });
 
 test("PTC evidence and next steps remain balanced", () => {

@@ -9,6 +9,7 @@ import {
   getAsbPtcDomainKey,
   getAsbPtcOpeningDirection,
   getPtcTemplateForSchool,
+  isAsbPtcActivityLedOpening,
   normaliseGeneratedAsbPtcReport,
 } from "@/lib/asb-ptc";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
@@ -328,12 +329,15 @@ WRITING RULES
 - Treat assessment statuses as judgments about individual evidence, not fixed labels for the learner.
 - Each evidence point must cite one or more supplied evidence entry IDs in its evidenceEntryIds field only. Never place an ID, UUID, citation, bracketed reference or source reference inside any prose text.
 - Write the learner profile as exactly three connected narrative segments that OASIS will join into one flowing paragraph. Together they must contain exactly four or five sentences and roughly 85-110 words: use two sentences in the first segment, one or two in the second, and one in the third.
-- Make the first sentence recognizably specific to this learner. Do not default to a generic list of positive adjectives or repeatedly use the same adjective pairing across learners.
+- Make the first sentence a whole-child introduction. Begin with ${learnerInitials} and describe an evidenced learning disposition, how they have settled into Pre-K, their social presence or relationships, or their overall attitude toward learning and classroom life.
+- The first sentence must introduce who the learner is in the class before saying what they like or what they can do. Do not open with an activity, material, incident or academic content such as shapes, numbers, measurement, writing, painting, construction or puzzles.
+- Do not use openings such as "${learnerInitials} enjoys exploring...", "${learnerInitials} likes..." or "${learnerInitials} builds...". Move those specific interests and examples into later sentences.
+- Keep the opening recognizably specific to this learner. Do not default to a generic list of positive adjectives or repeatedly use the same adjective pairing across learners.
 - Do not treat curious, independent or enthusiastic as default descriptors. Use any of these only when it is among the clearest and most distinctive patterns in this learner's evidence.
 - Follow the learner-specific opening direction below. It controls sentence structure only and is not evidence; every claim must still come from the supplied observations.
 - Write as the learner's teacher speaking warmly to the family. When the observations support the context, use natural phrases such as "in our classroom," "in our space," "in our learning environment" or "in our community."
-- Move from the opening description into the learner's preferred activities, materials or spaces, then give a concrete example of what they do. Include how they participate with others or contribute during group learning when the evidence supports it.
-- Let the second segment show one or two specific interests, experiences or relationships. Let the third show another clear strength in participation, communication, independence, self-management, thinking or research.
+- After the whole-child opening, move into how the learner participates, belongs, forms relationships or contributes during group learning when the evidence supports it. Then introduce preferred activities, materials or spaces and give a concrete example of what they do.
+- Let the second segment show one or two specific interests, experiences or relationships. Let the third show another clear strength in participation, communication, independence, self-management, thinking or research. Academic details belong here, not in the opening sentence.
 - Weave ATL language naturally into the prose. Do not list ATL categories or turn the paragraph into assessment jargon.
 - Use varied, natural sentence structures and American English spelling throughout. Prefer forms such as "organize", "behavior", "center", and "practice" rather than their British English equivalents. Use phrases such as "is beginning to", "has grown in confidence", "responds well to" and "would benefit from" when the evidence supports them.
 - Prefer simple, concrete language that sounds like a teacher who knows the learner well. Avoid analytical filler such as "reflecting," "highlighting," "demonstrating a disposition" or "fostering" when a direct description of what the learner does would be clearer.
@@ -596,6 +600,17 @@ ${JSON.stringify(entries, null, 2)}
           ...domain.nextSteps.map((item) => item.text),
         ]),
       ].join(" ");
+
+      if (
+        isAsbPtcActivityLedOpening(
+          report.learnerProfile.map((item) => item.text).join(" "),
+          learnerInitials
+        )
+      ) {
+        issues.push(
+          "The learner portrait opened with a specific activity or academic behavior. Rewrite the first sentence as a whole-child introduction about learning disposition, settling in, social presence or attitude toward classroom life, then move the activity into a later sentence."
+        );
+      }
 
       if (
         /\b(?:leader|leadership|leading role)\b/i.test(reportText) &&
