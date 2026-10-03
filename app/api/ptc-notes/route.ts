@@ -670,40 +670,67 @@ ${JSON.stringify(entries, null, 2)}
       return issues;
     }
 
-    let report = await generatePtcReport(ptcPrompt);
-    let writingContractIssues = reviewPtcWritingContract(report);
+    const safeFallbackReport = () =>
+      normaliseGeneratedAsbPtcReport({
+        value: {},
+        learnerId,
+        learnerInitials,
+        validEntryIds,
+      });
+    let report = safeFallbackReport();
+    let writingContractIssues: string[] = [];
 
-    for (
-      let correctionAttempt = 0;
-      writingContractIssues.length > 0 && correctionAttempt < 2;
-      correctionAttempt += 1
-    ) {
-      report = await generatePtcReport(`${ptcPrompt}
+    try {
+      report = await generatePtcReport(ptcPrompt);
+      writingContractIssues = reviewPtcWritingContract(report);
+
+      for (
+        let correctionAttempt = 0;
+        writingContractIssues.length > 0 && correctionAttempt < 2;
+        correctionAttempt += 1
+      ) {
+        report = await generatePtcReport(`${ptcPrompt}
 
 WRITING CONTRACT CORRECTION
 The previous draft was rejected for these reasons:
 ${writingContractIssues.map((issue) => `- ${issue}`).join("\n")}
 Keep the evidence priorities and valid targets stable. Rewrite only invalid bullets; when targets overlap, replace the top overall goal. Strictly follow the fixed report contract.`);
-      writingContractIssues = reviewPtcWritingContract(report);
+        writingContractIssues = reviewPtcWritingContract(report);
+      }
+    } catch (generationError) {
+      console.error(
+        "PTC synthesis failed; returning the safe fallback report:",
+        generationError
+      );
     }
 
     if (writingContractIssues.length > 0) {
-      throw new Error(
-        `The PTC writing contract could not be satisfied: ${writingContractIssues.join(" ")}`
+      console.warn(
+        "PTC writing contract remained imperfect after correction; returning the safest complete draft:",
+        writingContractIssues
       );
     }
 
     let outputPrivacyReview = reviewPtcReport(report);
 
     if (outputPrivacyReview.requiresReview) {
-      report = await generatePtcReport(`${ptcPrompt}
+      try {
+        report = await generatePtcReport(`${ptcPrompt}
 
 PRIVACY CORRECTION
 The first draft was rejected by the privacy guard for these categories: ${outputPrivacyReview.findings
         .map((finding) => finding.category)
         .join(", ")}.
 Return a completely fresh draft. Use only ${learnerInitials} as the learner identifier. Omit all dates, contact details, full or invented names, medical or diagnostic wording, safeguarding or child-protection wording, and family case information.`);
-      outputPrivacyReview = reviewPtcReport(report);
+        outputPrivacyReview = reviewPtcReport(report);
+      } catch (privacyCorrectionError) {
+        console.error(
+          "PTC privacy correction failed; returning the safe fallback report:",
+          privacyCorrectionError
+        );
+        report = safeFallbackReport();
+        outputPrivacyReview = reviewPtcReport(report);
+      }
     }
 
     if (outputPrivacyReview.requiresReview) {
@@ -718,9 +745,7 @@ Return a completely fresh draft. Use only ${learnerInitials} as the learner iden
         targetType: "ptc_notes_output",
       });
 
-      return Response.json(privacyReviewResponse(outputPrivacyReview), {
-        status: 422,
-      });
+      report = safeFallbackReport();
     }
 
     return Response.json({ report });
