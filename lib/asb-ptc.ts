@@ -11,9 +11,30 @@ export type AsbPtcDomainKey =
   | "physical"
   | "criticalThinking";
 
+export const ASB_PTC_OPENING_DIRECTIONS = [
+  "Lead with the learner's initials and one distinctive, evidenced way they participate in classroom life. Prefer an active verb to a list of adjectives.",
+  "Lead with a real classroom context, such as a routine, shared discussion or exploration, and place the learner's initials naturally within that sentence.",
+  "Lead with a specific, evidenced interest, material, question or creation, then connect it to how the learner approaches learning.",
+  "Lead with a specific contribution the learner makes to relationships, shared play or group learning.",
+  "Lead with an evidenced example of how the learner responds to a challenge, develops an idea or persists with an activity.",
+  "Lead with a familiar learning space or routine and the purposeful choice the learner makes there.",
+] as const;
+
+export function getAsbPtcOpeningDirection(stableLearnerKey: string) {
+  const hash = Array.from(stableLearnerKey.trim().toLowerCase()).reduce(
+    (total, character) => (total * 31 + character.charCodeAt(0)) >>> 0,
+    0
+  );
+
+  return ASB_PTC_OPENING_DIRECTIONS[
+    hash % ASB_PTC_OPENING_DIRECTIONS.length
+  ];
+}
+
 export const ASB_PTC_WRITING_PROFILE = {
   learnerPortrait: [
-    "Open directly with two or three evidence-backed qualities, using the natural pattern '[initials] is a curious, independent learner' rather than an abstract assessment-style introduction.",
+    "Make the first sentence specific to the learner rather than repeatedly opening with a list of familiar adjectives. It may lead with an evidenced disposition, classroom context, interest, contribution or approach to challenge.",
+    "Do not treat curious, independent or enthusiastic as default descriptors. Use any quality only when it is one of the clearest and most distinctive patterns in that learner's evidence.",
     "Write in a warm teacher voice to the family. When supported by the observations, use natural phrases such as our classroom, our space, our learning environment or our community.",
     "Make the portrait recognizably personal by naming particular interests, materials, spaces, questions, relationships or repeated ways of learning, followed by a concrete example of what the learner does there.",
     "Shape the portrait as four or five sentences of roughly 85-110 words, keeping only the most revealing details rather than trying to summarize every observation.",
