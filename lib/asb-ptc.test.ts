@@ -415,7 +415,7 @@ test("missing overall next steps receive concise school-based fallbacks", () => 
     report.overallNextSteps.map((step) => step.linkedObservationIndex),
     [0, 1, 2]
   );
-  assert.match(report.overallNextSteps[0].text, /familiar classroom activity/i);
+  assert.match(report.overallNextSteps[0].text, /request one clear kind of support/i);
   assert.doesNotMatch(
     report.overallNextSteps.map((step) => step.text).join(" "),
     /\b(?:at home|family|parent|sibling)\b/i
@@ -424,6 +424,29 @@ test("missing overall next steps receive concise school-based fallbacks", () => 
     report.overallNextSteps.map((step) => step.text).join(" "),
     /record what remains consistent/i
   );
+});
+
+test("built-in PTC fallbacks cannot trip the learner-active writing contract", () => {
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {},
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+  const nextSteps = [
+    ...report.overallNextSteps,
+    ...Object.values(report.domains).flatMap((domain) => domain.nextSteps),
+  ];
+  const nextStepText = nextSteps.map((step) => step.text).join(" ");
+
+  for (const step of nextSteps) {
+    assert.doesNotMatch(
+      step.text,
+      /^Will\s+(?:(?:begin|continue|start)\s+to\s+)?(?:encourage|support|invite|provide|give|offer)\b/i
+    );
+  }
+  assert.doesNotMatch(nextStepText, /\bAB\b/);
+  assert.deepEqual(findAsbPtcNextStepOverlaps(report), []);
 });
 
 test("PTC prose is normalized to American English and concise action-led next steps", () => {

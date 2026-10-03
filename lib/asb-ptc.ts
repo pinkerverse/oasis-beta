@@ -700,9 +700,7 @@ function normaliseNextSteps(
     .slice(0, maximumItems);
 }
 
-function insufficientEvidenceDomain(
-  learnerInitials: string
-): AsbPtcDomainReport {
+function insufficientEvidenceDomain(): AsbPtcDomainReport {
   return {
     observations: [
       {
@@ -718,7 +716,8 @@ function insufficientEvidenceDomain(
     ],
     nextSteps: [
       {
-        text: `Provide opportunities for ${learnerInitials} to revisit this area and show what they can initiate independently.`,
+        text:
+          "Will revisit this area in a familiar context and show what they can initiate independently.",
         linkedObservationIndex: 0,
       },
       {
@@ -756,7 +755,7 @@ function normaliseDomain(
     observations.length < 2 ||
     nextSteps.length !== observations.length
   ) {
-    return insufficientEvidenceDomain(learnerInitials);
+    return insufficientEvidenceDomain();
   }
 
   return {
@@ -820,17 +819,18 @@ export function normaliseGeneratedAsbPtcReport({
       ? overallNextSteps
       : [
           {
-            text: `Will continue to choose a familiar classroom activity and explain what they plan to make or investigate.`,
+            text:
+              "Will notice when help is needed and request one clear kind of support.",
             linkedObservationIndex: 0,
           },
           {
             text:
-              "Encourage active listening, turn-taking and sharing one original idea during small-group learning.",
+              "Will review completed work and identify one part they feel proud of.",
             linkedObservationIndex: 1,
           },
           {
             text:
-              "Provide tasks with two or three steps, allowing time to plan and work independently.",
+              "Will choose a classroom responsibility and follow it through from beginning to end.",
             linkedObservationIndex: 2,
           },
         ];
