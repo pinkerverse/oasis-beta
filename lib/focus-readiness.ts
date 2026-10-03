@@ -201,17 +201,24 @@ export function selectReadinessProgression({
   evidence,
   expectedMinimum,
   expectedMaximum,
+  absoluteMaximum,
   readiness,
 }: {
   progression: FrameworkProgressionLevel[];
   evidence: StatementEvidenceSummary | undefined;
   expectedMinimum: number | undefined;
   expectedMaximum: number | undefined;
+  absoluteMaximum?: number;
   readiness: AcademicYearReadiness;
 }) {
-  const levels = [...progression].sort(
+  const orderedLevels = [...progression].sort(
     (first, second) => first.level - second.level
   );
+  const cappedLevels =
+    typeof absoluteMaximum === "number"
+      ? orderedLevels.filter((level) => level.level <= absoluteMaximum)
+      : orderedLevels;
+  const levels = cappedLevels.length > 0 ? cappedLevels : orderedLevels;
 
   if (levels.length === 0) {
     return null;
