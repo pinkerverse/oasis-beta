@@ -10,6 +10,7 @@ import {
   ASB_PTC_WRITING_PROFILE,
   asbPtcLearnerNarrative,
   asbPtcReportToPlainText,
+  findAsbPtcNextStepOverlaps,
   getAsbPtcDomainKey,
   getAsbPtcOpeningDirection,
   getAsbPreKProgressionGuidance,
@@ -241,6 +242,134 @@ test("PTC evidence and next steps remain balanced", () => {
   assert.equal(plainText.match(/^Next steps$/gm)?.length, 5);
 });
 
+test("top next steps cannot repeat or paraphrase domain next steps", () => {
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: [
+        evidencePoint("AB contributes ideas during classroom play."),
+        evidencePoint("They organize materials for a project.", "evidence-2"),
+        evidencePoint("They compare objects during an investigation."),
+      ],
+      overallNextSteps: [
+        {
+          text: "Encourage AB to share ideas during small-group learning.",
+          linkedObservationIndex: 0,
+        },
+        {
+          text: "Provide tasks with two or three steps to plan independently.",
+          linkedObservationIndex: 1,
+        },
+        {
+          text: "Offer chances to ask a question before beginning an investigation.",
+          linkedObservationIndex: 2,
+        },
+      ],
+      domains: {
+        managingComplexity: {
+          observations: balancedDomain().observations,
+          nextSteps: [
+            {
+              text: "Will continue to organize a multi-step classroom task.",
+              linkedObservationIndex: 0,
+            },
+            {
+              text: "Offer a slightly more complex version of the challenge.",
+              linkedObservationIndex: 1,
+            },
+          ],
+        },
+        collaborationSocial: {
+          observations: balancedDomain().observations,
+          nextSteps: [
+            {
+              text: "Give opportunities to express one original idea in group play.",
+              linkedObservationIndex: 0,
+            },
+            {
+              text: "Encourage listening to a peer before responding.",
+              linkedObservationIndex: 1,
+            },
+          ],
+        },
+        physical: balancedDomain(),
+        criticalThinking: balancedDomain(),
+      },
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+
+  const overlaps = findAsbPtcNextStepOverlaps(report);
+
+  assert.equal(overlaps.length, 2);
+  assert.deepEqual(
+    overlaps.map((overlap) => overlap.overallIndex),
+    [0, 1]
+  );
+  assert.deepEqual(
+    overlaps.map((overlap) => overlap.domainKey),
+    ["collaborationSocial", "managingComplexity"]
+  );
+});
+
+test("distinct top and domain next steps pass the overlap check", () => {
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: balancedDomain().observations.concat([
+        evidencePoint("Asks questions about a new material."),
+      ]),
+      overallNextSteps: [
+        {
+          text: "Offer opportunities to identify a feeling and choose a calming response.",
+          linkedObservationIndex: 0,
+        },
+        {
+          text: "Will continue to choose a role before a familiar classroom activity.",
+          linkedObservationIndex: 1,
+        },
+      ],
+      domains: {
+        managingComplexity: {
+          observations: balancedDomain().observations,
+          nextSteps: [
+            {
+              text: "Provide tasks with two steps to organize independently.",
+              linkedObservationIndex: 0,
+            },
+            {
+              text: "Will continue to persist when a familiar plan changes.",
+              linkedObservationIndex: 1,
+            },
+          ],
+        },
+        collaborationSocial: {
+          observations: balancedDomain().observations,
+          nextSteps: [
+            {
+              text: "Encourage sharing one original idea during group play.",
+              linkedObservationIndex: 0,
+            },
+            {
+              text: "Give opportunities to listen and respond to a peer.",
+              linkedObservationIndex: 1,
+            },
+          ],
+        },
+        physical: balancedDomain(),
+        criticalThinking: balancedDomain(),
+      },
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+
+  assert.deepEqual(findAsbPtcNextStepOverlaps(report), []);
+});
+
 test("unsupported claims are replaced with an honest evidence-needed section", () => {
   const report = normaliseGeneratedAsbPtcReport({
     value: {
@@ -347,6 +476,50 @@ test("PTC prose is normalized to American English and concise action-led next st
       )
     );
   }
+});
+
+test("next steps make the learner active instead of describing teacher actions", () => {
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: [
+        evidencePoint("AB discusses familiar classroom experiences."),
+        evidencePoint("They exchange ideas with peers.", "evidence-2"),
+        evidencePoint("They share resources during group play."),
+      ],
+      overallNextSteps: [
+        {
+          text: "Will continue to encourage AB to build vocabulary by discussing group activities and songs.",
+          linkedObservationIndex: 0,
+        },
+        {
+          text: "Will begin to support AB in sustaining longer conversations and exchanging ideas with peers.",
+          linkedObservationIndex: 1,
+        },
+        {
+          text: "Will start to provide opportunities for AB to share resources and negotiate during group play.",
+          linkedObservationIndex: 2,
+        },
+      ],
+      domains: {},
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+
+  assert.deepEqual(
+    report.overallNextSteps.map((step) => step.text),
+    [
+      "Will continue to build vocabulary by discussing group activities and songs.",
+      "Will begin to sustain longer conversations and exchange ideas with peers.",
+      "Will start to share resources and negotiate during group play.",
+    ]
+  );
+  assert.doesNotMatch(
+    report.overallNextSteps.map((step) => step.text).join(" "),
+    /\b(?:encourage|support|provide opportunities for)\s+AB\b/i
+  );
 });
 
 test("the learner profile becomes one flowing narrative", () => {
