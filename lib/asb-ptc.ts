@@ -1,9 +1,80 @@
+import type { FrameworkDefinition } from "@/lib/framework";
+
 export const ASB_PTC_SCHOOL_ID =
   "6efecf9d-6567-465a-bbe5-7bec87a8e184";
 
 export const ASB_PTC_TEMPLATE_KEY = "asb_pre_k" as const;
 
 export type AsbPtcTemplateKey = typeof ASB_PTC_TEMPLATE_KEY;
+
+export const ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL = 3;
+
+export const ASB_PTC_NEXT_STEP_STARTERS = [
+  "Will begin to",
+  "Will continue to",
+  "Will start to",
+  "Encourage",
+  "Give opportunities to",
+  "Provide opportunities",
+  "Provide tasks",
+  "Offer tasks",
+] as const;
+
+export function isAsbPreKEmergentMathArea(
+  areaName: string | null | undefined
+) {
+  if (!areaName) return false;
+
+  const comparableName = areaName.toLowerCase();
+
+  return (
+    comparableName.includes("thinking skills") &&
+    /emergent maths?/.test(comparableName)
+  );
+}
+
+export function getAsbPreKTargetLevelMaximum(
+  areaName: string | null | undefined
+) {
+  return isAsbPreKEmergentMathArea(areaName)
+    ? ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL
+    : null;
+}
+
+export function getAsbPreKProgressionGuidance(
+  framework: FrameworkDefinition
+) {
+  return framework.areaDefinitions
+    .filter((area) => isAsbPreKEmergentMathArea(area.name))
+    .map((area) => ({
+      area: area.name,
+      maximumTargetLevel: ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL,
+      statements: area.statements.map((statement) => {
+        const orderedProgression = [...(statement.progression ?? [])].sort(
+          (first, second) => first.level - second.level
+        );
+        const masteryLevel = [...orderedProgression]
+          .reverse()
+          .find(
+            (level) =>
+              level.level <= ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL
+          );
+
+        return {
+          statementId: statement.id,
+          statement: statement.text,
+          preKMasteryLevel: masteryLevel?.level ?? null,
+          preKMasteryDescriptors: masteryLevel?.descriptors ?? [],
+          laterStageDescriptors: orderedProgression
+            .filter(
+              (level) =>
+                level.level > ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL
+            )
+            .flatMap((level) => level.descriptors),
+        };
+      }),
+    }));
+}
 
 export type AsbPtcDomainKey =
   | "managingComplexity"
@@ -52,9 +123,16 @@ export const ASB_PTC_WRITING_PROFILE = {
     "Select the most useful two or three capabilities rather than trying to mention every observation.",
   ],
   nextSteps: [
-    "Pair every current capability with one direct, achievable extension in a familiar Pre-K context.",
+    "Keep overall next steps school-based, concise and connected to the learner's strongest ATL and GOLD patterns. They are school priorities, not suggestions for families to complete at home.",
+    "Keep overall next steps distinct from the four domain-specific next steps. Synthesize the learner's broader development instead of repeating a narrower framework target from below.",
+    "Pair every domain capability with one direct, achievable extension from the active GOLD progression in a familiar Pre-K context.",
     "Move one step forward in independence, complexity, duration, precision, reflection or collaboration; do not simply rephrase the current capability.",
     "Make the intended practice visible enough that a teacher or family can understand what progress would look like.",
+    "Use a consistent action-led opening such as Will begin to, Will continue to, Encourage, Give opportunities to, Provide tasks or Offer tasks.",
+    "Keep every next step to one short clause of no more than 18 words.",
+    "For Thinking Skills (Emergent Math), treat three-star descriptors as the Pre-K4 target ceiling. Four-star descriptors are later-stage Kindergarten context, not automatic next steps.",
+    "When a learner is working within or above the three-star Emergent Math level, deepen mastery through varied materials, contexts, explanation, independence and consistency rather than advancing to four-star content.",
+    "For measurement, extend comparison with repeated non-standard units, ordering, recording and precise comparison language. Do not introduce formal measurement tools or standard units as the default next step.",
   ],
 } as const;
 
@@ -243,13 +321,92 @@ function removeInternalEvidenceReferences(value: string) {
     .replace(/([,;:])\s*([.!?])/g, "$2");
 }
 
+const AMERICAN_ENGLISH_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\borganisational\b/gi, "organizational"],
+  [/\borganisations\b/gi, "organizations"],
+  [/\borganisation\b/gi, "organization"],
+  [/\borganising\b/gi, "organizing"],
+  [/\borganised\b/gi, "organized"],
+  [/\borganises\b/gi, "organizes"],
+  [/\borganise\b/gi, "organize"],
+  [/\bbehaviours\b/gi, "behaviors"],
+  [/\bbehaviour\b/gi, "behavior"],
+  [/\bfavourites\b/gi, "favorites"],
+  [/\bfavourite\b/gi, "favorite"],
+  [/\bcolours\b/gi, "colors"],
+  [/\bcolour\b/gi, "color"],
+  [/\brecognising\b/gi, "recognizing"],
+  [/\brecognised\b/gi, "recognized"],
+  [/\brecognises\b/gi, "recognizes"],
+  [/\brecognise\b/gi, "recognize"],
+  [/\bpractising\b/gi, "practicing"],
+  [/\bpractised\b/gi, "practiced"],
+  [/\bpractises\b/gi, "practices"],
+  [/\bpractise\b/gi, "practice"],
+  [/\bcentres\b/gi, "centers"],
+  [/\bcentre\b/gi, "center"],
+  [/\bmodelling\b/gi, "modeling"],
+  [/\bmodelled\b/gi, "modeled"],
+  [/\blabelling\b/gi, "labeling"],
+  [/\blabelled\b/gi, "labeled"],
+  [/\blearnt\b/gi, "learned"],
+  [/\bwhilst\b/gi, "while"],
+  [/\btowards\b/gi, "toward"],
+];
+
+export function normaliseAsbPtcAmericanEnglish(value: string) {
+  return AMERICAN_ENGLISH_REPLACEMENTS.reduce(
+    (text, [pattern, replacement]) =>
+      text.replace(pattern, (match) =>
+        /^[A-Z]/.test(match)
+          ? `${replacement.charAt(0).toUpperCase()}${replacement.slice(1)}`
+          : replacement
+      ),
+    value
+  );
+}
+
 function normaliseText(value: unknown, maximumLength = 320) {
   return typeof value === "string"
-    ? removeInternalEvidenceReferences(value)
+    ? normaliseAsbPtcAmericanEnglish(removeInternalEvidenceReferences(value))
         .trim()
         .replace(/\s+/g, " ")
         .slice(0, maximumLength)
     : "";
+}
+
+function limitWords(value: string, maximumWords: number) {
+  const words = value.split(/\s+/).filter(Boolean);
+
+  if (words.length <= maximumWords) return value;
+
+  return `${words
+    .slice(0, maximumWords)
+    .join(" ")
+    .replace(/[,;:.!?]+$/, "")}.`;
+}
+
+function normaliseNextStepText(value: unknown, maximumWords: number) {
+  const text = normaliseText(value);
+
+  if (!text) return "";
+
+  const hasApprovedStarter = ASB_PTC_NEXT_STEP_STARTERS.some((starter) =>
+    text.toLowerCase().startsWith(starter.toLowerCase())
+  );
+  let actionLedText = text;
+
+  if (!hasApprovedStarter) {
+    actionLedText = text
+      .replace(/^Support\s+(.+?)\s+to\s+/i, "Provide opportunities for $1 to ")
+      .replace(/^Invite\s+(.+?)\s+to\s+/i, "Encourage $1 to ");
+
+    if (actionLedText === text) {
+      actionLedText = `Will continue to ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+    }
+  }
+
+  return limitWords(actionLedText, maximumWords);
 }
 
 function normaliseEvidencePoints(
@@ -288,7 +445,8 @@ function normaliseEvidencePoints(
 function normaliseNextSteps(
   value: unknown,
   observationCount: number,
-  maximumItems: number
+  maximumItems: number,
+  maximumWords: number
 ) {
   if (!Array.isArray(value) || observationCount < 1) return [];
 
@@ -299,7 +457,7 @@ function normaliseNextSteps(
       if (!candidate || typeof candidate !== "object") return [];
 
       const item = candidate as Partial<AsbPtcNextStep>;
-      const text = normaliseText(item.text);
+      const text = normaliseNextStepText(item.text, maximumWords);
       const linkedObservationIndex = Number(item.linkedObservationIndex);
 
       if (
@@ -337,12 +495,12 @@ function insufficientEvidenceDomain(
     ],
     nextSteps: [
       {
-        text: `Offer ${learnerInitials} a familiar opportunity in this area and note what they initiate independently.`,
+        text: `Provide opportunities for ${learnerInitials} to revisit this area and show what they can initiate independently.`,
         linkedObservationIndex: 0,
       },
       {
         text:
-          "Repeat the opportunity on another day and compare what changes with one brief prompt.",
+          "Will continue to revisit this area in another familiar context with one brief prompt.",
         linkedObservationIndex: 1,
       },
     ],
@@ -366,7 +524,8 @@ function normaliseDomain(
   const nextSteps = normaliseNextSteps(
     candidate.nextSteps,
     observations.length,
-    3
+    3,
+    18
   );
 
   if (
@@ -428,24 +587,25 @@ export function normaliseGeneratedAsbPtcReport({
   const overallNextSteps = normaliseNextSteps(
     candidate.overallNextSteps,
     learnerProfile.length,
-    3
+    3,
+    18
   );
-  const parentFriendlyNextSteps =
+  const schoolBasedNextSteps =
     overallNextSteps.length >= 2
       ? overallNextSteps
       : [
           {
-            text: `Invite ${learnerInitials} to choose a familiar activity and talk about what they would like to make, try or find out.`,
+            text: `Will continue to choose a familiar classroom activity and explain what they plan to make or investigate.`,
             linkedObservationIndex: 0,
           },
           {
             text:
-              "During shared play or everyday routines, encourage them to listen, take turns and add one of their own ideas.",
+              "Encourage active listening, turn-taking and sharing one original idea during small-group learning.",
             linkedObservationIndex: 1,
           },
           {
             text:
-              "Offer a simple two- or three-step task and give them time to complete as much of it independently as possible.",
+              "Provide tasks with two or three steps, allowing time to plan and work independently.",
             linkedObservationIndex: 2,
           },
         ];
@@ -459,7 +619,7 @@ export function normaliseGeneratedAsbPtcReport({
     learnerInitials,
     generatedAt,
     learnerProfile,
-    overallNextSteps: parentFriendlyNextSteps,
+    overallNextSteps: schoolBasedNextSteps,
     domains: {
       managingComplexity: normaliseDomain(
         rawDomains.managingComplexity,
