@@ -44,6 +44,10 @@ import {
   privacyReviewMessage,
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
+import {
+  ASB_PTC_TEMPLATE_KEY,
+  getAsbPreKTargetLevelMaximum,
+} from "@/lib/asb-ptc";
 
 
 
@@ -2482,11 +2486,16 @@ const buildFocusItems = (
     }
 
     const statementEvidenceSummary = statementEvidence.get(statement.id);
+    const schoolTargetMaximum =
+      ptcTemplate === ASB_PTC_TEMPLATE_KEY
+        ? getAsbPreKTargetLevelMaximum(area.name) ?? undefined
+        : undefined;
     const progressionLevel = selectReadinessProgression({
       progression,
       evidence: statementEvidenceSummary,
       expectedMinimum: targetLevel,
       expectedMaximum: expectedRange?.maxExpectedLevel,
+      absoluteMaximum: schoolTargetMaximum,
       readiness: academicYearReadiness,
     });
 
