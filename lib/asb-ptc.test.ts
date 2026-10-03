@@ -5,11 +5,15 @@ import {
   ASB_PTC_SCHOOL_ID,
   ASB_PTC_DOMAINS,
   ASB_PTC_OPENING_DIRECTIONS,
+  ASB_PTC_NEXT_STEP_STARTERS,
+  ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL,
   ASB_PTC_WRITING_PROFILE,
   asbPtcLearnerNarrative,
   asbPtcReportToPlainText,
   getAsbPtcDomainKey,
   getAsbPtcOpeningDirection,
+  getAsbPreKProgressionGuidance,
+  getAsbPreKTargetLevelMaximum,
   getPtcTemplateForSchool,
   normaliseGeneratedAsbPtcReport,
 } from "./asb-ptc.ts";
@@ -70,6 +74,57 @@ test("the ASB framework areas feed the four school PTC lenses", () => {
   assert.equal(
     getAsbPtcDomainKey("Creativity & Innovation"),
     "criticalThinking"
+  );
+});
+
+test("ASB Pre-K4 Emergent Math targets stop at three stars", () => {
+  assert.equal(
+    getAsbPreKTargetLevelMaximum("Thinking Skills (Emergent Math)"),
+    ASB_PREK_EMERGENT_MATH_MAX_TARGET_LEVEL
+  );
+  assert.equal(getAsbPreKTargetLevelMaximum("Critical Thinking"), null);
+
+  const guidance = getAsbPreKProgressionGuidance({
+    key: "asb-test",
+    name: "ASB test framework",
+    assessmentLevels: [],
+    areas: ["Thinking Skills (Emergent Math)"],
+    areaDefinitions: [
+      {
+        id: "thinking-skills",
+        name: "Thinking Skills (Emergent Math)",
+        statements: [
+          {
+            id: "measurement",
+            text: "Measurement",
+            progression: [
+              { level: 2, descriptors: ["Compares two objects."] },
+              {
+                level: 3,
+                descriptors: ["Measures with repeated non-standard units."],
+              },
+              {
+                level: 4,
+                descriptors: ["Uses standard tools and units."],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(guidance[0].maximumTargetLevel, 3);
+  assert.deepEqual(
+    guidance[0].statements[0].preKMasteryDescriptors,
+    ["Measures with repeated non-standard units."]
+  );
+  assert.deepEqual(guidance[0].statements[0].laterStageDescriptors, [
+    "Uses standard tools and units.",
+  ]);
+  assert.match(
+    ASB_PTC_WRITING_PROFILE.nextSteps.join(" "),
+    /formal measurement tools.*standard units/i
   );
 });
 
@@ -209,7 +264,7 @@ test("unsupported claims are replaced with an honest evidence-needed section", (
   );
 });
 
-test("missing overall next steps receive parent-friendly fallbacks", () => {
+test("missing overall next steps receive concise school-based fallbacks", () => {
   const report = normaliseGeneratedAsbPtcReport({
     value: {
       learnerProfile: [
@@ -231,11 +286,67 @@ test("missing overall next steps receive parent-friendly fallbacks", () => {
     report.overallNextSteps.map((step) => step.linkedObservationIndex),
     [0, 1, 2]
   );
-  assert.match(report.overallNextSteps[0].text, /familiar activity/i);
+  assert.match(report.overallNextSteps[0].text, /familiar classroom activity/i);
+  assert.doesNotMatch(
+    report.overallNextSteps.map((step) => step.text).join(" "),
+    /\b(?:at home|family|parent|sibling)\b/i
+  );
   assert.doesNotMatch(
     report.overallNextSteps.map((step) => step.text).join(" "),
     /record what remains consistent/i
   );
+});
+
+test("PTC prose is normalized to American English and concise action-led next steps", () => {
+  const longBritishStep =
+    "Support AB to practise organising their favourite coloured materials at the centre with family members while explaining every choice carefully.";
+  const report = normaliseGeneratedAsbPtcReport({
+    value: {
+      learnerProfile: [
+        evidencePoint("AB organises favourite colours at the centre."),
+        evidencePoint(
+          "They recognise patterns while practising with a friend.",
+          "evidence-2"
+        ),
+        evidencePoint("They describe their choices clearly."),
+      ],
+      overallNextSteps: [
+        { text: longBritishStep, linkedObservationIndex: 0 },
+        {
+          text: "Invite AB to organise and label favourite materials.",
+          linkedObservationIndex: 1,
+        },
+      ],
+      domains: {
+        managingComplexity: balancedDomain(),
+        collaborationSocial: balancedDomain(),
+        physical: balancedDomain(),
+        criticalThinking: balancedDomain(),
+      },
+      supports: [],
+    },
+    learnerId: "learner-1",
+    learnerInitials: "AB",
+    validEntryIds,
+  });
+  const visibleText = asbPtcReportToPlainText(report);
+
+  assert.doesNotMatch(
+    visibleText,
+    /\b(?:organise|organises|organising|favourite|colours?|centre|practise|recognise)\b/i
+  );
+
+  for (const step of [
+    ...report.overallNextSteps,
+    ...Object.values(report.domains).flatMap((domain) => domain.nextSteps),
+  ]) {
+    assert.ok(step.text.split(/\s+/).length <= 18);
+    assert.ok(
+      ASB_PTC_NEXT_STEP_STARTERS.some((starter) =>
+        step.text.toLowerCase().startsWith(starter.toLowerCase())
+      )
+    );
+  }
 });
 
 test("the learner profile becomes one flowing narrative", () => {
@@ -347,5 +458,5 @@ test("internal evidence IDs never appear in report prose", () => {
 
   assert.doesNotMatch(visibleText, /[0-9a-f]{8}-[0-9a-f-]{27,}/i);
   assert.match(visibleText, /AB builds detailed models\./);
-  assert.match(visibleText, /Offer another material\./);
+  assert.match(visibleText, /Will continue to offer another material\./);
 });

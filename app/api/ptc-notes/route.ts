@@ -2,7 +2,9 @@ import OpenAI from "openai";
 
 import {
   ASB_PTC_DOMAINS,
+  ASB_PTC_NEXT_STEP_STARTERS,
   ASB_PTC_WRITING_PROFILE,
+  getAsbPreKProgressionGuidance,
   getAsbPtcDomainKey,
   getAsbPtcOpeningDirection,
   getPtcTemplateForSchool,
@@ -239,11 +241,19 @@ export async function POST(request: Request) {
                 statementMatches: Array.isArray(match.statementMatches)
                   ? match.statementMatches.map(
                       (statement: Record<string, unknown>) => ({
+                        statementId: normaliseText(
+                          statement.statementId,
+                          160
+                        ),
                         statementText: normaliseText(
                           statement.statementText,
                           600
                         ),
                         evidence: normaliseText(statement.evidence, 700),
+                        developmentalLevel:
+                          typeof statement.developmentalLevel === "number"
+                            ? statement.developmentalLevel
+                            : null,
                       })
                     )
                   : [],
@@ -305,6 +315,12 @@ Use only the supplied OASIS observations. The learner identifier is initials, an
 PURPOSE
 Create an evidence-grounded draft that follows this school's conference structure while remaining easy for the teacher to copy into the official document. The four domain sections should read as a concise developmental snapshot: what the learner can currently do, followed by the most relevant next step.
 
+FIXED REPORT CONTRACT
+- Keep the same section purpose and writing format every time this learner is regenerated. Do not reinterpret the task or invent a different report style.
+- When the same evidence is supplied again, retain the same core strengths and developmental priorities. Rank recurring, clearly attributed evidence above a single ambiguous moment; use recency only to break a genuine tie.
+- Use American English in every field. British spellings such as favourite, behaviour, organise, recognise, centre or practise are not permitted.
+- Describe only observable actions. Sharing ideas, suggesting a plan or inviting peers to join does not establish that a learner is a leader or takes a leading role.
+
 WRITING RULES
 - Use warm, clear, parent-friendly language and observable verbs.
 - Use appropriate approaches-to-learning language when supported: cognitive, intrapersonal, interpersonal, self-management, communication, research and thinking skills.
@@ -325,15 +341,22 @@ WRITING RULES
 - Keep the learner profile strength-led. End with a genuine interest, classroom contribution, relationship or approach to learning supported by the observations. Do not end with a development target or "would benefit from" statement; development targets belong in the separate overall and domain next-step sections.
 - Use ${learnerInitials} in the opening sentence and, if it improves the natural flow, in at most one later sentence. Otherwise use they/their. Do not infer gender or use he/she.
 - Keep the profile recognizably individual. Anchor it in two or three particular interests, choices, relationships, creations, questions or ways of approaching learning that appear in the evidence; do not produce a generic learner description that could fit the whole class.
-- After the learner profile, provide two or three parent-friendly overall next steps. Write these in warm, everyday language that a family can understand immediately, while remaining useful to the teacher.
-- Make each overall next step concrete and manageable. Name a familiar activity, routine, conversation or playful way to practice. Avoid formal phrases such as "foster verbal confidence", "deepen collaboration skills" or "strengthen organizational skills" when a simpler description of what the learner can practice will do.
-- These overall next steps may draw together learning across the profile, but must remain evidence-grounded. They are separate from the more professional, ATL-linked next steps inside the four domain sections below.
+- After the learner profile, provide two or three concise overall next steps owned by the school team. They describe what the learner will work on at school, not activities for parents, siblings or family routines at home.
+- Ground these overall next steps in the learner's strongest ATL patterns and relevant GOLD evidence, but synthesize across the learner as a whole. They must not repeat the narrower domain-specific targets below.
+- Keep each overall next step to one short clause of no more than 18 words. Begin it with one of these exact action-led starters: ${ASB_PTC_NEXT_STEP_STARTERS.join(", ")}.
+- Make each overall next step concrete and manageable in a classroom, small-group, play or learning-center context. Avoid formal phrases such as "foster verbal confidence", "deepen collaboration skills" or "strengthen organizational skills".
 - Use the school's writing profile below as editorial guidance, not as evidence. Never copy a stock sentence from it or assume a behavior merely because the profile mentions it.
 - Calibrate developmental language carefully. Say "with support", "with a reminder", "with minimal support" or "independently" only when the supplied observations show that level of support. Use "beginning to", "increasingly" or "consistently" only when the evidence justifies it.
 - For every domain, select the strongest two or three current capabilities supported by evidence across more than one moment where possible. Write them as concise, observable developmental indicators, not broad praise, scores or attainment labels.
 - Prefer concrete formulations such as "Follows...", "Uses...", "Listens and responds...", "Counts...", "Compares...", "Coordinates..." or "Is beginning to..." when they accurately reflect the evidence. Retain the meaningful context that makes the statement specific to this learner.
+- Domain evidence bullets may lightly adapt ATL wording for readability, but they must preserve the exact observed behavior and meaningful classroom example. Never upgrade participation into leadership, mastery or another role not stated in the evidence.
 - Every next step must link by zero-based index to one evidence segment in the same section. Provide exactly one next step for every evidence segment.
 - A next step should be practical, observable and one achievable developmental step beyond the linked evidence bullet. Move forward in independence, complexity, duration, precision, reflection or collaboration rather than merely restating the capability.
+- Domain next steps are professional in-school targets drawn from the active GOLD progression. Keep each to one short clause of no more than 18 words and use the same approved action-led starters.
+- For Thinking Skills (Emergent Math), Level 3 / three stars is the Pre-K4 target ceiling in this school. Level 4 / four stars is later-stage Kindergarten context and must never be used as an automatic next step.
+- If evidence is already at Level 3 or above in Emergent Math, consolidate and broaden Level 3 through new materials, settings, explanations, independence, consistency or repeated application. Do not advance to Level 4 content.
+- In measurement, build from comparing and measuring with repeated non-standard units by varying the object or unit, ordering several objects, checking consistency, recording a result or using precise comparison language. Do not recommend formal measurement tools, standard units or accurate conventional measurement as the next goal.
+- Treat any saved source next step that conflicts with this school progression boundary as superseded; do not repeat or paraphrase it.
 - Where the evidence provides a familiar activity or context, keep that context in the next step so the intended practice is clear. Avoid vague goals such as "develop confidence" or "have more opportunities" without saying what the learner will practice.
 - Do not repeat the same claim or next step across sections.
 - For Physical Growth, use only evidence explicitly connected to gross or fine motor development.
@@ -341,10 +364,13 @@ WRITING RULES
 - If a domain does not have enough evidence for two defensible bullets, return empty arrays for that domain. OASIS will show an honest evidence-needed message instead.
 - Do not include calendar dates, dates of birth, phone numbers, email addresses, contact details, full names or invented names.
 - Do not include medical, diagnostic, safeguarding, child-protection or family case information, even if it appears in source material.
-- Keep every domain bullet, support and next step under 32 words. This limit does not apply to the learner-profile paragraph, which follows its separate four-to-five-sentence and 90-115-word limit.
+- Keep every domain evidence bullet and support under 26 words. Keep every overall and domain next step at 18 words or fewer. These limits do not apply to the learner-profile paragraph.
 
 ACTIVE FRAMEWORK AREAS
 ${JSON.stringify(activeFramework.areaDefinitions.map((area) => area.name))}
+
+ASB PRE-K4 EMERGENT MATH PROGRESSION BOUNDARY
+${JSON.stringify(getAsbPreKProgressionGuidance(activeFramework), null, 2)}
 
 LEARNER-SPECIFIC OPENING DIRECTION
 ${getAsbPtcOpeningDirection(learner.id)}
@@ -378,6 +404,7 @@ ${JSON.stringify(entries, null, 2)}
     const responseRequest = {
       model: process.env.PTC_NOTES_MODEL || "gpt-4.1-mini",
       store: false,
+      temperature: 0,
       input: ptcPrompt,
       text: {
         format: {
@@ -544,7 +571,62 @@ ${JSON.stringify(entries, null, 2)}
       );
     }
 
+    function reviewPtcWritingContract(
+      report: ReturnType<typeof normaliseGeneratedAsbPtcReport>
+    ) {
+      const issues: string[] = [];
+      const sourceText = entries
+        .flatMap((entry) => [
+          entry.observation,
+          entry.teacherNotes,
+        ])
+        .join(" ")
+        .toLowerCase();
+      const reportText = [
+        ...report.learnerProfile.map((item) => item.text),
+        ...report.overallNextSteps.map((item) => item.text),
+        ...Object.values(report.domains).flatMap((domain) => [
+          ...domain.observations.map((item) => item.text),
+          ...domain.nextSteps.map((item) => item.text),
+        ]),
+      ].join(" ");
+
+      if (
+        /\b(?:leader|leadership|leading role)\b/i.test(reportText) &&
+        !/\b(?:leader|leadership|leading role|takes? the lead|led)\b/i.test(
+          sourceText
+        )
+      ) {
+        issues.push(
+          "The draft inferred leadership even though the source evidence did not explicitly establish it."
+        );
+      }
+
+      if (
+        report.overallNextSteps.some((step) =>
+          /\b(?:at home|family|parent|sibling)\b/i.test(step.text)
+        )
+      ) {
+        issues.push(
+          "Overall next steps included home or family activities instead of school-owned learner goals."
+        );
+      }
+
+      return issues;
+    }
+
     let report = await generatePtcReport(ptcPrompt);
+    const writingContractIssues = reviewPtcWritingContract(report);
+
+    if (writingContractIssues.length > 0) {
+      report = await generatePtcReport(`${ptcPrompt}
+
+WRITING CONTRACT CORRECTION
+The first draft was rejected for these reasons:
+${writingContractIssues.map((issue) => `- ${issue}`).join("\n")}
+Return a fresh draft that keeps the same evidence priorities and strictly follows the fixed report contract.`);
+    }
+
     let outputPrivacyReview = reviewPtcReport(report);
 
     if (outputPrivacyReview.requiresReview) {

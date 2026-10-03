@@ -20,6 +20,10 @@ import {
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
 import { recordSecurityEvent } from "@/lib/security-audit";
+import {
+  getAsbPreKProgressionGuidance,
+  getPtcTemplateForSchool,
+} from "@/lib/asb-ptc";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -296,6 +300,11 @@ const framework: FrameworkDefinition =
     frameworkKey as keyof typeof frameworks
   ] ||
   frameworks.eyfs;
+const asbPreKProgressionGuidance = getPtcTemplateForSchool(
+  context.schoolId
+)
+  ? getAsbPreKProgressionGuidance(framework)
+  : [];
 const {
   data: assessmentSettings,
   error: assessmentSettingsError,
@@ -566,6 +575,17 @@ ${assessmentLevelsText}
 
 Framework areas and statements:
 ${frameworkStatementsText}
+
+School-specific progression boundary:
+${
+  asbPreKProgressionGuidance.length > 0
+    ? `${JSON.stringify(asbPreKProgressionGuidance, null, 2)}
+- For Thinking Skills (Emergent Math), Level 3 / three stars is the Pre-K4 target ceiling. Level 4 / four stars is later-stage Kindergarten context, not the next goal.
+- Keep developmentalLevel faithful to the observed evidence, even when it is Level 4. This boundary changes recommendations, not evidence classification.
+- Next steps for learners at Level 3 or above must consolidate and broaden Level 3 through varied materials, contexts, explanation, independence, consistency or repeated application.
+- For measurement, extend non-standard measurement through different repeated units, ordering, checking consistency, recording and precise comparison vocabulary. Do not recommend formal measurement tools or standard units.`
+    : "No additional school-specific progression boundary."
+}
 
 Observation:
 ${privacySafeObservation}
