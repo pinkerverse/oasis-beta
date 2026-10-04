@@ -10,6 +10,7 @@ import {
   ASB_PTC_WRITING_PROFILE,
   asbPtcLearnerNarrative,
   asbPtcReportToPlainText,
+  buildAsbPtcFrameworkAlignedDomains,
   findAsbPtcNextStepOverlaps,
   getAsbPtcDomainKey,
   getAsbPtcOpeningDirection,
@@ -76,6 +77,218 @@ test("the ASB framework areas feed the four school PTC lenses", () => {
   assert.equal(
     getAsbPtcDomainKey("Creativity & Innovation"),
     "criticalThinking"
+  );
+});
+
+test("PTC domain boxes use the strongest exact framework descriptors", () => {
+  const framework = {
+    key: "asb-accuracy-test",
+    name: "ASB accuracy test",
+    assessmentLevels: [],
+    areas: [
+      "Collaboration & Social Skills",
+      "Communication Skills (Emergent Literacy)",
+    ],
+    areaDefinitions: [
+      {
+        id: "collaboration",
+        name: "Collaboration & Social Skills",
+        statements: [
+          {
+            id: "exchange-information",
+            text: "Exchanging information",
+            progression: [
+              {
+                level: 3,
+                descriptors: [
+                  "Engages in conversations of at least three exchanges and stays on topic during conversations",
+                ],
+              },
+              {
+                level: 4,
+                descriptors: [
+                  "Engages in complex, lengthy conversations of five or more exchanges",
+                ],
+              },
+            ],
+          },
+          {
+            id: "relationships",
+            text: "Interpersonal Relationships",
+            progression: [
+              {
+                level: 3,
+                descriptors: [
+                  "Initiates, joins in, and sustains positive interactions with a small group of two to three",
+                ],
+              },
+              {
+                level: 4,
+                descriptors: [
+                  "Interacts cooperatively in groups of four or five children",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "communication",
+        name: "Communication Skills (Emergent Literacy)",
+        statements: [
+          {
+            id: "phonological-awareness",
+            text: "Demonstrates Phonological Awareness",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Sings songs and recites rhymes and refrains with repeating initial sounds",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Shows awareness that some words begin or end with the same way",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const statementMatch = (
+    statementId: string,
+    developmentalLevel: number
+  ) => ({ statementId, developmentalLevel });
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "evidence-1",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              statementMatch("phonological-awareness", 1),
+              statementMatch("exchange-information", 3),
+            ],
+          },
+        ],
+      },
+      {
+        id: "evidence-2",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              statementMatch("exchange-information", 3),
+              statementMatch("relationships", 3),
+            ],
+          },
+        ],
+      },
+      {
+        id: "evidence-3",
+        frameworkMatches: [
+          {
+            statementMatches: [statementMatch("relationships", 3)],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    domains.collaborationSocial.observations.map((item) => item.text),
+    [
+      "Engages in conversations of at least three exchanges and stays on topic during conversations",
+      "Initiates, joins in, and sustains positive interactions with a small group of two to three",
+    ]
+  );
+  assert.deepEqual(
+    domains.collaborationSocial.nextSteps.map((item) => item.text),
+    [
+      "Will engage in complex, lengthy conversations of five or more exchanges.",
+      "Will interact cooperatively in groups of four or five children.",
+    ]
+  );
+  assert.doesNotMatch(
+    domains.collaborationSocial.observations
+      .concat(
+        domains.collaborationSocial.nextSteps.map((step) => ({
+          text: step.text,
+          evidenceEntryIds: [],
+        }))
+      )
+      .map((item) => item.text)
+      .join(" "),
+    /song/i
+  );
+});
+
+test("a song reference appears only when that exact framework objective is selected", () => {
+  const framework = {
+    key: "asb-song-test",
+    name: "ASB song test",
+    assessmentLevels: [],
+    areas: ["Communication Skills (Emergent Literacy)"],
+    areaDefinitions: [
+      {
+        id: "communication",
+        name: "Communication Skills (Emergent Literacy)",
+        statements: [
+          {
+            id: "phonological-awareness",
+            text: "Demonstrates Phonological Awareness",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Sings songs and recites rhymes and refrains with repeating initial sounds",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Shows awareness that some words begin or end with the same way",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "song-evidence",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              {
+                statementId: "phonological-awareness",
+                developmentalLevel: 1,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(
+    domains.collaborationSocial.observations[0].text,
+    "Sings songs and recites rhymes and refrains with repeating initial sounds"
+  );
+  assert.equal(
+    domains.collaborationSocial.nextSteps[0].text,
+    "Will show awareness that some words begin or end with the same way."
+  );
+  assert.doesNotMatch(
+    domains.collaborationSocial.nextSteps[0].text,
+    /song meanings|vocabulary/i
   );
 });
 

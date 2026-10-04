@@ -289,6 +289,16 @@ export type AsbPtcReport = {
   supports: AsbPtcEvidencePoint[];
 };
 
+export type AsbPtcFrameworkEvidenceEntry = {
+  id: string;
+  frameworkMatches: Array<{
+    statementMatches: Array<{
+      statementId: string;
+      developmentalLevel: number | null;
+    }>;
+  }>;
+};
+
 export type AsbPtcNextStepOverlap = {
   overallIndex: number;
   domainKey: AsbPtcDomainKey;
@@ -749,6 +759,252 @@ function insufficientEvidenceDomain(): AsbPtcDomainReport {
       },
     ],
   };
+}
+
+const FRAMEWORK_VERB_BASE_FORMS: Record<string, string> = {
+  asks: "ask",
+  babbles: "babble",
+  compares: "compare",
+  completes: "complete",
+  cooperates: "cooperate",
+  counts: "count",
+  creates: "create",
+  demonstrates: "demonstrate",
+  describes: "describe",
+  draws: "draw",
+  engages: "engage",
+  explores: "explore",
+  follows: "follow",
+  groups: "group",
+  holds: "hold",
+  identifies: "identify",
+  initiates: "initiate",
+  interacts: "interact",
+  isolates: "isolate",
+  knows: "know",
+  listens: "listen",
+  makes: "make",
+  matches: "match",
+  moves: "move",
+  places: "place",
+  plans: "plan",
+  plays: "play",
+  pronounces: "pronounce",
+  recognizes: "recognize",
+  represents: "represent",
+  responds: "respond",
+  retells: "retell",
+  shows: "show",
+  sings: "sing",
+  speaks: "speak",
+  sustains: "sustain",
+  takes: "take",
+  tries: "try",
+  understands: "understand",
+  uses: "use",
+};
+
+function frameworkDescriptorAction(value: string) {
+  const descriptor = normaliseAsbPtcAmericanEnglish(value)
+    .trim()
+    .replace(/[.;]+$/, "");
+  const beginningMatch = descriptor.match(/^(?:Is\s+)?Beginning to\s+(.+)$/i);
+
+  if (beginningMatch) {
+    return `begin to ${beginningMatch[1].charAt(0).toLowerCase()}${beginningMatch[1].slice(1)}`;
+  }
+
+  const canMatch = descriptor.match(/^Can\s+(.+)$/i);
+
+  if (canMatch) {
+    return `${canMatch[1].charAt(0).toLowerCase()}${canMatch[1].slice(1)}`;
+  }
+
+  const stateMatch = descriptor.match(/^(?:Is|Are)\s+(.+)$/i);
+
+  if (stateMatch) {
+    return `be ${stateMatch[1].charAt(0).toLowerCase()}${stateMatch[1].slice(1)}`;
+  }
+
+  const [firstWord, ...remainingWords] = descriptor.split(/\s+/);
+  const baseVerb = FRAMEWORK_VERB_BASE_FORMS[firstWord.toLowerCase()];
+
+  if (!baseVerb) {
+    return descriptor.charAt(0).toLowerCase() + descriptor.slice(1);
+  }
+
+  return [baseVerb, ...remainingWords].join(" ");
+}
+
+function frameworkNextStep(
+  currentDescriptor: string,
+  nextDescriptor: string | null
+) {
+  if (nextDescriptor) {
+    return `Will ${nextDescriptor
+      .split(/\s*;\s*/)
+      .filter(Boolean)
+      .map(frameworkDescriptorAction)
+      .join(" and ")}.`;
+  }
+
+  return `Will continue to ${currentDescriptor
+    .split(/\s*;\s*/)
+    .filter(Boolean)
+    .map(frameworkDescriptorAction)
+    .join(" and ")} across familiar classroom contexts.`;
+}
+
+export function buildAsbPtcFrameworkAlignedDomains({
+  entries,
+  framework,
+}: {
+  entries: AsbPtcFrameworkEvidenceEntry[];
+  framework: FrameworkDefinition;
+}): Record<AsbPtcDomainKey, AsbPtcDomainReport> {
+  type Candidate = {
+    count: number;
+    currentDescriptor: string;
+    currentLevel: number;
+    evidenceEntryIds: string[];
+    firstSeenOrder: number;
+    nextDescriptor: string | null;
+  };
+
+  const statementDefinitions = new Map<
+    string,
+    {
+      areaName: string;
+      progression: NonNullable<
+        FrameworkDefinition["areaDefinitions"][number]["statements"][number]["progression"]
+      >;
+    }
+  >();
+
+  framework.areaDefinitions.forEach((area) => {
+    area.statements.forEach((statement) => {
+      statementDefinitions.set(statement.id, {
+        areaName: area.name,
+        progression: [...(statement.progression ?? [])].sort(
+          (first, second) => first.level - second.level
+        ),
+      });
+    });
+  });
+
+  const candidatesByDomain = new Map<
+    AsbPtcDomainKey,
+    Map<string, Candidate>
+  >();
+  let firstSeenOrder = 0;
+
+  entries.forEach((entry) => {
+    const seenStatementIds = new Set<string>();
+
+    entry.frameworkMatches.forEach((match) => {
+      match.statementMatches.forEach((statementMatch) => {
+        const statementId = statementMatch.statementId.trim();
+
+        if (!statementId || seenStatementIds.has(statementId)) return;
+        seenStatementIds.add(statementId);
+
+        const definition = statementDefinitions.get(statementId);
+        const developmentalLevel = statementMatch.developmentalLevel;
+
+        if (!definition || !Number.isInteger(developmentalLevel)) return;
+
+        const currentProgression = definition.progression.find(
+          (level) => level.level === developmentalLevel
+        );
+        const currentDescriptor = currentProgression?.descriptors
+          .map((descriptor) => descriptor.trim())
+          .filter(Boolean)
+          .join("; ");
+        const domain = getAsbPtcDomainKey(definition.areaName);
+
+        if (!currentDescriptor || !domain || developmentalLevel === null) {
+          return;
+        }
+
+        const maximumTargetLevel = getAsbPreKTargetLevelMaximum(
+          definition.areaName
+        );
+        const nextProgression = definition.progression.find(
+          (level) =>
+            level.level > developmentalLevel &&
+            (maximumTargetLevel === null ||
+              level.level <= maximumTargetLevel)
+        );
+        const nextDescriptor =
+          nextProgression?.descriptors
+            .map((descriptor) => descriptor.trim())
+            .filter(Boolean)
+            .join("; ") || null;
+        const candidates =
+          candidatesByDomain.get(domain) ?? new Map<string, Candidate>();
+        const existing = candidates.get(statementId);
+
+        if (existing) {
+          existing.count += 1;
+          if (
+            developmentalLevel === existing.currentLevel &&
+            !existing.evidenceEntryIds.includes(entry.id)
+          ) {
+            existing.evidenceEntryIds.push(entry.id);
+          }
+        } else {
+          candidates.set(statementId, {
+            count: 1,
+            currentDescriptor,
+            currentLevel: developmentalLevel,
+            evidenceEntryIds: [entry.id],
+            firstSeenOrder,
+            nextDescriptor,
+          });
+          firstSeenOrder += 1;
+        }
+
+        candidatesByDomain.set(domain, candidates);
+      });
+    });
+  });
+
+  return Object.fromEntries(
+    ASB_PTC_DOMAINS.map((domain) => {
+      const selected = [
+        ...(candidatesByDomain.get(domain.key)?.values() ?? []),
+      ]
+        .sort(
+          (first, second) =>
+            second.count - first.count ||
+            first.firstSeenOrder - second.firstSeenOrder
+        )
+        .slice(0, 2);
+
+      if (selected.length === 0) {
+        return [domain.key, insufficientEvidenceDomain()];
+      }
+
+      return [
+        domain.key,
+        {
+          observations: selected.map((candidate) => ({
+            text: normaliseAsbPtcAmericanEnglish(
+              candidate.currentDescriptor
+            ),
+            evidenceEntryIds: candidate.evidenceEntryIds.slice(0, 4),
+          })),
+          nextSteps: selected.map((candidate, index) => ({
+            text: frameworkNextStep(
+              candidate.currentDescriptor,
+              candidate.nextDescriptor
+            ),
+            linkedObservationIndex: index,
+          })),
+        },
+      ];
+    })
+  ) as Record<AsbPtcDomainKey, AsbPtcDomainReport>;
 }
 
 function normaliseDomain(
