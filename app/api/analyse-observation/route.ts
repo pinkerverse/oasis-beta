@@ -615,6 +615,10 @@ Assessment rules:
 - Include a short evidence excerpt or precise evidence description from the observation.
 - The evidence must explain why that specific statement was matched.
 - For each matched statement, set developmentalLevel to the progression level whose supplied descriptor best matches the observed evidence.
+- Matching a parent framework statement and assigning a progression level are separate decisions. A broad activity match does not prove a higher descriptor.
+- Assign a progression level only when the observation explicitly demonstrates every behaviour clause included in the selected descriptor. If only part of a descriptor is visible, choose the highest lower descriptor that is fully evidenced or set developmentalLevel to null.
+- Do not infer describing, identifying, recognizing, planning, comparing, explaining or independence merely because the learner used related materials. For example, building with shapes does not prove that the learner described or recognized shapes.
+- Consider adult and peer support explicitly. If a prompt, model, reminder, question, gesture, help or guidance enabled the action, do not score the post-support performance as though it were independent. Use a lower fully evidenced descriptor or null unless the descriptor itself is specifically about responding to that support.
 - developmentalLevel represents developmental evidence only. Do not change it because of the learner's age, stage, class, observation date, or expected attainment.
 - The same evidence against the same framework progression must produce the same developmentalLevel regardless of which learner it belongs to.
 - Only use whole-number progression levels explicitly supplied for that statement.

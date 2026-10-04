@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const authenticatedSupabase = await createServerSupabaseClient();
     let learnerQuery = authenticatedSupabase
       .from("learners")
-      .select("id, first_name, last_name")
+      .select("id, first_name, last_name, class_name, date_of_birth")
       .eq("id", learnerId)
       .eq("school_id", context.schoolId)
       .eq("active", true);
@@ -241,6 +241,10 @@ export async function POST(request: Request) {
               return {
                 area,
                 ptcDomain: getAsbPtcDomainKey(area),
+                confidence:
+                  typeof match.confidence === "number"
+                    ? match.confidence
+                    : null,
                 statementMatches: Array.isArray(match.statementMatches)
                   ? match.statementMatches.map(
                       (statement: Record<string, unknown>) => ({
@@ -274,6 +278,8 @@ export async function POST(request: Request) {
     const frameworkAlignedDomains = buildAsbPtcFrameworkAlignedDomains({
       entries,
       framework: activeFramework,
+      learnerDateOfBirth: learner.date_of_birth,
+      learnerClassName: learner.class_name,
     });
 
     if (entries.length === 0) {
