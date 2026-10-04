@@ -167,6 +167,8 @@ test("PTC domain boxes use the strongest exact framework descriptors", () => {
     entries: [
       {
         id: "evidence-1",
+        observation:
+          "AB sang songs and recited rhymes with repeating initial sounds. AB engaged in a conversation of three exchanges and stayed on topic.",
         frameworkMatches: [
           {
             statementMatches: [
@@ -178,6 +180,8 @@ test("PTC domain boxes use the strongest exact framework descriptors", () => {
       },
       {
         id: "evidence-2",
+        observation:
+          "AB engaged in another conversation of three exchanges and stayed on topic. AB initiated play, joined two peers and sustained the positive interaction.",
         frameworkMatches: [
           {
             statementMatches: [
@@ -189,6 +193,8 @@ test("PTC domain boxes use the strongest exact framework descriptors", () => {
       },
       {
         id: "evidence-3",
+        observation:
+          "AB initiated a building game, joined a small group of three peers and sustained the positive interaction.",
         frameworkMatches: [
           {
             statementMatches: [statementMatch("relationships", 3)],
@@ -264,6 +270,8 @@ test("a song reference appears only when that exact framework objective is selec
     entries: [
       {
         id: "song-evidence",
+        observation:
+          "AB sang songs and recited rhymes and refrains with repeating initial sounds.",
         frameworkMatches: [
           {
             statementMatches: [
@@ -289,6 +297,218 @@ test("a song reference appears only when that exact framework objective is selec
   assert.doesNotMatch(
     domains.collaborationSocial.nextSteps[0].text,
     /song meanings|vocabulary/i
+  );
+});
+
+test("a related activity cannot become proof of an unevidenced framework descriptor", () => {
+  const framework = {
+    key: "asb-shape-evidence-test",
+    name: "ASB shape evidence test",
+    assessmentLevels: [],
+    areas: ["Thinking Skills (Emergent Math)"],
+    areaDefinitions: [
+      {
+        id: "thinking-skills",
+        name: "Thinking Skills (Emergent Math)",
+        statements: [
+          {
+            id: "shapes",
+            text: "Understands Shapes",
+            progression: [
+              { level: 1, descriptors: ["Matches two identical shapes"] },
+              {
+                level: 2,
+                descriptors: ["Identifies a few basic shapes"],
+              },
+              {
+                level: 3,
+                descriptors: [
+                  "Describes basic two- and three-dimensional shapes by using own words; recognizes basic shapes when they are presented in a new orientation",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "shape-building",
+        observation:
+          "AB used magnetic pieces to build a detailed rocket with a friend.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              { statementId: "shapes", developmentalLevel: 3 },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.match(
+    domains.criticalThinking.observations[0].text,
+    /not yet sufficient/i
+  );
+  assert.doesNotMatch(
+    domains.criticalThinking.observations.map((item) => item.text).join(" "),
+    /describes basic|identifies a few|matches two/i
+  );
+});
+
+test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
+  const framework = {
+    key: "asb-prek3-cap-test",
+    name: "ASB Pre-K3 cap test",
+    stages: [
+      {
+        id: "preschool-3-class",
+        label: "Preschool 3 class",
+        minAgeMonths: 36,
+        maxAgeMonths: 47,
+        order: 1,
+      },
+    ],
+    assessmentLevels: [],
+    areas: ["Thinking Skills (Emergent Math)"],
+    areaDefinitions: [
+      {
+        id: "thinking-skills",
+        name: "Thinking Skills (Emergent Math)",
+        statements: [
+          {
+            id: "shapes",
+            text: "Understands Shapes",
+            expectedProgression: [
+              {
+                stageId: "preschool-3-class",
+                minExpectedLevel: 1,
+                maxExpectedLevel: 2,
+              },
+            ],
+            progression: [
+              { level: 1, descriptors: ["Matches two identical shapes"] },
+              {
+                level: 2,
+                descriptors: ["Identifies a few basic shapes"],
+              },
+              {
+                level: 3,
+                descriptors: [
+                  "Describes basic two- and three-dimensional shapes by using own words; recognizes basic shapes when they are presented in a new orientation",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    learnerDateOfBirth: "2022-10-01",
+    learnerClassName: "Pre-K3 Eichhorn",
+    referenceDate: new Date("2026-10-04T00:00:00.000Z"),
+    entries: [
+      {
+        id: "direct-shape-evidence",
+        observation:
+          "AB identified a circle and triangle, then recognized both shapes after they were rotated.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              { statementId: "shapes", developmentalLevel: 3 },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(
+    domains.criticalThinking.observations[0].text,
+    "Identifies a few basic shapes"
+  );
+  assert.match(
+    domains.criticalThinking.nextSteps[0].text,
+    /continue to identify a few basic shapes/i
+  );
+  assert.doesNotMatch(
+    domains.criticalThinking.observations
+      .concat(
+        domains.criticalThinking.nextSteps.map((step) => ({
+          text: step.text,
+          evidenceEntryIds: [],
+        }))
+      )
+      .map((item) => item.text)
+      .join(" "),
+    /three-dimensional|new orientation/i
+  );
+});
+
+test("prompted performance is not reported as an independent higher level", () => {
+  const framework = {
+    key: "asb-support-test",
+    name: "ASB support test",
+    assessmentLevels: [],
+    areas: ["Collaboration & Social Skills"],
+    areaDefinitions: [
+      {
+        id: "collaboration",
+        name: "Collaboration & Social Skills",
+        statements: [
+          {
+            id: "listening",
+            text: "Listening",
+            progression: [
+              {
+                level: 2,
+                descriptors: [
+                  "Beginning to listen respectfully in small and large group settings",
+                ],
+              },
+              {
+                level: 3,
+                descriptors: [
+                  "Listens respectfully and responds appropriately to specific vocabulary and simple statements, questions, and stories",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "prompted-listening",
+        observation:
+          "After a teacher prompt, AB listened respectfully and responded to a question during group time.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              { statementId: "listening", developmentalLevel: 3 },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(
+    domains.collaborationSocial.observations[0].text,
+    "Beginning to listen respectfully in small and large group settings"
+  );
+  assert.doesNotMatch(
+    domains.collaborationSocial.observations[0].text,
+    /responds appropriately/i
   );
 });
 
