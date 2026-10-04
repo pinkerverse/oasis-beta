@@ -4,6 +4,7 @@ import {
   ASB_PTC_DOMAINS,
   ASB_PTC_NEXT_STEP_STARTERS,
   ASB_PTC_WRITING_PROFILE,
+  buildAsbPtcFrameworkAlignedDomains,
   findAsbPtcNextStepOverlaps,
   getAsbPreKProgressionGuidance,
   getAsbPtcDomainKey,
@@ -270,6 +271,10 @@ export async function POST(request: Request) {
           : [],
       }));
     const validEntryIds = new Set(entries.map((entry) => entry.id));
+    const frameworkAlignedDomains = buildAsbPtcFrameworkAlignedDomains({
+      entries,
+      framework: activeFramework,
+    });
 
     if (entries.length === 0) {
       return Response.json({
@@ -359,7 +364,10 @@ WRITING RULES
 - Calibrate developmental language carefully. Say "with support", "with a reminder", "with minimal support" or "independently" only when the supplied observations show that level of support. Use "beginning to", "increasingly" or "consistently" only when the evidence justifies it.
 - For every domain, select the strongest two or three current capabilities supported by evidence across more than one moment where possible. Write them as concise, observable developmental indicators, not broad praise, scores or attainment labels.
 - Prefer concrete formulations such as "Follows...", "Uses...", "Listens and responds...", "Counts...", "Compares...", "Coordinates..." or "Is beginning to..." when they accurately reflect the evidence. Retain the meaningful context that makes the statement specific to this learner.
-- Domain evidence bullets may lightly adapt ATL wording for readability, but they must preserve the exact observed behavior and meaningful classroom example. Never upgrade participation into leadership, mastery or another role not stated in the evidence.
+- Domain evidence bullets must stay aligned to the exact active-framework descriptor at the saved developmental level. Do not merge it with a different activity, objective or observation context.
+- A song, rhyme, number, shape, writing or other content reference may appear in a domain bullet only when the selected framework descriptor explicitly contains that reference.
+- Domain next steps must come from the next descriptor in the same framework objective. Do not invent a related-sounding extension such as discussing song meanings when that language is absent from the progression.
+- Never upgrade participation into leadership, mastery or another role not stated in the evidence.
 - Every next step must link by zero-based index to one evidence segment in the same section. Provide exactly one next step for every evidence segment.
 - A next step should be practical, observable and one achievable developmental step beyond the linked evidence bullet. Move forward in independence, complexity, duration, precision, reflection or collaboration rather than merely restating the capability.
 - Domain next steps are professional in-school targets drawn from the active GOLD progression. Keep each to one short clause of no more than 18 words and use the same learner-active sentence structure.
@@ -557,12 +565,17 @@ ${JSON.stringify(entries, null, 2)}
         throw new Error("The PTC synthesis returned no content.");
       }
 
-      return normaliseGeneratedAsbPtcReport({
+      const generatedReport = normaliseGeneratedAsbPtcReport({
         value: JSON.parse(outputText),
         learnerId,
         learnerInitials,
         validEntryIds,
       });
+
+      return {
+        ...generatedReport,
+        domains: frameworkAlignedDomains,
+      };
     }
 
     function reviewPtcReport(
@@ -685,13 +698,19 @@ ${JSON.stringify(entries, null, 2)}
       return issues;
     }
 
-    const safeFallbackReport = () =>
-      normaliseGeneratedAsbPtcReport({
+    const safeFallbackReport = () => {
+      const fallbackReport = normaliseGeneratedAsbPtcReport({
         value: {},
         learnerId,
         learnerInitials,
         validEntryIds,
       });
+
+      return {
+        ...fallbackReport,
+        domains: frameworkAlignedDomains,
+      };
+    };
     let report = safeFallbackReport();
     let writingContractIssues: string[] = [];
 
