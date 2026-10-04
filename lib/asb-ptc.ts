@@ -1192,12 +1192,48 @@ function frameworkNextStep(
     );
   }
 
+  const masteryTargets: Array<[RegExp, string]> = [
+    [
+      /identif(?:y|ies).*basic shapes?/i,
+      "Will identify and name familiar shapes across varied classroom materials.",
+    ],
+    [
+      /comforts? self|seeking out special person or object/i,
+      "Will choose a familiar calming strategy with growing independence.",
+    ],
+    [
+      /grasp.*drawing.*writing tools?|jabbing at paper/i,
+      "Will use familiar drawing and writing tools with increasing control and purpose.",
+    ],
+    [
+      /cooperates?.*shares?.*ideas?.*materials?/i,
+      "Will sustain cooperative play by sharing ideas and materials within a small group.",
+    ],
+    [
+      /simple back-and-forth exchanges?/i,
+      "Will sustain longer back-and-forth exchanges by adding one relevant idea or question.",
+    ],
+    [
+      /notices? information from sources?/i,
+      "Will share what was noticed and make one connection across familiar classroom sources.",
+    ],
+    [
+      /flexibility in thinking and play|choose new idea|try another choice/i,
+      "Will try another idea independently when a first plan does not work.",
+    ],
+  ];
+  const masteryTarget = masteryTargets.find(([pattern]) =>
+    pattern.test(currentDescriptor)
+  )?.[1];
+
+  if (masteryTarget) return masteryTarget;
+
+  const masteryAction = frameworkDescriptorAction(
+    currentDescriptor.split(/\s*;\s*/).filter(Boolean)[0] ?? currentDescriptor
+  );
+
   return limitWords(
-    `Will continue to ${currentDescriptor
-      .split(/\s*;\s*/)
-      .filter(Boolean)
-      .map(frameworkDescriptorAction)
-      .join(" and ")} across familiar classroom contexts.`,
+    `Will ${masteryAction} with growing independence across varied classroom contexts.`,
     18
   );
 }
@@ -1259,6 +1295,103 @@ export function buildAsbPtcFrameworkAlignedDomains({
   >();
   let firstSeenOrder = 0;
 
+  function registerCandidate({
+    developmentalLevel,
+    entry,
+    entryAgeInMonths,
+    entryStageId,
+    evidenceText,
+    statementId,
+  }: {
+    developmentalLevel: number;
+    entry: AsbPtcFrameworkEvidenceEntry;
+    entryAgeInMonths: number | null;
+    entryStageId: string | null;
+    evidenceText: string;
+    statementId: string;
+  }) {
+    const definition = statementDefinitions.get(statementId);
+
+    if (!definition || !Number.isInteger(developmentalLevel)) return;
+
+    const domain = getAsbPtcDomainKey(definition.areaName);
+
+    if (!domain) return;
+
+    const maximumLevel = getStatementMaximumLevel({
+      areaName: definition.areaName,
+      ageInMonths: entryAgeInMonths,
+      classMaximum,
+      stageId: entryStageId,
+      statement: definition.statement,
+    });
+    const evidenceWasSupported = ASB_PTC_SUPPORT_CUE_PATTERN.test(
+      evidenceText
+    );
+    const eligibleProgression = definition.progression
+      .filter(
+        (level) =>
+          level.level <= developmentalLevel &&
+          (maximumLevel === null || level.level <= maximumLevel) &&
+          (!evidenceWasSupported || level.level < developmentalLevel)
+      )
+      .sort((first, second) => second.level - first.level);
+    const directProgression = eligibleProgression
+      .map((level) => ({
+        level: level.level,
+        descriptors: level.descriptors
+          .map((descriptor) => descriptor.trim())
+          .filter(
+            (descriptor) =>
+              descriptor &&
+              descriptorIsDirectlyEvidenced(descriptor, evidenceText)
+          ),
+      }))
+      .find((level) => level.descriptors.length > 0);
+
+    if (!directProgression) return;
+
+    const currentDescriptor = directProgression.descriptors.join("; ");
+    const nextProgression = definition.progression.find(
+      (level) =>
+        level.level > directProgression.level &&
+        (maximumLevel === null || level.level <= maximumLevel)
+    );
+    const nextDescriptor = nextProgression
+      ? selectRelevantNextDescriptor(
+          nextProgression.descriptors,
+          currentDescriptor
+        )
+      : null;
+    const candidates =
+      candidatesByDomain.get(domain) ?? new Map<string, Candidate>();
+    const candidate = candidates.get(statementId) ?? {
+      variants: new Map<string, CandidateVariant>(),
+    };
+    const variantKey = `${directProgression.level}:${currentDescriptor}:${nextDescriptor ?? ""}`;
+    const existingVariant = candidate.variants.get(variantKey);
+
+    if (existingVariant) {
+      existingVariant.count += 1;
+      if (!existingVariant.evidenceEntryIds.includes(entry.id)) {
+        existingVariant.evidenceEntryIds.push(entry.id);
+      }
+    } else {
+      candidate.variants.set(variantKey, {
+        count: 1,
+        currentDescriptor,
+        currentLevel: directProgression.level,
+        evidenceEntryIds: [entry.id],
+        firstSeenOrder,
+        nextDescriptor,
+      });
+      firstSeenOrder += 1;
+    }
+
+    candidates.set(statementId, candidate);
+    candidatesByDomain.set(domain, candidates);
+  }
+
   entries.forEach((entry) => {
     const seenStatementIds = new Set<string>();
     const parsedEntryDate = entry.date ? new Date(entry.date) : referenceDate;
@@ -1278,93 +1411,47 @@ export function buildAsbPtcFrameworkAlignedDomains({
         if (!statementId || seenStatementIds.has(statementId)) return;
         seenStatementIds.add(statementId);
 
-        const definition = statementDefinitions.get(statementId);
         const developmentalLevel = statementMatch.developmentalLevel;
 
-        if (!definition || !Number.isInteger(developmentalLevel)) return;
+        if (developmentalLevel === null) return;
 
-        const domain = getAsbPtcDomainKey(definition.areaName);
-
-        if (!domain || developmentalLevel === null) {
-          return;
-        }
-
-        const maximumLevel = getStatementMaximumLevel({
-          areaName: definition.areaName,
-          ageInMonths: entryAgeInMonths,
-          classMaximum,
-          stageId: entryStageId,
-          statement: definition.statement,
-        });
-
-        const evidenceText = [entry.observation, entry.teacherNotes]
+        const evidenceText = [
+          entry.observation,
+          entry.teacherNotes,
+          statementMatch.evidence,
+        ]
           .filter(Boolean)
           .join(" ");
-        const evidenceWasSupported = ASB_PTC_SUPPORT_CUE_PATTERN.test(
-          [evidenceText, statementMatch.evidence].filter(Boolean).join(" ")
-        );
-        const eligibleProgression = definition.progression
-          .filter(
-            (level) =>
-              level.level <= developmentalLevel &&
-              (maximumLevel === null || level.level <= maximumLevel) &&
-              (!evidenceWasSupported || level.level < developmentalLevel)
-          )
-          .sort((first, second) => second.level - first.level);
-        const directProgression = eligibleProgression
-          .map((level) => ({
-            level: level.level,
-            descriptors: level.descriptors
-              .map((descriptor) => descriptor.trim())
-              .filter(
-                (descriptor) =>
-                  descriptor &&
-                  descriptorIsDirectlyEvidenced(descriptor, evidenceText)
-              ),
-          }))
-          .find((level) => level.descriptors.length > 0);
 
-        if (!directProgression) return;
+        registerCandidate({
+          developmentalLevel,
+          entry,
+          entryAgeInMonths,
+          entryStageId,
+          evidenceText,
+          statementId,
+        });
+      });
+    });
 
-        const currentDescriptor = directProgression.descriptors.join("; ");
-        const nextProgression = definition.progression.find(
-          (level) =>
-            level.level > directProgression.level &&
-            (maximumLevel === null || level.level <= maximumLevel)
-        );
-        const nextDescriptor = nextProgression
-          ? selectRelevantNextDescriptor(
-              nextProgression.descriptors,
-              currentDescriptor
-            )
-          : null;
-        const candidates =
-          candidatesByDomain.get(domain) ?? new Map<string, Candidate>();
-        const candidate = candidates.get(statementId) ?? {
-          variants: new Map<string, CandidateVariant>(),
-        };
-        const variantKey = `${directProgression.level}:${currentDescriptor}:${nextDescriptor ?? ""}`;
-        const existingVariant = candidate.variants.get(variantKey);
+    const entryEvidenceText = [entry.observation, entry.teacherNotes]
+      .filter(Boolean)
+      .join(" ");
 
-        if (existingVariant) {
-          existingVariant.count += 1;
-          if (!existingVariant.evidenceEntryIds.includes(entry.id)) {
-            existingVariant.evidenceEntryIds.push(entry.id);
-          }
-        } else {
-          candidate.variants.set(variantKey, {
-            count: 1,
-            currentDescriptor,
-            currentLevel: directProgression.level,
-            evidenceEntryIds: [entry.id],
-            firstSeenOrder,
-            nextDescriptor,
-          });
-          firstSeenOrder += 1;
-        }
+    statementDefinitions.forEach((definition, statementId) => {
+      if (seenStatementIds.has(statementId)) return;
 
-        candidates.set(statementId, candidate);
-        candidatesByDomain.set(domain, candidates);
+      const highestFrameworkLevel = definition.progression.at(-1)?.level;
+
+      if (typeof highestFrameworkLevel !== "number") return;
+
+      registerCandidate({
+        developmentalLevel: highestFrameworkLevel,
+        entry,
+        entryAgeInMonths,
+        entryStageId,
+        evidenceText: entryEvidenceText,
+        statementId,
       });
     });
   });
@@ -1378,7 +1465,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
           [...candidate.variants.values()].sort(
             (first, second) =>
               second.count - first.count ||
-              first.currentLevel - second.currentLevel ||
+              second.currentLevel - first.currentLevel ||
               first.firstSeenOrder - second.firstSeenOrder
           )[0]
         )
@@ -1386,6 +1473,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
         .sort(
           (first, second) =>
             second.count - first.count ||
+            second.currentLevel - first.currentLevel ||
             first.firstSeenOrder - second.firstSeenOrder
         )
         .slice(0, 2);

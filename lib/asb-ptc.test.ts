@@ -360,6 +360,51 @@ test("a related activity cannot become proof of an unevidenced framework descrip
   );
 });
 
+test("the omitted-match recovery does not turn shape construction into shape identification", () => {
+  const framework = {
+    key: "asb-unmapped-shape-evidence-test",
+    name: "ASB unmapped shape evidence test",
+    assessmentLevels: [],
+    areas: ["Thinking Skills (Emergent Math)"],
+    areaDefinitions: [
+      {
+        id: "thinking-skills",
+        name: "Thinking Skills (Emergent Math)",
+        statements: [
+          {
+            id: "shapes",
+            text: "Understands Shapes",
+            progression: [
+              { level: 1, descriptors: ["Matches two identical shapes"] },
+              { level: 2, descriptors: ["Identifies a few basic shapes"] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "unmapped-shape-building",
+        observation:
+          "AB used magnetic shape pieces to build a detailed rocket with a friend.",
+        frameworkMatches: [],
+      },
+    ],
+  });
+
+  assert.match(
+    domains.criticalThinking.observations[0].text,
+    /not yet sufficient/i
+  );
+  assert.doesNotMatch(
+    domains.criticalThinking.observations.map((item) => item.text).join(" "),
+    /identifies a few|matches two/i
+  );
+});
+
 test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
   const framework = {
     key: "asb-prek3-cap-test",
@@ -433,9 +478,9 @@ test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
     domains.criticalThinking.observations[0].text,
     "Identifies a few basic shapes"
   );
-  assert.match(
+  assert.equal(
     domains.criticalThinking.nextSteps[0].text,
-    /continue to identify a few basic shapes/i
+    "Will identify and name familiar shapes across varied classroom materials."
   );
   assert.doesNotMatch(
     domains.criticalThinking.observations
@@ -448,6 +493,119 @@ test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
       .map((item) => item.text)
       .join(" "),
     /three-dimensional|new orientation/i
+  );
+});
+
+test("saved evidence excerpts can restore a directly observed physical capability", () => {
+  const framework = {
+    key: "asb-physical-evidence-test",
+    name: "ASB physical evidence test",
+    assessmentLevels: [],
+    areas: ["Physical"],
+    areaDefinitions: [
+      {
+        id: "physical",
+        name: "Physical",
+        statements: [
+          {
+            id: "fine-motor-tools",
+            text: "Uses fingers and hands",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Grasps drawing and writing tools, jabbing at paper",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Holds drawing and writing tools with a whole-hand grasp",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "painting-evidence",
+        observation: "MM worked carefully on a painting during exploration time.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              {
+                statementId: "fine-motor-tools",
+                developmentalLevel: 2,
+                evidence:
+                  "MM held a drawing tool with a whole-hand grasp while painting.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(
+    domains.physical.observations[0].text,
+    "Holds drawing and writing tools with a whole-hand grasp"
+  );
+});
+
+test("direct physical evidence is recovered when an earlier framework mapping omitted it", () => {
+  const framework = {
+    key: "asb-unmapped-physical-test",
+    name: "ASB unmapped physical test",
+    assessmentLevels: [],
+    areas: ["Physical", "Critical Thinking"],
+    areaDefinitions: [
+      {
+        id: "physical",
+        name: "Physical",
+        statements: [
+          {
+            id: "balance",
+            text: "Balances",
+            progression: [
+              {
+                level: 1,
+                descriptors: ["Balances while climbing and moving"],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "thinking",
+        name: "Critical Thinking",
+        statements: [],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "unmapped-balance-evidence",
+        observation:
+          "MM balanced carefully while climbing and moving across the playground equipment.",
+        frameworkMatches: [],
+      },
+    ],
+  });
+
+  assert.equal(
+    domains.physical.observations[0].text,
+    "Balances while climbing and moving"
+  );
+  assert.doesNotMatch(
+    domains.physical.nextSteps[0].text,
+    /continue to balance while climbing and moving/i
   );
 });
 
