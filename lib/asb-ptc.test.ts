@@ -405,7 +405,7 @@ test("the omitted-match recovery does not turn shape construction into shape ide
   );
 });
 
-test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
+test("class expectations do not erase a directly observed higher capability", () => {
   const framework = {
     key: "asb-prek3-cap-test",
     name: "ASB Pre-K3 cap test",
@@ -462,7 +462,7 @@ test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
       {
         id: "direct-shape-evidence",
         observation:
-          "AB identified a circle and triangle, then recognized both shapes after they were rotated.",
+          "AB described a circle and a triangular prism using their own words, then recognized both shapes after they were rotated.",
         frameworkMatches: [
           {
             statementMatches: [
@@ -476,24 +476,9 @@ test("Pre-K3 PTC evidence is capped at the learner's class target", () => {
 
   assert.equal(
     domains.criticalThinking.observations[0].text,
-    "Identifies a few basic shapes"
+    "Describes basic two- and three-dimensional shapes by using own words; recognizes basic shapes when they are presented in a new orientation"
   );
-  assert.equal(
-    domains.criticalThinking.nextSteps[0].text,
-    "Will identify and name familiar shapes across varied classroom materials."
-  );
-  assert.doesNotMatch(
-    domains.criticalThinking.observations
-      .concat(
-        domains.criticalThinking.nextSteps.map((step) => ({
-          text: step.text,
-          evidenceEntryIds: [],
-        }))
-      )
-      .map((item) => item.text)
-      .join(" "),
-    /three-dimensional|new orientation/i
-  );
+  assert.doesNotMatch(domains.criticalThinking.nextSteps[0].text, /level 4/i);
 });
 
 test("saved evidence excerpts can restore a directly observed physical capability", () => {
@@ -785,6 +770,311 @@ test("PTC domains use natural report language and recover a null-level balancing
       .join(" "),
     /will comforts|will grips|one's own|jabbing at paper/i
   );
+});
+
+test("explicit pencil grip and balance evidence cannot be replaced by a lower target", () => {
+  const framework = {
+    key: "asb-physical-progression-test",
+    name: "ASB physical progression test",
+    assessmentLevels: [],
+    areas: ["Physical"],
+    areaDefinitions: [
+      {
+        id: "physical",
+        name: "Physical",
+        statements: [
+          {
+            id: "fine-motor-tools",
+            text: "Uses drawing and writing tools",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Grasps drawing and writing tools, jabbing at paper",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Holds drawing and writing tools with a whole-hand grasp",
+                ],
+              },
+              {
+                level: 3,
+                descriptors: [
+                  "Holds drawing and writing tools with a three-point finger grip and efficient hand placement",
+                ],
+              },
+            ],
+          },
+          {
+            id: "balance",
+            text: "Balance and coordination",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Sustains balance during simple movement experiences",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Sustains balance during complex movement experiences",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    learnerClassName: "Pre-K3 Eichhorn",
+    entries: [
+      {
+        id: "physical-observation",
+        observation:
+          "After a reminder, AB put away their shoes. AB held a pencil correctly using a three-point finger grip and efficient hand placement. AB balanced confidently across the climbing equipment.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              {
+                statementId: "fine-motor-tools",
+                developmentalLevel: 1,
+                evidence:
+                  "AB held a pencil correctly using a three-point finger grip and efficient hand placement.",
+              },
+              {
+                statementId: "balance",
+                developmentalLevel: 2,
+                evidence:
+                  "AB balanced confidently across the climbing equipment.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(domains.physical.observations.length, 2);
+  assert.ok(
+    domains.physical.observations.some((item) =>
+      /three-point finger grip/i.test(item.text)
+    )
+  );
+  assert.ok(
+    domains.physical.observations.some((item) =>
+      /balance/i.test(item.text)
+    )
+  );
+  assert.ok(
+    domains.physical.nextSteps.some((item) =>
+      /control and stamina/i.test(item.text)
+    )
+  );
+  assert.doesNotMatch(
+    domains.physical.nextSteps.map((item) => item.text).join(" "),
+    /whole-hand grip/i
+  );
+});
+
+test("each populated PTC domain keeps at least two useful evidence and next-step bullets", () => {
+  const framework = {
+    key: "asb-domain-coverage-test",
+    name: "ASB domain coverage test",
+    assessmentLevels: [],
+    areas: [
+      "Managing Complexity",
+      "Collaboration & Social Skills",
+      "Physical",
+      "Thinking Skills (Emergent Math)",
+    ],
+    areaDefinitions: [
+      {
+        id: "managing",
+        name: "Managing Complexity",
+        statements: [
+          {
+            id: "routines",
+            text: "Classroom routines",
+            progression: [
+              {
+                level: 1,
+                descriptors: ["Follows familiar classroom routines"],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Follows directions of two or more steps during classroom routines",
+                ],
+              },
+            ],
+          },
+          {
+            id: "feelings",
+            text: "Recognizes feelings",
+            progression: [
+              {
+                level: 1,
+                descriptors: ["Expresses feelings during a conflict"],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Recognizes and names their feelings during a conflict",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "collaboration",
+        name: "Collaboration & Social Skills",
+        statements: [
+          {
+            id: "exchange",
+            text: "Exchanging information",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Engages in simple back-and-forth exchanges with others",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: ["Initiates and attends to brief conversations"],
+              },
+            ],
+          },
+          {
+            id: "turn-taking",
+            text: "Participates cooperatively",
+            progression: [
+              { level: 1, descriptors: ["Takes turns"] },
+              {
+                level: 2,
+                descriptors: ["Initiates the sharing of classroom materials"],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "physical",
+        name: "Physical",
+        statements: [
+          {
+            id: "movement",
+            text: "Balance and coordination",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Sustains balance during simple movement experiences",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Sustains balance during complex movement experiences",
+                ],
+              },
+            ],
+          },
+          {
+            id: "tool-use",
+            text: "Uses drawing tools",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Grasps drawing and writing tools, jabbing at paper",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Holds drawing and writing tools with a whole-hand grasp",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "thinking",
+        name: "Thinking Skills (Emergent Math)",
+        statements: [
+          {
+            id: "comparison",
+            text: "Comparison",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Makes simple comparisons between two objects",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: ["Compares and orders a small set of objects"],
+              },
+            ],
+          },
+          {
+            id: "sorting",
+            text: "Classification and sorting",
+            progression: [
+              { level: 1, descriptors: ["Sorts objects by color"] },
+              {
+                level: 2,
+                descriptors: ["Groups objects by two characteristics"],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const entries = [
+    ["routine", "AB follows familiar classroom routines.", "routines"],
+    ["feelings", "AB expresses feelings during a conflict.", "feelings"],
+    ["exchange", "AB engages in simple back-and-forth exchanges with others.", "exchange"],
+    ["turns", "AB takes turns with a friend.", "turn-taking"],
+    ["balance", "AB sustains balance during simple movement experiences.", "movement"],
+    ["tools", "AB grasps drawing and writing tools and makes marks on paper.", "tool-use"],
+    ["compare", "AB makes simple comparisons between two objects.", "comparison"],
+    ["sort", "AB sorts objects by color.", "sorting"],
+  ].map(([id, observation, statementId]) => ({
+    id,
+    observation,
+    frameworkMatches: [
+      {
+        statementMatches: [
+          {
+            statementId,
+            developmentalLevel: 1,
+            evidence: observation,
+          },
+        ],
+      },
+    ],
+  }));
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries,
+  });
+
+  for (const domain of Object.values(domains)) {
+    assert.ok(domain.observations.length >= 2);
+    assert.equal(domain.nextSteps.length, domain.observations.length);
+    assert.ok(domain.nextSteps.every((item) => item.text.length > 12));
+  }
 });
 
 test("prompted performance is not reported as an independent higher level", () => {
