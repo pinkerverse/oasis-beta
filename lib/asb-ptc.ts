@@ -1265,6 +1265,10 @@ function frameworkEvidenceText(value: string) {
       "Creates a drawing or construction and explains what it represents",
     ],
     [
+      /^Sustains? balance during simple movement experiences?$/i,
+      "Maintains balance during familiar movement experiences",
+    ],
+    [
       /^Demonstrates? flexibility in thinking and play \(can choose new idea, try another choice\)$/i,
       "Shows flexibility by trying a new idea or another approach during play",
     ],
@@ -1435,7 +1439,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
           (!evidenceWasSupported || level.level < developmentalLevel)
       )
       .sort((first, second) => second.level - first.level);
-    const directProgression = eligibleProgression
+    let directProgression = eligibleProgression
       .map((level) => ({
         level: level.level,
         descriptors: level.descriptors
@@ -1447,6 +1451,18 @@ export function buildAsbPtcFrameworkAlignedDomains({
           ),
       }))
       .find((level) => level.descriptors.length > 0);
+
+    if (!directProgression && /\bbalanc\w*\b/i.test(evidenceText)) {
+      directProgression = [...eligibleProgression]
+        .reverse()
+        .map((level) => ({
+          level: level.level,
+          descriptors: level.descriptors
+            .map((descriptor) => descriptor.trim())
+            .filter((descriptor) => /\bbalanc\w*\b/i.test(descriptor)),
+        }))
+        .find((level) => level.descriptors.length > 0);
+    }
 
     if (!directProgression) return false;
 

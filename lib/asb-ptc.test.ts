@@ -684,7 +684,15 @@ test("PTC domains use natural report language and recover a null-level balancing
             progression: [
               {
                 level: 1,
-                descriptors: ["Balances while climbing and moving"],
+                descriptors: [
+                  "Sustains balance during simple movement experiences",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Sustains balance during complex movement experiences",
+                ],
               },
             ],
           },
@@ -711,7 +719,7 @@ test("PTC domains use natural report language and recover a null-level balancing
       {
         id: "physical-evidence",
         observation:
-          "AB grasped a drawing tool and made marks on paper, then balanced while climbing and moving.",
+          "AB grasped a drawing tool and made marks on paper, then balanced confidently on the monkey bars.",
         frameworkMatches: [
           {
             statementMatches: [
@@ -724,7 +732,7 @@ test("PTC domains use natural report language and recover a null-level balancing
               {
                 statementId: "gross-motor-balance",
                 developmentalLevel: null,
-                evidence: "AB balanced while climbing and moving.",
+                evidence: "AB balanced confidently on the monkey bars.",
               },
             ],
           },
@@ -743,7 +751,8 @@ test("PTC domains use natural report language and recover a null-level balancing
   assert.equal(domains.physical.observations.length, 2);
   assert.ok(
     domains.physical.observations.some(
-      (item) => item.text === "Balances while climbing and moving"
+      (item) =>
+        item.text === "Maintains balance during familiar movement experiences"
     )
   );
   assert.ok(
@@ -757,6 +766,13 @@ test("PTC domains use natural report language and recover a null-level balancing
       (item) =>
         item.text ===
         "Will use a whole-hand grip to make marks with increasing control."
+    )
+  );
+  assert.ok(
+    domains.physical.nextSteps.some(
+      (item) =>
+        item.text ===
+        "Will sustain balance during complex movement experiences."
     )
   );
   assert.doesNotMatch(
