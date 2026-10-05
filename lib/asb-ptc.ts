@@ -767,19 +767,28 @@ function insufficientEvidenceDomain(): AsbPtcDomainReport {
 }
 
 const FRAMEWORK_VERB_BASE_FORMS: Record<string, string> = {
+  accepts: "accept",
+  allows: "allow",
   asks: "ask",
   babbles: "babble",
+  balances: "balance",
+  carries: "carry",
+  chooses: "choose",
   compares: "compare",
   completes: "complete",
+  comforts: "comfort",
   cooperates: "cooperate",
+  coordinates: "coordinate",
   counts: "count",
   creates: "create",
   demonstrates: "demonstrate",
   describes: "describe",
   draws: "draw",
   engages: "engage",
+  expresses: "express",
   explores: "explore",
   follows: "follow",
+  grips: "grip",
   groups: "group",
   holds: "hold",
   identifies: "identify",
@@ -791,6 +800,7 @@ const FRAMEWORK_VERB_BASE_FORMS: Record<string, string> = {
   makes: "make",
   matches: "match",
   moves: "move",
+  names: "name",
   places: "place",
   plans: "plan",
   plays: "play",
@@ -799,6 +809,7 @@ const FRAMEWORK_VERB_BASE_FORMS: Record<string, string> = {
   represents: "represent",
   responds: "respond",
   retells: "retell",
+  seeks: "seek",
   shows: "show",
   sings: "sing",
   speaks: "speak",
@@ -1148,23 +1159,56 @@ function selectRelevantNextDescriptor(
 function frameworkDescriptorAction(value: string) {
   const descriptor = normaliseAsbPtcAmericanEnglish(value)
     .trim()
-    .replace(/[.;]+$/, "");
+    .replace(/[.;]+$/, "")
+    .replace(/\bone'?s\b/gi, "their");
+  const clearActionRewrites: Array<[RegExp, string]> = [
+    [
+      /^Comforts? self by seeking out (?:a )?special person or object$/i,
+      "seek comfort from a familiar person or object when needed",
+    ],
+    [
+      /^(?:Is )?aware (?:of|on) (?:one'?s|their) own feelings and is beginning to identify some$/i,
+      "recognize and begin to name their own feelings",
+    ],
+    [
+      /^Grips? drawing and writing tools? with (?:a )?whole hand but may use whole-arm movements to make marks$/i,
+      "use a whole-hand grip to make marks with increasing control",
+    ],
+    [
+      /^Draws? or constructs?, and then identifies? what it is$/i,
+      "create a drawing or construction and explain what it represents",
+    ],
+  ];
+  const clearAction = clearActionRewrites.find(([pattern]) =>
+    pattern.test(descriptor)
+  )?.[1];
+
+  if (clearAction) return clearAction;
+
   const beginningMatch = descriptor.match(/^(?:Is\s+)?Beginning to\s+(.+)$/i);
 
   if (beginningMatch) {
-    return `begin to ${beginningMatch[1].charAt(0).toLowerCase()}${beginningMatch[1].slice(1)}`;
+    return `begin to ${baseConjoinedFrameworkVerbs(
+      `${beginningMatch[1].charAt(0).toLowerCase()}${beginningMatch[1].slice(1)}`
+    )}`;
   }
 
   const canMatch = descriptor.match(/^Can\s+(.+)$/i);
 
   if (canMatch) {
-    return `${canMatch[1].charAt(0).toLowerCase()}${canMatch[1].slice(1)}`;
+    return baseConjoinedFrameworkVerbs(
+      `${canMatch[1].charAt(0).toLowerCase()}${canMatch[1].slice(1)}`
+    );
   }
 
   const stateMatch = descriptor.match(/^(?:Is|Are)\s+(.+)$/i);
 
   if (stateMatch) {
-    return `be ${stateMatch[1].charAt(0).toLowerCase()}${stateMatch[1].slice(1)}`;
+    return baseConjoinedFrameworkVerbs(
+      `be ${stateMatch[1].charAt(0).toLowerCase()}${stateMatch[1].slice(1)}`
+        .replace(/\band is beginning to\b/gi, "and begin to")
+        .replace(/\band is\b/gi, "and be")
+    );
   }
 
   const [firstWord, ...remainingWords] = descriptor.split(/\s+/);
@@ -1174,7 +1218,62 @@ function frameworkDescriptorAction(value: string) {
     return descriptor.charAt(0).toLowerCase() + descriptor.slice(1);
   }
 
-  return [baseVerb, ...remainingWords].join(" ");
+  return baseConjoinedFrameworkVerbs(
+    [baseVerb, ...remainingWords].join(" ")
+  );
+}
+
+function baseConjoinedFrameworkVerbs(value: string) {
+  return value.replace(/\band\s+([a-z]+)\b/gi, (match, word: string) => {
+    const baseVerb = FRAMEWORK_VERB_BASE_FORMS[word.toLowerCase()];
+
+    return baseVerb ? `and ${baseVerb}` : match;
+  });
+}
+
+function frameworkEvidenceText(value: string) {
+  const descriptor = normaliseAsbPtcAmericanEnglish(value)
+    .trim()
+    .replace(/\bone'?s\b/gi, "their");
+  const clearEvidenceRewrites: Array<[RegExp, string]> = [
+    [
+      /^Allows? a grown[- ]?up to help when upset or in distress$/i,
+      "Accepts help from a familiar adult when upset",
+    ],
+    [
+      /^Comforts? self by seeking out (?:a )?special person or object$/i,
+      "Seeks comfort from a familiar person or object when needed",
+    ],
+    [
+      /^(?:Is )?aware (?:of|on) (?:one'?s|their) own feelings and is beginning to identify some$/i,
+      "Recognizes and begins to name their own feelings",
+    ],
+    [
+      /^Grasps? drawing and writing tools?, jabbing at paper$/i,
+      "Uses drawing and writing tools to make marks on paper",
+    ],
+    [
+      /^Grips? drawing and writing tools? with (?:a )?whole hand but may use whole-arm movements to make marks$/i,
+      "Uses a whole-hand grip to make marks with drawing and writing tools",
+    ],
+    [
+      /^Cooperates? and shares? ideas and materials in socially setting acceptable ways$/i,
+      "Cooperates with others and shares ideas and materials appropriately",
+    ],
+    [
+      /^Draws? or constructs?, and then identifies? what it is$/i,
+      "Creates a drawing or construction and explains what it represents",
+    ],
+    [
+      /^Demonstrates? flexibility in thinking and play \(can choose new idea, try another choice\)$/i,
+      "Shows flexibility by trying a new idea or another approach during play",
+    ],
+  ];
+
+  return (
+    clearEvidenceRewrites.find(([pattern]) => pattern.test(descriptor))?.[1] ??
+    descriptor
+  );
 }
 
 function frameworkNextStep(
@@ -1312,11 +1411,11 @@ export function buildAsbPtcFrameworkAlignedDomains({
   }) {
     const definition = statementDefinitions.get(statementId);
 
-    if (!definition || !Number.isInteger(developmentalLevel)) return;
+    if (!definition || !Number.isInteger(developmentalLevel)) return false;
 
     const domain = getAsbPtcDomainKey(definition.areaName);
 
-    if (!domain) return;
+    if (!domain) return false;
 
     const maximumLevel = getStatementMaximumLevel({
       areaName: definition.areaName,
@@ -1349,7 +1448,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
       }))
       .find((level) => level.descriptors.length > 0);
 
-    if (!directProgression) return;
+    if (!directProgression) return false;
 
     const currentDescriptor = directProgression.descriptors.join("; ");
     const nextProgression = definition.progression.find(
@@ -1390,10 +1489,13 @@ export function buildAsbPtcFrameworkAlignedDomains({
 
     candidates.set(statementId, candidate);
     candidatesByDomain.set(domain, candidates);
+
+    return true;
   }
 
   entries.forEach((entry) => {
     const seenStatementIds = new Set<string>();
+    const matchedEvidenceByStatement = new Map<string, string[]>();
     const parsedEntryDate = entry.date ? new Date(entry.date) : referenceDate;
     const entryReferenceDate = Number.isNaN(parsedEntryDate.getTime())
       ? referenceDate
@@ -1409,9 +1511,15 @@ export function buildAsbPtcFrameworkAlignedDomains({
         const statementId = statementMatch.statementId.trim();
 
         if (!statementId || seenStatementIds.has(statementId)) return;
-        seenStatementIds.add(statementId);
 
         const developmentalLevel = statementMatch.developmentalLevel;
+
+        if (statementMatch.evidence) {
+          const existingEvidence =
+            matchedEvidenceByStatement.get(statementId) ?? [];
+          existingEvidence.push(statementMatch.evidence);
+          matchedEvidenceByStatement.set(statementId, existingEvidence);
+        }
 
         if (developmentalLevel === null) return;
 
@@ -1423,7 +1531,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
           .filter(Boolean)
           .join(" ");
 
-        registerCandidate({
+        const registered = registerCandidate({
           developmentalLevel,
           entry,
           entryAgeInMonths,
@@ -1431,6 +1539,8 @@ export function buildAsbPtcFrameworkAlignedDomains({
           evidenceText,
           statementId,
         });
+
+        if (registered) seenStatementIds.add(statementId);
       });
     });
 
@@ -1450,7 +1560,12 @@ export function buildAsbPtcFrameworkAlignedDomains({
         entry,
         entryAgeInMonths,
         entryStageId,
-        evidenceText: entryEvidenceText,
+        evidenceText: [
+          entryEvidenceText,
+          ...(matchedEvidenceByStatement.get(statementId) ?? []),
+        ]
+          .filter(Boolean)
+          .join(" "),
         statementId,
       });
     });
@@ -1486,9 +1601,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
         domain.key,
         {
           observations: selected.map((candidate) => ({
-            text: normaliseAsbPtcAmericanEnglish(
-              candidate.currentDescriptor
-            ),
+            text: frameworkEvidenceText(candidate.currentDescriptor),
             evidenceEntryIds: candidate.evidenceEntryIds.slice(0, 4),
           })),
           nextSteps: selected.map((candidate, index) => ({

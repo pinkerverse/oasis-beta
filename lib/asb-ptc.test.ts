@@ -609,6 +609,168 @@ test("direct physical evidence is recovered when an earlier framework mapping om
   );
 });
 
+test("PTC domains use natural report language and recover a null-level balancing match", () => {
+  const framework = {
+    key: "asb-report-language-test",
+    name: "ASB report language test",
+    assessmentLevels: [],
+    areas: ["Managing Complexity", "Physical"],
+    areaDefinitions: [
+      {
+        id: "managing-complexity",
+        name: "Managing Complexity",
+        statements: [
+          {
+            id: "comfort",
+            text: "Manages feelings",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Allows a grown up to help when upset or in distress",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Comforts self by seeking out special person or object",
+                ],
+              },
+            ],
+          },
+          {
+            id: "feelings",
+            text: "Recognizes feelings",
+            progression: [
+              {
+                level: 1,
+                descriptors: ["Expresses feelings during a conflict"],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Is aware of one's own feelings and is beginning to identify some",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "physical",
+        name: "Physical",
+        statements: [
+          {
+            id: "fine-motor-tools",
+            text: "Uses fingers and hands",
+            progression: [
+              {
+                level: 1,
+                descriptors: [
+                  "Grasps drawing and writing tools, jabbing at paper",
+                ],
+              },
+              {
+                level: 2,
+                descriptors: [
+                  "Grips drawing and writing tools with whole hand but may use whole-arm movements to make marks",
+                ],
+              },
+            ],
+          },
+          {
+            id: "gross-motor-balance",
+            text: "Balance and coordination",
+            progression: [
+              {
+                level: 1,
+                descriptors: ["Balances while climbing and moving"],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries: [
+      {
+        id: "managing-evidence",
+        observation:
+          "AB allowed a grown up to help when upset and expressed feelings during a conflict.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              { statementId: "comfort", developmentalLevel: 1 },
+              { statementId: "feelings", developmentalLevel: 1 },
+            ],
+          },
+        ],
+      },
+      {
+        id: "physical-evidence",
+        observation:
+          "AB grasped a drawing tool and made marks on paper, then balanced while climbing and moving.",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              {
+                statementId: "fine-motor-tools",
+                developmentalLevel: 1,
+                evidence:
+                  "AB grasped drawing and writing tools and made marks on paper.",
+              },
+              {
+                statementId: "gross-motor-balance",
+                developmentalLevel: null,
+                evidence: "AB balanced while climbing and moving.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    domains.managingComplexity.nextSteps.map((item) => item.text),
+    [
+      "Will seek comfort from a familiar person or object when needed.",
+      "Will recognize and begin to name their own feelings.",
+    ]
+  );
+  assert.equal(domains.physical.observations.length, 2);
+  assert.ok(
+    domains.physical.observations.some(
+      (item) => item.text === "Balances while climbing and moving"
+    )
+  );
+  assert.ok(
+    domains.physical.observations.some(
+      (item) =>
+        item.text === "Uses drawing and writing tools to make marks on paper"
+    )
+  );
+  assert.ok(
+    domains.physical.nextSteps.some(
+      (item) =>
+        item.text ===
+        "Will use a whole-hand grip to make marks with increasing control."
+    )
+  );
+  assert.doesNotMatch(
+    [
+      ...domains.managingComplexity.nextSteps,
+      ...domains.physical.observations,
+      ...domains.physical.nextSteps,
+    ]
+      .map((item) => item.text)
+      .join(" "),
+    /will comforts|will grips|one's own|jabbing at paper/i
+  );
+});
+
 test("prompted performance is not reported as an independent higher level", () => {
   const framework = {
     key: "asb-support-test",
