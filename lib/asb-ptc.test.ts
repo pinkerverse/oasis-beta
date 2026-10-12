@@ -481,6 +481,180 @@ test("class expectations do not erase a directly observed higher capability", ()
   assert.doesNotMatch(domains.criticalThinking.nextSteps[0].text, /level 4/i);
 });
 
+test("repeated private calibration notes prevent an overstated PTC descriptor", () => {
+  const framework = {
+    key: "private-calibration-test",
+    name: "Private calibration test",
+    assessmentLevels: [],
+    areas: ["Collaboration & Social Skills"],
+    areaDefinitions: [
+      {
+        id: "collaboration",
+        name: "Collaboration & Social Skills",
+        statements: [
+          {
+            id: "turn-taking",
+            text: "Participates cooperatively",
+            progression: [
+              { level: 1, descriptors: ["Responds appropriately to others' wants"] },
+              { level: 2, descriptors: ["Shares materials with peers"] },
+              {
+                level: 3,
+                descriptors: ["Initiates the sharing of materials in the classroom and outdoors"],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const entries = [
+    {
+      id: "sharing-moment",
+      observation:
+        "AB initiated the sharing of materials in the classroom during block play.",
+      frameworkMatches: [
+        {
+          statementMatches: [
+            { statementId: "turn-taking", developmentalLevel: 3 },
+          ],
+        },
+      ],
+    },
+    {
+      id: "turn-taking-moment",
+        observation: "AB shares materials with peers during a familiar classroom game.",
+      frameworkMatches: [
+        {
+          statementMatches: [
+            {
+              statementId: "turn-taking",
+              developmentalLevel: 2,
+              evidence: "AB shares materials with peers during a familiar classroom game.",
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  const withoutCalibration = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries,
+  });
+  const withCalibration = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries,
+    calibrationNotes: [
+      {
+        attainmentSignal: "demonstrated",
+        supportLevel: "verbal_prompt",
+        pattern: "repeated",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              { statementId: "turn-taking", developmentalLevel: 3 },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(
+    withoutCalibration.collaborationSocial.observations[0].text,
+    "Initiates the sharing of materials in the classroom and outdoors"
+  );
+  assert.equal(
+    withCalibration.collaborationSocial.observations[0].text,
+    "Shares materials with peers"
+  );
+  assert.equal(
+    withCalibration.collaborationSocial.nextSteps[0].text,
+    "Will initiate the sharing of materials in the classroom and outdoors."
+  );
+});
+
+test("one private note does not outweigh repeated independent evidence", () => {
+  const framework = {
+    key: "single-calibration-test",
+    name: "Single calibration test",
+    assessmentLevels: [],
+    areas: ["Collaboration & Social Skills"],
+    areaDefinitions: [
+      {
+        id: "collaboration",
+        name: "Collaboration & Social Skills",
+        statements: [
+          {
+            id: "turn-taking",
+            text: "Participates cooperatively",
+            progression: [
+              { level: 1, descriptors: ["Responds appropriately to others' wants"] },
+              { level: 2, descriptors: ["Shares materials with peers"] },
+              {
+                level: 3,
+                descriptors: ["Initiates the sharing of materials in the classroom and outdoors"],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const entries = [
+    "sharing-one",
+    "sharing-two",
+  ].map((id) => ({
+    id,
+    observation:
+      "AB initiated the sharing of materials in the classroom and outdoors.",
+    frameworkMatches: [
+      {
+        statementMatches: [
+          { statementId: "turn-taking", developmentalLevel: 3 },
+        ],
+      },
+    ],
+  }));
+  entries.push({
+    id: "turn-taking",
+    observation: "AB shares materials with peers during a classroom game.",
+    frameworkMatches: [
+      {
+        statementMatches: [
+          {
+            statementId: "turn-taking",
+            developmentalLevel: 2,
+          },
+        ],
+      },
+    ],
+  });
+  const domains = buildAsbPtcFrameworkAlignedDomains({
+    framework,
+    entries,
+    calibrationNotes: [
+      {
+        attainmentSignal: "not_yet",
+        supportLevel: "verbal_prompt",
+        pattern: "single_moment",
+        frameworkMatches: [
+          {
+            statementMatches: [
+              { statementId: "turn-taking", developmentalLevel: 3 },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(
+    domains.collaborationSocial.observations[0].text,
+    "Initiates the sharing of materials in the classroom and outdoors"
+  );
+});
+
 test("saved evidence excerpts can restore a directly observed physical capability", () => {
   const framework = {
     key: "asb-physical-evidence-test",

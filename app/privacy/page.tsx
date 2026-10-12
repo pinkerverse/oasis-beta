@@ -68,7 +68,8 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Learner information:</strong> school-generated learner
             identifiers, initials, class, birth month and year, support flags,
-            observations, evidence, teacher judgements, baselines and next steps.
+            observations, private professional teacher notes, evidence, teacher
+            judgements, baselines and next steps.
           </li>
           <li>
             <strong>Uploaded and generated content:</strong> framework documents,
@@ -98,6 +99,10 @@ export default function PrivacyPolicyPage() {
           <li>to create accounts, authenticate users and manage permissions;</li>
           <li>to provide journals, assessment views, planning prompts and reports;</li>
           <li>to analyse observations and surface evidence for teacher review;</li>
+          <li>
+            to use private teacher notes as internal professional context when an
+            educator requests a learner insight or draft report;
+          </li>
           <li>to invite colleagues and send essential service communications;</li>
           <li>to prevent misuse, investigate incidents and keep OASIS reliable;</li>
           <li>to answer support requests and improve service quality; and</li>
@@ -156,6 +161,12 @@ export default function PrivacyPolicyPage() {
           educator to review, edit or reject—not a final assessment, diagnosis,
           safeguarding decision or solely automated decision with legal or similarly
           significant effects.
+        </p>
+        <p>
+          Private teacher notes are stored separately from family-facing
+          observations. They may calibrate an educator-requested insight or draft,
+          but are not counted as observations and are not displayed in learner
+          progress, evidence coverage, journals or family exports.
         </p>
       </LegalSection>
 

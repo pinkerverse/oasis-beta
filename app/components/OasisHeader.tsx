@@ -23,12 +23,14 @@ type OasisHeaderProps = {
   onPTCNotes?: () => void;
   onReportHelper?: () => void;
   onAddObservation?: () => void;
+  onTeacherNote?: () => void;
   onTodaysFocus?: () => void;
   onSettings?: () => void;
   ptcNotesRequiresLearnerSelection?: boolean;
   ptcNotesActive?: boolean;
   reportHelperActive?: boolean;
   addObservationActive?: boolean;
+  teacherNoteActive?: boolean;
   todaysFocusActive?: boolean;
   settingsActive?: boolean;
 };
@@ -50,7 +52,7 @@ function iconClasses(active: boolean) {
 }
 
 function actionButtonClasses(active: boolean) {
-  return `group flex h-11 w-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white md:w-auto md:px-3 ${
+  return `group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 md:w-auto md:px-3 ${
     active
       ? "border-slate-900 bg-slate-900 text-white"
       : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
@@ -74,12 +76,14 @@ export default function OasisHeader({
   onPTCNotes,
   onReportHelper,
   onAddObservation,
+  onTeacherNote,
   onTodaysFocus,
   onSettings,
   ptcNotesRequiresLearnerSelection = true,
   ptcNotesActive = false,
   reportHelperActive = false,
   addObservationActive = false,
+  teacherNoteActive = false,
   todaysFocusActive = false,
   settingsActive = false,
 }: OasisHeaderProps) {
@@ -193,7 +197,7 @@ export default function OasisHeader({
         <Link
           href={hasClass ? "/" : "/school-overview"}
           aria-label="Back to OASIS dashboard"
-          className="relative h-12 w-16 shrink-0 sm:h-20 sm:w-28"
+          className="relative h-10 w-12 shrink-0 min-[420px]:h-12 min-[420px]:w-16 sm:h-20 sm:w-28"
         >
           <Image
             src="/oasis-logo.png"
@@ -317,10 +321,40 @@ export default function OasisHeader({
 
               <button
                 type="button"
+                onClick={() => runPanelAction("teacher-note", onTeacherNote)}
+                aria-label="Teacher Note"
+                title="Private Teacher Note"
+                className={actionButtonClasses(teacherNoteActive)}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 4.5h9.5A2.5 2.5 0 0 1 18 7v12.5H8A2 2 0 0 1 6 17.5v-13Z"
+                  />
+                  <path strokeLinecap="round" d="M9 9h6M9 12.5h4" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16.2 4.8V3.6a1.8 1.8 0 0 1 3.6 0v1.2M15.3 4.8h5.4v4.5h-5.4z"
+                  />
+                </svg>
+                <span className="hidden md:inline">Teacher Note</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => runPanelAction("focus", onTodaysFocus)}
                 aria-label="Today’s Focus"
                 title="Today’s Focus"
-                className={`group flex h-11 w-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white md:w-auto md:px-3 ${
+                className={`group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 md:w-auto md:px-3 ${
                   todaysFocusActive
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-100 text-slate-900 hover:border-indigo-300 hover:from-cyan-100 hover:to-indigo-100"
@@ -338,7 +372,7 @@ export default function OasisHeader({
               onClick={openSettings}
               aria-label="Settings"
               title="Settings"
-              className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition min-[520px]:flex ${
+              className={`hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition min-[520px]:flex sm:h-11 sm:w-11 ${
                 settingsActive
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-900 active:text-white"
@@ -369,7 +403,7 @@ export default function OasisHeader({
               aria-expanded={showProfileMenu}
               aria-haspopup="menu"
               aria-label="Profile menu"
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition ${
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition sm:h-11 sm:w-11 ${
                 showProfileMenu
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"

@@ -33,6 +33,47 @@ function normaliseText(value: unknown) {
     : "";
 }
 
+function calibrationFrameworkReferences(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value.slice(0, 2).flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return [];
+
+    const match = candidate as Record<string, unknown>;
+    const area = normaliseText(match.strand).slice(0, 120);
+    const statements = Array.isArray(match.statementMatches)
+      ? match.statementMatches.slice(0, 2).flatMap((statementCandidate) => {
+          if (!statementCandidate || typeof statementCandidate !== "object") {
+            return [];
+          }
+
+          const statement = statementCandidate as Record<string, unknown>;
+          const statementId = normaliseText(statement.statementId).slice(0, 180);
+          const rawLevel = statement.developmentalLevel;
+
+          if (!statementId) return [];
+
+          return [
+            {
+              statementId,
+              developmentalLevel:
+                typeof rawLevel === "number" &&
+                Number.isInteger(rawLevel) &&
+                rawLevel >= 1 &&
+                rawLevel <= 4
+                  ? rawLevel
+                  : null,
+            },
+          ];
+        })
+      : [];
+
+    if (!area || statements.length === 0) return [];
+
+    return [{ area, statements }];
+  });
+}
+
 function evidenceMomentKey(entry: {
   observation?: unknown;
   observation_date?: unknown;
@@ -223,6 +264,52 @@ export async function POST(request: Request) {
       .filter((entry) => normaliseText(entry.observation))
       .slice(0, 30);
 
+    const { data: rawCalibrationNotes, error: calibrationError } =
+      await authenticatedSupabase
+        .from("learner_teacher_notes")
+        .select(
+          "observed_on, note, context, attainment_signal, support_level, pattern, framework_matches"
+        )
+        .eq("school_id", context.schoolId)
+        .eq("workspace_id", context.workspaceId)
+        .eq("learner_id", learnerId)
+        .order("observed_on", { ascending: false })
+        .limit(30);
+
+    if (calibrationError) {
+      console.error(
+        "Learner intelligence private calibration lookup failed; continuing without private notes:",
+        calibrationError
+      );
+    }
+
+    const calibrationNotes = (rawCalibrationNotes ?? [])
+      .flatMap((note) => {
+        const privacySafeNote = replaceLearnerNamesWithInitials(
+          normaliseText(note.note),
+          privacyIdentities
+        ).slice(0, 2000);
+
+        if (!privacySafeNote || reviewPrivacyText(privacySafeNote).requiresReview) {
+          return [];
+        }
+
+        return [
+          {
+            date: note.observed_on,
+            note: privacySafeNote,
+            context: normaliseText(note.context),
+            attainmentSignal: normaliseText(note.attainment_signal),
+            supportLevel: normaliseText(note.support_level),
+            pattern: normaliseText(note.pattern),
+            frameworkReferences: calibrationFrameworkReferences(
+              note.framework_matches
+            ),
+          },
+        ];
+      })
+      .slice(0, 20);
+
     if (entries.length < 2) {
       return Response.json({
         strengths: [],
@@ -300,6 +387,9 @@ RULES
 - Use tentative language such as “appears to”, “may” or “the current evidence suggests”. Never diagnose or assign a personality trait.
 - Keep strengths distinct from patterns: a strength is a repeatedly demonstrated capability; a pattern explains a recurring way the learner engages with or develops learning.
 - Independence insights require explicit evidence about independent action, prompting, modelling, guidance or change over time. Otherwise return an empty array.
+- PRIVATE CALIBRATION NOTES are internal professional context. Use them to temper claims about independence, consistency and level of support, and to sharpen teachingResponse or nextNoticing.
+- Never use a private calibration note by itself to create a strength or learning pattern. Never quote, paraphrase, cite or reveal a private note in the output.
+- evidenceEntryIds must contain only IDs from EVIDENCE. Private calibration notes are deliberately not citable sources.
 - Each teachingResponse must be one concrete, proportionate teaching implication grounded in the pattern. Do not prescribe a generic activity and do not overreach beyond the evidence.
 - nextNoticing may use one source when it tests an important tentative interpretation; every other section requires at least two.
 - Return at most three strengths, three patterns, one independence insight and two next-noticing insights. Return an empty array when the evidence is insufficient.
@@ -307,6 +397,9 @@ RULES
 
 EVIDENCE
 ${privacySafeEvidenceJson}
+
+PRIVATE CALIBRATION NOTES — INTERNAL USE ONLY, NEVER OUTPUT OR CITE
+${JSON.stringify(calibrationNotes, null, 2)}
       `,
       text: {
         format: {

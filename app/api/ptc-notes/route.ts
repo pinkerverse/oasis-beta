@@ -12,6 +12,7 @@ import {
   getPtcTemplateForSchool,
   isAsbPtcActivityLedOpening,
   normaliseGeneratedAsbPtcReport,
+  type AsbPtcCalibrationNote,
 } from "@/lib/asb-ptc";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import { frameworks, type FrameworkDefinition } from "@/lib/framework";
@@ -204,6 +205,25 @@ export async function POST(request: Request) {
       );
     }
 
+    const { data: rawCalibrationNotes, error: calibrationError } =
+      await authenticatedSupabase
+        .from("learner_teacher_notes")
+        .select(
+          "observed_on, note, context, attainment_signal, support_level, pattern, framework_matches"
+        )
+        .eq("school_id", context.schoolId)
+        .eq("workspace_id", context.workspaceId)
+        .eq("learner_id", learnerId)
+        .order("observed_on", { ascending: false })
+        .limit(30);
+
+    if (calibrationError) {
+      console.error(
+        "PTC private calibration lookup failed; continuing without private notes:",
+        calibrationError
+      );
+    }
+
     const learnerInitials = getLearnerInitials({
       firstName: learner.first_name,
       lastName: learner.last_name,
@@ -274,10 +294,91 @@ export async function POST(request: Request) {
             })
           : [],
       }));
+    const allowedAttainmentSignals = new Set([
+      "not_yet",
+      "emerging",
+      "demonstrated",
+    ]);
+    const allowedSupportLevels = new Set([
+      "independent",
+      "reminder",
+      "verbal_prompt",
+      "modeled",
+      "direct_help",
+    ]);
+    const allowedPatterns = new Set([
+      "single_moment",
+      "sometimes",
+      "repeated",
+      "consistent",
+    ]);
+    const privateCalibrationNotes = (rawCalibrationNotes ?? [])
+      .flatMap((note) => {
+        const safeNoteText = replaceLearnerNamesWithInitials(
+          normaliseText(note.note, 2000),
+          privacyIdentities
+        );
+        const notePrivacyReview = reviewPrivacyText(safeNoteText);
+
+        if (
+          notePrivacyReview.requiresReview ||
+          !allowedAttainmentSignals.has(note.attainment_signal) ||
+          !allowedSupportLevels.has(note.support_level) ||
+          !allowedPatterns.has(note.pattern)
+        ) {
+          return [];
+        }
+
+        const frameworkMatches = Array.isArray(note.framework_matches)
+          ? note.framework_matches.slice(0, 2).map((match) => ({
+              statementMatches: Array.isArray(match.statementMatches)
+                ? match.statementMatches.slice(0, 2).flatMap(
+                    (statement: Record<string, unknown>) => {
+                      const statementId = normaliseText(
+                        statement.statementId,
+                        160
+                      );
+
+                      if (!statementId) return [];
+
+                      return [
+                        {
+                          statementId,
+                          developmentalLevel:
+                            typeof statement.developmentalLevel === "number" &&
+                            Number.isInteger(statement.developmentalLevel) &&
+                            statement.developmentalLevel >= 1 &&
+                            statement.developmentalLevel <= 4
+                              ? statement.developmentalLevel
+                              : null,
+                        },
+                      ];
+                    }
+                  )
+                : [],
+            }))
+          : [];
+
+        return [
+          {
+            date: note.observed_on,
+            note: safeNoteText,
+            context: normaliseText(note.context, 80),
+            attainmentSignal:
+              note.attainment_signal as AsbPtcCalibrationNote["attainmentSignal"],
+            supportLevel:
+              note.support_level as AsbPtcCalibrationNote["supportLevel"],
+            pattern: note.pattern as AsbPtcCalibrationNote["pattern"],
+            frameworkMatches,
+          },
+        ];
+      })
+      .slice(0, 20);
     const validEntryIds = new Set(entries.map((entry) => entry.id));
     const frameworkAlignedDomains = buildAsbPtcFrameworkAlignedDomains({
       entries,
       framework: activeFramework,
+      calibrationNotes: privateCalibrationNotes,
       learnerDateOfBirth: learner.date_of_birth,
       learnerClassName: learner.class_name,
     });
@@ -338,6 +439,9 @@ WRITING RULES
 - Use warm, clear, parent-friendly language and observable verbs.
 - Use appropriate approaches-to-learning language when supported: cognitive, intrapersonal, interpersonal, self-management, communication, research and thinking skills.
 - Treat assessment statuses as judgments about individual evidence, not fixed labels for the learner.
+- Treat PRIVATE CALIBRATION NOTES as internal professional context, never as family-facing evidence. Use them only to avoid overstating independence, consistency or developmental level and to choose proportionate next steps.
+- A repeated or consistent "not yet" or supported calibration note should temper one unusually successful observation of the same framework statement. One isolated calibration moment must not outweigh several independent observations.
+- Never quote, paraphrase, cite or refer to a private calibration note in any learner-profile, evidence, next-step or support text. Never place a private note ID in the output.
 - Each evidence point must cite one or more supplied evidence entry IDs in its evidenceEntryIds field only. Never place an ID, UUID, citation, bracketed reference or source reference inside any prose text.
 - Write the learner profile as exactly three connected narrative segments that OASIS will join into one flowing paragraph. Together they must contain exactly four or five sentences and roughly 85-110 words: use two sentences in the first segment, one or two in the second, and one in the third.
 - Make the first sentence a whole-child introduction. Begin with ${learnerInitials} and describe an evidenced learning disposition, how they have settled into Pre-K, their social presence or relationships, or their overall attitude toward learning and classroom life.
@@ -424,6 +528,9 @@ DOMAIN CURATION
 
 EVIDENCE
 ${JSON.stringify(entries, null, 2)}
+
+PRIVATE CALIBRATION NOTES — INTERNAL USE ONLY, NEVER OUTPUT OR CITE
+${JSON.stringify(privateCalibrationNotes, null, 2)}
     `;
     const responseRequest = {
       model: process.env.PTC_NOTES_MODEL || "gpt-4.1-mini",

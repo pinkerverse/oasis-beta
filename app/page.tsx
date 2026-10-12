@@ -15,6 +15,7 @@ import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/clie
 import AccountSecurity from "@/app/components/AccountSecurity";
 import AsbPtcNotesModal from "@/app/components/AsbPtcNotesModal";
 import OasisHeader from "@/app/components/OasisHeader";
+import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
@@ -622,6 +623,7 @@ function handleRemoveManualLearningArea(strand: string) {
 
   const [showPTCNotes, setShowPTCNotes] = useState(false);
   const [showReportHelper, setShowReportHelper] = useState(false);
+  const [showTeacherNote, setShowTeacherNote] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
 const [newLearnerLastName, setNewLearnerLastName] = useState("");
@@ -4764,6 +4766,8 @@ useEffect(() => {
 
   if (panel === "observation") {
     openObservationComposer();
+  } else if (panel === "teacher-note") {
+    setShowTeacherNote(true);
   } else if (panel === "focus") {
     openTodaysFocus();
   } else if (panel === "settings") {
@@ -6356,12 +6360,14 @@ if (checkingOnboarding) {
   onPTCNotes={() => setShowPTCNotes(true)}
   onReportHelper={() => setShowReportHelper(true)}
   onAddObservation={openObservationComposer}
+  onTeacherNote={() => setShowTeacherNote(true)}
   onTodaysFocus={openTodaysFocus}
   onSettings={() => void openSettings()}
   ptcNotesRequiresLearnerSelection={ptcTemplate !== "asb_pre_k"}
   ptcNotesActive={showPTCNotes}
   reportHelperActive={showReportHelper}
   addObservationActive={showObservationModal}
+  teacherNoteActive={showTeacherNote}
   todaysFocusActive={showTodaysFocus}
   settingsActive={showSettings}
 />
@@ -13458,6 +13464,14 @@ onClick={() => {
     learners={pupils}
     initialLearnerIds={selectedChildren}
     onClose={() => setShowPTCNotes(false)}
+  />
+)}
+
+{showTeacherNote && (
+  <TeacherNoteModal
+    learners={pupils}
+    selectedLearnerIds={selectedChildren}
+    onClose={() => setShowTeacherNote(false)}
   />
 )}
 

@@ -304,6 +304,23 @@ export type AsbPtcFrameworkEvidenceEntry = {
   }>;
 };
 
+export type AsbPtcCalibrationNote = {
+  attainmentSignal: "not_yet" | "emerging" | "demonstrated";
+  supportLevel:
+    | "independent"
+    | "reminder"
+    | "verbal_prompt"
+    | "modeled"
+    | "direct_help";
+  pattern: "single_moment" | "sometimes" | "repeated" | "consistent";
+  frameworkMatches: Array<{
+    statementMatches: Array<{
+      statementId: string;
+      developmentalLevel: number | null;
+    }>;
+  }>;
+};
+
 export type AsbPtcNextStepOverlap = {
   overallIndex: number;
   domainKey: AsbPtcDomainKey;
@@ -1347,9 +1364,11 @@ function frameworkNextStep(
 export function buildAsbPtcFrameworkAlignedDomains({
   entries,
   framework,
+  calibrationNotes = [],
 }: {
   entries: AsbPtcFrameworkEvidenceEntry[];
   framework: FrameworkDefinition;
+  calibrationNotes?: AsbPtcCalibrationNote[];
   learnerDateOfBirth?: string | null;
   learnerClassName?: string | null;
   referenceDate?: Date;
@@ -1393,6 +1412,57 @@ export function buildAsbPtcFrameworkAlignedDomains({
     Map<string, Candidate>
   >();
   let firstSeenOrder = 0;
+
+  const calibrationLimits = new Map<
+    string,
+    { hardMaximum: number | null; softMaximum: number | null }
+  >();
+
+  calibrationNotes.forEach((note) => {
+    const shouldCalibrate =
+      note.attainmentSignal !== "demonstrated" ||
+      note.supportLevel !== "independent";
+
+    if (!shouldCalibrate) return;
+
+    note.frameworkMatches.forEach((match) => {
+      match.statementMatches.forEach((statementMatch) => {
+        const definition = statementDefinitions.get(statementMatch.statementId);
+        const developmentalLevel = statementMatch.developmentalLevel;
+
+        if (!definition || developmentalLevel === null) return;
+
+        const lowestLevel = definition.progression[0]?.level ?? 1;
+        const needsLowerLevel =
+          note.attainmentSignal !== "demonstrated" ||
+          note.supportLevel !== "independent";
+        const maximumLevel = Math.max(
+          lowestLevel,
+          developmentalLevel - (needsLowerLevel ? 1 : 0)
+        );
+        const repeatedPattern =
+          note.pattern === "repeated" || note.pattern === "consistent";
+        const current = calibrationLimits.get(statementMatch.statementId) ?? {
+          hardMaximum: null,
+          softMaximum: null,
+        };
+
+        if (repeatedPattern) {
+          current.hardMaximum =
+            current.hardMaximum === null
+              ? maximumLevel
+              : Math.min(current.hardMaximum, maximumLevel);
+        } else {
+          current.softMaximum =
+            current.softMaximum === null
+              ? maximumLevel
+              : Math.min(current.softMaximum, maximumLevel);
+        }
+
+        calibrationLimits.set(statementMatch.statementId, current);
+      });
+    });
+  });
 
   function registerCandidate({
     developmentalLevel,
@@ -1590,15 +1660,40 @@ export function buildAsbPtcFrameworkAlignedDomains({
   return Object.fromEntries(
     ASB_PTC_DOMAINS.map((domain) => {
       const candidateGroups = [
-        ...(candidatesByDomain.get(domain.key)?.values() ?? []),
-      ].map((candidate) =>
-        [...candidate.variants.values()].sort(
-          (first, second) =>
+        ...(candidatesByDomain.get(domain.key)?.entries() ?? []),
+      ].map(([statementId, candidate]) => {
+        const calibration = calibrationLimits.get(statementId);
+        const eligibleVariants = [...candidate.variants.values()].filter(
+          (variant) =>
+            calibration?.hardMaximum === null ||
+            calibration?.hardMaximum === undefined ||
+            variant.currentLevel <= calibration.hardMaximum
+        );
+
+        return eligibleVariants.sort((first, second) => {
+          if (calibration?.softMaximum !== null && calibration?.softMaximum !== undefined) {
+            const firstAbove = Number(
+              first.currentLevel > calibration.softMaximum
+            );
+            const secondAbove = Number(
+              second.currentLevel > calibration.softMaximum
+            );
+
+            return (
+              second.count - first.count ||
+              firstAbove - secondAbove ||
+              second.currentLevel - first.currentLevel ||
+              first.firstSeenOrder - second.firstSeenOrder
+            );
+          }
+
+          return (
             second.currentLevel - first.currentLevel ||
             second.count - first.count ||
             first.firstSeenOrder - second.firstSeenOrder
-        )
-      );
+          );
+        });
+      });
       const selected = candidateGroups
         .map((variants) => variants[0])
         .filter((candidate): candidate is CandidateVariant => Boolean(candidate))
