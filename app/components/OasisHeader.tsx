@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import AccountModal from "@/app/components/AccountModal";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -12,6 +12,7 @@ type HeaderPage =
   | "classroom-insights"
   | "class-attainment"
   | "school-overview"
+  | "planning"
   | null;
 
 type OasisHeaderProps = {
@@ -52,20 +53,14 @@ function iconClasses(active: boolean) {
 }
 
 function actionButtonClasses(active: boolean) {
-  return `group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 md:w-auto md:px-3 ${
+  return `group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 xl:w-auto xl:px-3 ${
     active
       ? "border-slate-900 bg-slate-900 text-white"
       : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
   }`;
 }
 
-function learnerToolButtonClasses(active: boolean) {
-  return `hidden h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-xl border px-3 text-sm font-semibold shadow-sm transition lg:flex disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 disabled:shadow-none ${
-    active
-      ? "border-slate-900 bg-slate-900 text-white"
-      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-  }`;
-}
+const menuItemClasses = "block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-600 disabled:cursor-not-allowed disabled:text-slate-400";
 
 export default function OasisHeader({
   activePage = null,
@@ -88,6 +83,12 @@ export default function OasisHeader({
   settingsActive = false,
 }: OasisHeaderProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const toolsMenuId = useId();
+  const toolsRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [loadedAccountName, setLoadedAccountName] = useState("");
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
@@ -149,6 +150,28 @@ export default function OasisHeader({
     };
   }, [suppliedAccountEmail, suppliedAccountName]);
 
+  useEffect(() => {
+    if (!showToolsMenu && !showProfileMenu) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (!toolsRef.current?.contains(event.target)) setShowToolsMenu(false);
+      if (!profileRef.current?.contains(event.target)) setShowProfileMenu(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (showToolsMenu) toolsButtonRef.current?.focus();
+      else if (showProfileMenu) profileButtonRef.current?.focus();
+      setShowToolsMenu(false);
+      setShowProfileMenu(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [showToolsMenu, showProfileMenu]);
+
   const nameParts = accountName.trim().split(/\s+/).filter(Boolean);
   const profileInitials = nameParts.length
     ? nameParts
@@ -161,6 +184,8 @@ export default function OasisHeader({
       : "ME";
 
   function runPanelAction(panel: string, callback?: () => void) {
+    setShowToolsMenu(false);
+    setShowProfileMenu(false);
     if (callback) {
       callback();
       return;
@@ -170,6 +195,7 @@ export default function OasisHeader({
   }
 
   function openSettings() {
+    setShowToolsMenu(false);
     setShowProfileMenu(false);
 
     if (onSettings) {
@@ -211,47 +237,26 @@ export default function OasisHeader({
 
         <div className="hidden h-11 w-px bg-slate-200 lg:block" />
 
-        <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+        <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-1.5">
           {hasClass && (
             <>
-              <button
-                type="button"
-                onClick={() => runPanelAction("ptc", onPTCNotes)}
-                disabled={
-                  ptcNotesRequiresLearnerSelection && !hasLearnerSelection
-                }
-                aria-label="PTC Notes"
-                title={
-                  !ptcNotesRequiresLearnerSelection || hasLearnerSelection
-                    ? "PTC Notes"
-                    : "Select a learner to open PTC Notes"
-                }
-                className={learnerToolButtonClasses(ptcNotesActive)}
+              <Link
+                href="/planning"
+                aria-label="Weekly planning"
+                title="Weekly planning"
+                aria-current={activePage === "planning" ? "page" : undefined}
+                className={actionButtonClasses(activePage === "planning")}
               >
-                PTC Notes
-              </button>
-
-              <button
-                type="button"
-                onClick={() => runPanelAction("report", onReportHelper)}
-                disabled={!hasLearnerSelection}
-                aria-label="Report Helper"
-                title={
-                  hasLearnerSelection
-                    ? "Report Helper"
-                    : "Select a learner to open Report Helper"
-                }
-                className={learnerToolButtonClasses(reportHelperActive)}
-              >
-                Report Helper
-              </button>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 10h18M7 14h3m4 0h3M7 17h3" /></svg>
+                <span className="hidden xl:inline">Planning</span>
+              </Link>
 
               <Link
                 href="/learner-intelligence"
                 aria-label="Learner Insight"
                 aria-current={learnerIntelligenceActive ? "page" : undefined}
                 title="Learner Insight"
-                className={actionButtonClasses(learnerIntelligenceActive)}
+                className={`${actionButtonClasses(learnerIntelligenceActive)} hidden sm:flex`}
               >
                 <Image
                   src="/learner-intelligence-brain.png"
@@ -261,9 +266,6 @@ export default function OasisHeader({
                   className={iconClasses(learnerIntelligenceActive)}
                   aria-hidden="true"
                 />
-                <span className="hidden min-[1540px]:inline">
-                  Learner Insight
-                </span>
               </Link>
 
               <Link
@@ -271,7 +273,7 @@ export default function OasisHeader({
                 aria-label="Classroom Intelligence"
                 aria-current={classroomInsightsActive ? "page" : undefined}
                 title="Classroom Intelligence"
-                className={actionButtonClasses(classroomInsightsActive)}
+                className={`${actionButtonClasses(classroomInsightsActive)} hidden sm:flex`}
               >
                 <Image
                   src="/classroom-insights-eye.png"
@@ -281,9 +283,6 @@ export default function OasisHeader({
                   className={iconClasses(classroomInsightsActive)}
                   aria-hidden="true"
                 />
-                <span className="hidden min-[1540px]:inline">
-                  Classroom Intelligence
-                </span>
               </Link>
 
               <Link
@@ -291,7 +290,7 @@ export default function OasisHeader({
                 aria-label="Class Attainment"
                 aria-current={classAttainmentActive ? "page" : undefined}
                 title="Class Attainment"
-                className={actionButtonClasses(classAttainmentActive)}
+                className={`${actionButtonClasses(classAttainmentActive)} hidden sm:flex`}
               >
                 <Image
                   src="/class-attainment-icon.png"
@@ -301,9 +300,6 @@ export default function OasisHeader({
                   className={iconClasses(classAttainmentActive)}
                   aria-hidden="true"
                 />
-                <span className="hidden min-[1540px]:inline">
-                  Class Attainment
-                </span>
               </Link>
 
               <button
@@ -316,7 +312,7 @@ export default function OasisHeader({
                 <span className="text-lg leading-none" aria-hidden="true">
                   +
                 </span>
-                <span className="hidden md:inline">Add Observation</span>
+                <span className="hidden xl:inline">Add Observation</span>
               </button>
 
               <button
@@ -324,7 +320,7 @@ export default function OasisHeader({
                 onClick={() => runPanelAction("teacher-note", onTeacherNote)}
                 aria-label="Teacher Note"
                 title="Private Teacher Note"
-                className={actionButtonClasses(teacherNoteActive)}
+                className={`${actionButtonClasses(teacherNoteActive)} hidden sm:flex`}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -346,7 +342,7 @@ export default function OasisHeader({
                     d="M16.2 4.8V3.6a1.8 1.8 0 0 1 3.6 0v1.2M15.3 4.8h5.4v4.5h-5.4z"
                   />
                 </svg>
-                <span className="hidden md:inline">Teacher Note</span>
+                <span className="hidden xl:inline">Teacher Note</span>
               </button>
 
               <button
@@ -354,52 +350,47 @@ export default function OasisHeader({
                 onClick={() => runPanelAction("focus", onTodaysFocus)}
                 aria-label="Today’s Focus"
                 title="Today’s Focus"
-                className={`group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 md:w-auto md:px-3 ${
+                className={`group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 xl:w-auto xl:px-3 ${
                   todaysFocusActive
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-100 text-slate-900 hover:border-indigo-300 hover:from-cyan-100 hover:to-indigo-100"
                 }`}
               >
                 <span aria-hidden="true">◎</span>
-                <span className="hidden md:inline">Today’s Focus</span>
+                <span className="hidden xl:inline">Today’s Focus</span>
               </button>
             </>
           )}
 
           {hasClass && (
-            <button
-              type="button"
-              onClick={openSettings}
-              aria-label="Settings"
-              title="Settings"
-              className={`hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition min-[520px]:flex sm:h-11 sm:w-11 ${
-                settingsActive
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-900 active:text-white"
-              }`}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9.6 3.8 10.2 2h3.6l.6 1.8 1.7 1 1.9-.4 1.8 3.1-1.3 1.4v2l1.3 1.4-1.8 3.1-1.9-.4-1.7 1-.6 1.8h-3.6L9.6 16l-1.7-1-1.9.4-1.8-3.1 1.3-1.4v-2L4.2 7.5 6 4.4l1.9.4 1.7-1Z"
-                />
-                <circle cx="12" cy="10" r="2.5" />
-              </svg>
-            </button>
+            <div ref={toolsRef} className="relative">
+              <button ref={toolsButtonRef} type="button" aria-label="Tools" title="Tools" aria-expanded={showToolsMenu} aria-controls={toolsMenuId}
+                onClick={() => { setShowToolsMenu((current) => !current); setShowProfileMenu(false); }}
+                className={actionButtonClasses(showToolsMenu || ptcNotesActive || reportHelperActive || settingsActive)}>
+                <span aria-hidden="true" className="text-xl leading-none">⋯</span>
+                <span className="hidden xl:inline">Tools</span>
+              </button>
+              {showToolsMenu && <nav id={toolsMenuId} aria-label="Class tools" className="absolute right-0 top-full mt-2 max-h-[70dvh] w-64 max-w-[calc(100vw-5rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Reports</p>
+                <button type="button" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={menuItemClasses}>PTC Notes</button>
+                <button type="button" onClick={() => runPanelAction("report", onReportHelper)} disabled={!hasLearnerSelection} className={menuItemClasses}>Report Helper</button>
+                {!hasLearnerSelection && <p className="px-3 pb-2 text-xs leading-5 text-slate-500">{ptcNotesRequiresLearnerSelection ? "Select a learner in My Class to use these report tools." : "Select a learner in My Class to use Report Helper."}</p>}
+                <div className="mt-1 border-t border-slate-100 pt-1 sm:hidden">
+                  <button type="button" onClick={() => runPanelAction("teacher-note", onTeacherNote)} className={menuItemClasses}>Teacher Note</button>
+                  <Link href="/learner-intelligence" aria-current={learnerIntelligenceActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Learner Insight</Link>
+                  <Link href="/classroom-insights" aria-current={classroomInsightsActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Classroom Intelligence</Link>
+                  <Link href="/class-attainment" aria-current={classAttainmentActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Class Attainment</Link>
+                </div>
+                <div className="mt-1 border-t border-slate-100 pt-1"><button type="button" onClick={openSettings} className={menuItemClasses}>Settings</button></div>
+              </nav>}
+            </div>
           )}
 
-          <div className="relative">
+          <div ref={profileRef} className="relative">
             <button
+              ref={profileButtonRef}
               type="button"
-              onClick={() => setShowProfileMenu((current) => !current)}
+              onClick={() => { setShowProfileMenu((current) => !current); setShowToolsMenu(false); }}
               aria-expanded={showProfileMenu}
               aria-haspopup="menu"
               aria-label="Profile menu"
@@ -415,32 +406,20 @@ export default function OasisHeader({
             {showProfileMenu && (
               <div
                 role="menu"
-                className="absolute right-0 top-full mt-2 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
+                className="absolute right-0 top-full mt-2 w-52 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
               >
                 <p className="truncate border-b border-slate-100 px-3 py-2 text-xs text-slate-500">
                   {accountName || accountEmail || "My account"}
                 </p>
 
-                {schoolAdmin && (
-                  <>
-                    <Link
-                      href="/school-overview"
-                      role="menuitem"
-                      className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 xl:hidden"
-                    >
-                      School Overview
-                    </Link>
-                    {hasClass && (
-                      <Link
-                        href="/"
-                        role="menuitem"
-                        className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 xl:hidden"
-                      >
-                        My Class
-                      </Link>
-                    )}
-                  </>
+                {hasClass && (
+                  <Link href="/planning" role="menuitem" onClick={() => setShowProfileMenu(false)} className="mt-1 block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    Weekly planning
+                  </Link>
                 )}
+
+                {schoolAdmin && <Link href="/school-overview" role="menuitem" aria-current={schoolOverviewActive ? "page" : undefined} onClick={() => setShowProfileMenu(false)} className={menuItemClasses}>School Overview</Link>}
+                {hasClass && <Link href="/" role="menuitem" onClick={() => setShowProfileMenu(false)} className={menuItemClasses}>My Class</Link>}
 
                 {platformOwner && (
                   <Link
@@ -487,38 +466,7 @@ export default function OasisHeader({
             )}
           </div>
 
-          {schoolAdmin && (
-            <>
-              <div className="mx-1 hidden h-8 w-px bg-slate-200 xl:block" />
-              <nav
-                aria-label="Workspace view"
-                className="hidden shrink-0 items-center whitespace-nowrap rounded-xl bg-slate-100 p-1 xl:flex"
-              >
-                <Link
-                  href="/school-overview"
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                    schoolOverviewActive
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-900"
-                  }`}
-                >
-                  School Overview
-                </Link>
-                {hasClass && (
-                  <Link
-                    href="/"
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                      !schoolOverviewActive
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-900"
-                    }`}
-                  >
-                    My Class
-                  </Link>
-                )}
-              </nav>
-            </>
-          )}
+
         </div>
       </div>
 
