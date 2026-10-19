@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { loadImportedLearnerContext } from "@/lib/document-import-server";
+import { DOCUMENT_CONTEXT_RULES } from "@/lib/document-import";
 
 import {
   ASB_PTC_DOMAINS,
@@ -421,6 +423,7 @@ export async function POST(request: Request) {
       });
     }
 
+    const importedDocumentContext = await loadImportedLearnerContext(context, learnerId, privacyIdentities);
     const ptcPrompt = `
 You are an experienced Pre-K pedagogical documentation lead preparing concise parent-teacher conference notes for learner ${learnerInitials}.
 
@@ -531,6 +534,10 @@ ${JSON.stringify(entries, null, 2)}
 
 PRIVATE CALIBRATION NOTES — INTERNAL USE ONLY, NEVER OUTPUT OR CITE
 ${JSON.stringify(privateCalibrationNotes, null, 2)}
+
+${DOCUMENT_CONTEXT_RULES}
+IMPORTED DOCUMENT CONTEXT — INTERNAL USE ONLY
+${JSON.stringify(importedDocumentContext)}
     `;
     const responseRequest = {
       model: process.env.PTC_NOTES_MODEL || "gpt-4.1-mini",

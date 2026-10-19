@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { loadImportedLearnerContext } from "@/lib/document-import-server";
+import { DOCUMENT_CONTEXT_RULES } from "@/lib/document-import";
 
 import {
   getCurrentWorkspaceContext,
@@ -338,6 +340,7 @@ export async function POST(request: Request) {
         ? entry.next_steps
         : [],
     }));
+    const importedDocumentContext = await loadImportedLearnerContext(context, learnerId, privacyIdentities);
     const model =
       process.env.LEARNER_INTELLIGENCE_MODEL || "gpt-4.1-mini";
     const privacySafeEvidenceJson = replaceLearnerNamesWithInitials(
@@ -400,6 +403,10 @@ ${privacySafeEvidenceJson}
 
 PRIVATE CALIBRATION NOTES — INTERNAL USE ONLY, NEVER OUTPUT OR CITE
 ${JSON.stringify(calibrationNotes, null, 2)}
+
+${DOCUMENT_CONTEXT_RULES}
+IMPORTED DOCUMENT CONTEXT — INTERNAL USE ONLY
+${JSON.stringify(importedDocumentContext)}
       `,
       text: {
         format: {

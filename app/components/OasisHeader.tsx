@@ -371,6 +371,7 @@ export default function OasisHeader({
                 <span className="hidden xl:inline">Tools</span>
               </button>
               {showToolsMenu && <nav id={toolsMenuId} aria-label="Class tools" className="absolute right-0 top-full mt-2 max-h-[70dvh] w-64 max-w-[calc(100vw-5rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                <Link href="/documents" onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Upload documents</Link>
                 <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Reports</p>
                 <button type="button" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={menuItemClasses}>PTC Notes</button>
                 <button type="button" onClick={() => runPanelAction("report", onReportHelper)} disabled={!hasLearnerSelection} className={menuItemClasses}>Report Helper</button>
