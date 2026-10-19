@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import OasisHeader from "@/app/components/OasisHeader";
-import { mondayOf, upcomingMonday, planningHeatClasses, PLAN_DAYS, PLAN_FIELDS, type ActivityIdea, type PlanEntry, type PlanField, type PlanningContext, type WeeklyPlan } from "@/lib/planning";
+import { mondayOf, upcomingMonday, planningHeatClasses, parsePlan, parseProvocation, parseProvocationImage, ACTIVITY_FIELDS, PROVOCATION_FIELDS, PLAN_DAYS, PLAN_FIELDS, type ActivityIdea, type PlanEntry, type PlanField, type PlanningContext, type WeeklyPlan } from "@/lib/planning";
 
 const button = "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 const input = "w-full rounded-xl border border-slate-300 bg-white p-3 text-sm leading-relaxed text-slate-800 focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100";
-const labels: Record<PlanField, string> = { activity: "Activity · 3–5 minutes", resources: "Resources", support: "Support", stretch: "Stretch", questions: "Questions to ask" };
+const labels: Record<PlanField, string> = { activity: "Activity · 3–5 minutes", resources: "Resources", support: "Support", stretch: "Stretch", questions: "Questions to ask", provocationSetup: "Area & setup", provocationMaterials: "Materials to prepare", provocationNotice: "What to notice & ask" };
 
 function localWeek() {
   const now = new Date();
@@ -44,8 +44,13 @@ export default function WeeklyPlanner() {
   const [ideas, setIdeas] = useState<ActivityIdea[]>([]);
   const [generating, setGenerating] = useState(false);
   const [ideaError, setIdeaError] = useState("");
+  const [roomJob, setRoomJob] = useState<{ id: string; kind: "provocation" | "image" } | null>(null);
+  const [roomError, setRoomError] = useState<{ id: string; message: string } | null>(null);
+  const [includeSetupSheets, setIncludeSetupSheets] = useState(false);
   const requestId = useRef(0);
   const editVersion = useRef(0);
+  const roomRequestId = useRef(0);
+  const planRef = useRef(plan);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -62,7 +67,8 @@ export default function WeeklyPlanner() {
     fetch(`/api/planning?week=${week}`, { signal: abort.signal, cache: "no-store" }).then(async (response) => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setPlan(data.plan); setRevision(data.revision);
+      const loaded = parsePlan(data.plan);
+      planRef.current = loaded; setPlan(loaded); setRevision(data.revision);
     }).catch((cause) => { if (!abort.signal.aborted) setError(cause.message || "The week could not be loaded."); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
@@ -81,13 +87,14 @@ export default function WeeklyPlanner() {
     return () => { window.removeEventListener("beforeunload", warn); document.removeEventListener("click", warnOnLink, true); };
   }, [dirty]);
 
-  function change(next: WeeklyPlan) { editVersion.current++; setPlan(next); setDirty(true); setNotice(""); }
+  function change(next: WeeklyPlan) { editVersion.current++; planRef.current = next; setPlan(next); setDirty(true); setNotice(""); }
   function updateEntry(id: string, values: Partial<PlanEntry>) { change({ ...plan, entries: plan.entries.map((entry) => entry.id === id ? { ...entry, ...values } : entry) }); }
   function chooseWeek(value: string) {
     if (!value) return;
     const next = mondayOf(value);
     if (next === week || (dirty && !window.confirm("Leave this week and discard unsaved changes? Save or download your plan first if you want to keep them."))) return;
     requestId.current++; setIdeasFor(null); setPickerDay(null); setWeek(next); setPlan({ week: next, entries: [], notes: "" }); setRevision(0); setDirty(false); setLoading(true); setError(""); setNotice("");
+    roomRequestId.current++; setRoomJob(null); setRoomError(null); planRef.current = { week: next, entries: [], notes: "" };
   }
   function shiftWeek(days: number) {
     const date = new Date(`${week}T12:00:00Z`);
@@ -109,12 +116,31 @@ export default function WeeklyPlanner() {
   async function download() {
     setExporting(true); setError("");
     try {
-      const response = await fetch("/api/planning/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(plan) });
+      const response = await fetch("/api/planning/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...plan, includeSetupSheets }) });
       if (!response.ok) { const data = await response.json(); throw new Error(data.error); }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a"); link.href = url; link.download = `OASIS-week-${week}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The PDF could not be downloaded."); }
     finally { setExporting(false); }
+  }
+  async function generateRoom(entry: PlanEntry, kind: "provocation" | "image") {
+    const token = ++roomRequestId.current;
+    const requestWeek = planRef.current.week;
+    const before = JSON.stringify(parseProvocation(entry));
+    setRoomJob({ id: entry.id, kind }); setRoomError(null);
+    try {
+      const response = await fetch(`/api/planning/${kind === "image" ? "image" : "ideas"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: kind, frameworkId: entry.frameworkId, statementId: entry.statementId, level: entry.level, ...(kind === "image" ? parseProvocation(entry) : {}) }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Please try again.");
+      if (token !== roomRequestId.current || planRef.current.week !== requestWeek) return;
+      const latest = planRef.current.entries.find((item) => item.id === entry.id);
+      if (!latest || JSON.stringify(parseProvocation(latest)) !== before) return;
+      const values = kind === "image" ? { provocationImage: parseProvocationImage(data.image) } : { ...parseProvocation(data.provocation), provocationImage: undefined };
+      if (kind === "image" && !values.provocationImage) throw new Error("No image was returned. Your written plan is unchanged.");
+      change({ ...planRef.current, entries: planRef.current.entries.map((item) => item.id === entry.id ? { ...item, ...values } : item) });
+    } catch (cause) {
+      if (token === roomRequestId.current) setRoomError({ id: entry.id, message: cause instanceof Error ? cause.message : "The room suggestion is unavailable. Your plan is unchanged." });
+    } finally { if (token === roomRequestId.current) setRoomJob(null); }
   }
   async function generate(entry: PlanEntry) {
     const current = ++requestId.current;
@@ -132,7 +158,7 @@ export default function WeeklyPlanner() {
   const target = selected?.progression?.find((item) => String(item.level) === level);
   function addObjective(withIdeas: boolean) {
     if (!selected || !selectedArea || !context || pickerDay === null || (selected.progression?.length && !target)) return;
-    const entry: PlanEntry = { id: crypto.randomUUID(), day: pickerDay, frameworkId: context.frameworkId, statementId: selected.id, area: selectedArea.name, objective: selected.text, target: target?.descriptors.join("; ") ?? "", level: target?.level ?? null, activity: "", resources: "", support: "", stretch: "", questions: "" };
+    const entry: PlanEntry = { id: crypto.randomUUID(), day: pickerDay, frameworkId: context.frameworkId, statementId: selected.id, area: selectedArea.name, objective: selected.text, target: target?.descriptors.join("; ") ?? "", level: target?.level ?? null, activity: "", resources: "", support: "", stretch: "", questions: "", ...parseProvocation({}) };
     change({ ...plan, entries: [...plan.entries, entry] }); setPickerDay(null);
     if (withIdeas) void generate(entry);
   }
@@ -154,12 +180,14 @@ export default function WeeklyPlanner() {
           <span role="status" className="py-2 text-sm text-slate-500">{loading ? "Loading your week…" : dirty ? "Unsaved changes" : notice || "A4 landscape · Monday to Friday"}</span>
         </div>
         <p className="mt-2 text-xs text-slate-500">Opens on the upcoming week. Use the arrows or date picker to plan any week ahead.</p>
+        <label className="mt-3 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={includeSetupSheets} onChange={(event) => setIncludeSetupSheets(event.target.checked)} /> Include detailed room setup sheets (with images when available)</label>
+        <p className="mt-1 text-xs text-slate-500">The weekly grid includes a short setup description. Setup sheets add the materials and what to notice.</p>
       </section>
       {error && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</p>}
       {contextError && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{contextError}</p>}
       {context?.preview && <p className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600">Local preview: your full active framework and live activity suggestions. Coverage numbers are illustrative, not your class data. Plans here are temporary.</p>}
       {!loading && <>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-5">
           {PLAN_DAYS.map((day, index) => {
             const entries = plan.entries.filter((entry) => entry.day === index);
             return <section key={day} aria-label={day} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -168,7 +196,21 @@ export default function WeeklyPlanner() {
               {entries.map((entry) => <article key={entry.id} className="mb-5 space-y-4 border-b border-slate-200 pb-5">
                 <div className="rounded-xl bg-cyan-50 p-3"><p className="text-[11px] font-bold uppercase tracking-wide text-cyan-800">{entry.area}</p><h3 className="mt-2 text-sm font-semibold leading-6">{entry.objective}</h3>{entry.target && <p className="mt-2 text-xs leading-5 text-slate-600">Level {entry.level}: {entry.target}</p>}</div>
                 <div className="flex flex-wrap gap-2"><button className={`${button} !px-2 !text-xs`} onClick={() => void generate(entry)}>Explore 2 ideas</button><button className="text-xs text-slate-500 underline" onClick={() => { if (window.confirm("Remove this objective and its activity from the plan?")) change({ ...plan, entries: plan.entries.filter((item) => item.id !== entry.id) }); }}>Remove</button></div>
-                {PLAN_FIELDS.map((field) => <div key={field}><label htmlFor={`${entry.id}-${field}`} className="mb-1 block text-xs font-bold text-slate-600">{labels[field]}</label><textarea id={`${entry.id}-${field}`} value={entry[field]} maxLength={1200} rows={field === "resources" ? 2 : 4} className={input} placeholder={field === "questions" ? "What do you notice?\nHow could you try it another way?" : "Write your own or explore ideas…"} onChange={(event) => updateEntry(entry.id, { [field]: event.target.value })} /></div>)}
+                {ACTIVITY_FIELDS.map((field) => <div key={field}><label htmlFor={`${entry.id}-${field}`} className="mb-1 block text-xs font-bold text-slate-600">{labels[field]}</label><textarea id={`${entry.id}-${field}`} value={entry[field]} maxLength={1200} rows={field === "resources" ? 2 : 4} className={input} placeholder={field === "questions" ? "What do you notice?\nHow could you try it another way?" : "Write your own or explore ideas…"} onChange={(event) => updateEntry(entry.id, { [field]: event.target.value })} /></div>)}
+                <section aria-label={`Room provocation for ${entry.objective}`} className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50/50 p-3">
+                  <div><h4 className="text-sm font-bold text-cyan-900">Room provocation</h4><p className="mt-1 text-xs leading-5 text-slate-600">One invitation to explore this objective through play, beyond the short activity.</p></div>
+                  <button className={`${button} !px-2 !text-xs`} disabled={Boolean(roomJob)} onClick={() => { if (!PROVOCATION_FIELDS.some((field) => entry[field]) || window.confirm("Replace just this room provocation? The activity, support, stretch and questions will stay unchanged. Any setup image will be cleared.")) void generateRoom(entry, "provocation"); }}>{roomJob?.id === entry.id && roomJob.kind === "provocation" ? "Creating setup…" : PROVOCATION_FIELDS.some((field) => entry[field]) ? "Suggest another setup" : "Suggest a room setup"}</button>
+                  {PROVOCATION_FIELDS.map((field) => <div key={field}><label htmlFor={`${entry.id}-${field}`} className="mb-1 block text-xs font-bold text-slate-600">{labels[field]}</label><textarea id={`${entry.id}-${field}`} value={entry[field]} disabled={roomJob?.id === entry.id} maxLength={1200} rows={field === "provocationMaterials" ? 2 : 4} className={input} placeholder={field === "provocationSetup" ? "Where will it go, and what will invite exploration?" : field === "provocationMaterials" ? "Simple, accessible resources…" : "Actions to look for and one open question…"} onChange={(event) => updateEntry(entry.id, { [field]: event.target.value, provocationImage: undefined })} /></div>)}
+                  {entry.provocationImage && <figure>{/* Saved JPEG only; never an untrusted remote image URL. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={entry.provocationImage} alt={`AI-generated setup concept for ${entry.objective}`} className="w-full rounded-lg border border-slate-200" />
+                    <figcaption className="mt-1 text-[11px] leading-4 text-slate-500">AI illustration, not a photograph of your room. Check materials and safety before setting up.</figcaption>
+                  </figure>}
+                  <div className="flex flex-wrap gap-2"><button className={`${button} !px-2 !text-xs`} disabled={Boolean(roomJob) || PROVOCATION_FIELDS.some((field) => !entry[field].trim())} onClick={() => { if (!entry.provocationImage || window.confirm("Generate a replacement image? This makes a new image request.")) void generateRoom(entry, "image"); }}>{roomJob?.id === entry.id && roomJob.kind === "image" ? "Creating image…" : entry.provocationImage ? "Regenerate image" : "Create optional image"}</button>{entry.provocationImage && <button className="text-xs text-slate-500 underline" disabled={Boolean(roomJob)} onClick={() => updateEntry(entry.id, { provocationImage: undefined })}>Remove image</button>}</div>
+                  <p className="text-[11px] leading-4 text-slate-500">Images take a moment and make an additional AI request. Only the curriculum and setup text go to OpenAI—keep learner details out. Save the week to keep your image; editing this setup clears it.</p>
+                  {roomJob?.id === entry.id && <p role="status" className="text-xs text-cyan-800">{roomJob.kind === "image" ? "Creating one matching visual. Your written plan is safe." : "Finding a practical invitation for this objective…"}</p>}
+                  {roomError?.id === entry.id && <p role="alert" className="text-xs leading-5 text-amber-900">{roomError.message}</p>}
+                </section>
               </article>)}
               <button className={`${button} w-full !px-2`} disabled={!context || entries.length >= 3} onClick={() => { setChosen(""); setLevel(""); setSearch(""); setOnlyGaps(false); setOpenArea(null); setPickerDay(index); }}>+ Add from framework</button>
             </section>;
@@ -224,8 +266,8 @@ export default function WeeklyPlanner() {
       <p className="mb-4 text-sm text-slate-600">{ideaEntry.objective}{ideaEntry.target ? ` · ${ideaEntry.target}` : ""}</p>
       {generating && <p role="status" className="py-10 text-center text-slate-500">Finding two practical ways to explore this objective…</p>}
       {ideaError && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{ideaError}</p>}
-      <div className="grid gap-4 sm:grid-cols-2">{ideas.map((idea, index) => <section key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><h3 className="mb-4 font-bold">Idea {index + 1}</h3>{PLAN_FIELDS.map((field) => <div key={field} className="mb-4"><h4 className="text-xs font-bold uppercase tracking-wide text-cyan-800">{labels[field]}</h4><p className="mt-1 whitespace-pre-line text-sm leading-6">{idea[field]}</p></div>)}<button className={`${button} w-full`} onClick={() => { updateEntry(ideaEntry.id, idea); setIdeasFor(null); }}>Use this idea</button></section>)}</div>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Choosing an idea replaces this entry’s activity, resources, support, stretch and questions as a matched set. You can edit any field afterward.</p><button disabled={generating} className={button} onClick={() => void generate(ideaEntry)}>Try two more</button></div>
+      <div className="grid gap-4 sm:grid-cols-2">{ideas.map((idea, index) => <section key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><h3 className="mb-4 font-bold">Idea {index + 1}</h3>{PLAN_FIELDS.map((field) => <div key={field} className="mb-4">{field === "provocationSetup" && <h4 className="mb-3 border-t border-cyan-200 pt-4 font-bold text-cyan-900">Room provocation</h4>}<h4 className="text-xs font-bold uppercase tracking-wide text-cyan-800">{labels[field]}</h4><p className="mt-1 whitespace-pre-line text-sm leading-6">{idea[field]}</p></div>)}<button className={`${button} w-full`} onClick={() => { updateEntry(ideaEntry.id, { ...idea, provocationImage: undefined }); setIdeasFor(null); }}>Use this idea</button></section>)}</div>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Choosing an idea replaces the activity and room provocation as a matched set, clearing any previous setup image. You can edit each field or regenerate just the room setup afterward.</p><button disabled={generating} className={button} onClick={() => void generate(ideaEntry)}>Try two more</button></div>
     </Modal>}
   </div>;
 }

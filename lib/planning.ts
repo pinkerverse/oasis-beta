@@ -1,7 +1,12 @@
 import type { FrameworkDefinition } from "./framework";
 
 export const PLAN_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as const;
-export const PLAN_FIELDS = ["activity", "resources", "support", "stretch", "questions"] as const;
+export const ACTIVITY_FIELDS = ["activity", "resources", "support", "stretch", "questions"] as const;
+export const PROVOCATION_FIELDS = ["provocationSetup", "provocationMaterials", "provocationNotice"] as const;
+export const PLAN_FIELDS = [...ACTIVITY_FIELDS, ...PROVOCATION_FIELDS] as const;
+export type RoomProvocation = Record<(typeof PROVOCATION_FIELDS)[number], string>;
+// Bounded JPEG thumbnails keep even a full 15-objective plan below request limits.
+export const MAX_PROVOCATION_IMAGE_LENGTH = 160_000;
 export type PlanField = (typeof PLAN_FIELDS)[number];
 export type ActivityIdea = Record<PlanField, string>;
 export type PlanEntry = ActivityIdea & {
@@ -13,6 +18,7 @@ export type PlanEntry = ActivityIdea & {
   objective: string;
   target: string;
   level: number | null;
+  provocationImage?: string;
 };
 export type WeeklyPlan = { week: string; notes: string; entries: PlanEntry[] };
 export type ObjectiveCoverage = { observations: number; learners: number };
@@ -68,7 +74,19 @@ function text(value: unknown, max: number) {
 
 export function parseIdea(value: unknown): ActivityIdea {
   const item = record(value);
-  return Object.fromEntries(PLAN_FIELDS.map((field) => [field, text(item[field], 1200)])) as ActivityIdea;
+  return { ...Object.fromEntries(ACTIVITY_FIELDS.map((field) => [field, text(item[field], 1200)])), ...parseProvocation(item) } as ActivityIdea;
+}
+
+export function parseProvocation(value: unknown): RoomProvocation {
+  const item = record(value);
+  // Older plans predate this section. Missing fields stay blank, never invented.
+  return Object.fromEntries(PROVOCATION_FIELDS.map((field) => [field, text(item[field] === undefined ? "" : item[field], 1200)])) as RoomProvocation;
+}
+
+export function parseProvocationImage(value: unknown): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || value.length > MAX_PROVOCATION_IMAGE_LENGTH || !/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error("Use a generated planning JPEG within the image size limit.");
+  return value;
 }
 
 export function parsePlan(value: unknown): WeeklyPlan {
@@ -91,7 +109,8 @@ export function parsePlan(value: unknown): WeeklyPlan {
     const statementId = text(entry.statementId, 200);
     const frameworkId = text(entry.frameworkId, 100);
     if (!objective || !statementId || !frameworkId) throw new Error("Choose a framework objective.");
-    return { ...parseIdea(entry), id, day, level, objective, statementId, frameworkId, area: text(entry.area, 500), target: text(entry.target, 3000) };
+    const provocationImage = parseProvocationImage(entry.provocationImage);
+    return { ...parseIdea(entry), id, day, level, objective, statementId, frameworkId, area: text(entry.area, 500), target: text(entry.target, 3000), ...(provocationImage ? { provocationImage } : {}) };
   });
   return { week, notes: text(plan.notes, 6000), entries };
 }

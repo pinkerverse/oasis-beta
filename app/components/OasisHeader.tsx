@@ -62,6 +62,26 @@ function actionButtonClasses(active: boolean) {
 
 const menuItemClasses = "block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-600 disabled:cursor-not-allowed disabled:text-slate-400";
 
+type ToolIcon = "upload" | "report" | "note" | "insight" | "settings";
+const toolItemClasses = "group/tool flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-cyan-50/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
+
+function ToolMenuContent({ icon, label, description }: { icon: ToolIcon; label: string; description?: string }) {
+  const paths: Record<ToolIcon, string> = {
+    upload: "M12 16V4m-4 4 4-4 4 4M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4",
+    report: "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5Zm0 0v5h5M8 12h8M8 16h5",
+    note: "M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6M15 4l5 5M10 14l1-5 7-7 5 5-7 7-6 1Z",
+    insight: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Zm13 0a3 3 0 1 0-6 0 3 3 0 0 0 6 0",
+    settings: "M4 7h16M4 17h16M8 4v6M16 14v6",
+  };
+  return <>
+    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50 text-slate-500 transition group-hover/tool:border-cyan-200 group-hover/tool:bg-white group-hover/tool:text-cyan-700">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[19px] w-[19px]"><path d={paths[icon]} /></svg>
+    </span>
+    <span className="min-w-0 flex-1"><span className="block text-sm font-semibold leading-5 text-slate-800">{label}</span>{description && <span className="mt-0.5 block text-xs leading-4 text-slate-500">{description}</span>}</span>
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-3.5 w-3.5 shrink-0 text-slate-300 group-hover/tool:text-cyan-600"><path d="m6 4 4 4-4 4" /></svg>
+  </>;
+}
+
 export default function OasisHeader({
   activePage = null,
   className = "",
@@ -370,19 +390,19 @@ export default function OasisHeader({
                 <span aria-hidden="true" className="text-xl leading-none">⋯</span>
                 <span className="hidden xl:inline">Tools</span>
               </button>
-              {showToolsMenu && <nav id={toolsMenuId} aria-label="Class tools" className="absolute right-0 top-full mt-2 max-h-[70dvh] w-64 max-w-[calc(100vw-5rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                <Link href="/documents" onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Upload documents</Link>
-                <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Reports</p>
-                <button type="button" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={menuItemClasses}>PTC Notes</button>
-                <button type="button" onClick={() => runPanelAction("report", onReportHelper)} disabled={!hasLearnerSelection} className={menuItemClasses}>Report Helper</button>
-                {!hasLearnerSelection && <p className="px-3 pb-2 text-xs leading-5 text-slate-500">{ptcNotesRequiresLearnerSelection ? "Select a learner in My Class to use these report tools." : "Select a learner in My Class to use Report Helper."}</p>}
-                <div className="mt-1 border-t border-slate-100 pt-1 sm:hidden">
-                  <button type="button" onClick={() => runPanelAction("teacher-note", onTeacherNote)} className={menuItemClasses}>Teacher Note</button>
-                  <Link href="/learner-intelligence" aria-current={learnerIntelligenceActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Learner Insight</Link>
-                  <Link href="/classroom-insights" aria-current={classroomInsightsActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Classroom Intelligence</Link>
-                  <Link href="/class-attainment" aria-current={classAttainmentActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={menuItemClasses}>Class Attainment</Link>
+              {showToolsMenu && <nav id={toolsMenuId} aria-label="Class tools" className="absolute right-0 top-full mt-3 max-h-[min(75dvh,640px)] w-80 max-w-[calc(100vw-5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.24)]">
+                <div className="px-3 pb-2 pt-2"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700">Classroom tools</p></div>
+                <Link href="/documents" onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="upload" label="Upload documents" description="Bring learner context together" /></Link>
+                <div className="mx-3 mb-2 mt-3 border-t border-slate-100 pt-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Reports & reflection</p></div>
+                <button type="button" aria-label="PTC Notes" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={toolItemClasses}><ToolMenuContent icon="report" label="PTC Notes" description={ptcNotesRequiresLearnerSelection && !hasLearnerSelection ? "Select a learner in My Class" : "Prepare conference summaries"} /></button>
+                <button type="button" aria-label="Report Helper" onClick={() => runPanelAction("report", onReportHelper)} disabled={!hasLearnerSelection} className={toolItemClasses}><ToolMenuContent icon="report" label="Report Helper" description={!hasLearnerSelection ? "Select a learner in My Class" : "Gather evidence for report writing"} /></button>
+                <div className="mt-2 border-t border-slate-100 pt-2 sm:hidden">
+                  <button type="button" aria-label="Teacher Note" onClick={() => runPanelAction("teacher-note", onTeacherNote)} className={toolItemClasses}><ToolMenuContent icon="note" label="Teacher Note" /></button>
+                  <Link href="/learner-intelligence" aria-current={learnerIntelligenceActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="insight" label="Learner Insight" /></Link>
+                  <Link href="/classroom-insights" aria-current={classroomInsightsActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="insight" label="Classroom Intelligence" /></Link>
+                  <Link href="/class-attainment" aria-current={classAttainmentActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="report" label="Class Attainment" /></Link>
                 </div>
-                <div className="mt-1 border-t border-slate-100 pt-1"><button type="button" onClick={openSettings} className={menuItemClasses}>Settings</button></div>
+                <div className="mt-2 border-t border-slate-100 pt-2"><button type="button" aria-label="Settings" onClick={openSettings} className={toolItemClasses}><ToolMenuContent icon="settings" label="Settings" /></button></div>
               </nav>}
             </div>
           )}

@@ -1,10 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildObjectiveCoverage, mondayOf, upcomingMonday, planningHeatClasses, planningIdeaInput, parsePlan, type PlanEntry } from "./planning.ts";
+import { buildObjectiveCoverage, mondayOf, upcomingMonday, planningHeatClasses, planningIdeaInput, parsePlan, parseProvocation, parseProvocationImage, type PlanEntry } from "./planning.ts";
 import type { FrameworkDefinition } from "./framework.ts";
 
 const framework: FrameworkDefinition = { key: "test", name: "Test", assessmentLevels: [], areas: ["Physical"], areaDefinitions: [{ id: "physical", name: "Physical", statements: [{ id: "balance", text: "Balances" }, { id: "grip", text: "Uses tools" }] }] };
-const entry: PlanEntry = { id: "entry", day: 0, frameworkId: "framework", statementId: "balance", objective: "Balances", area: "Physical", level: 2, target: "Tries different ways of balancing", activity: "Try a path.", resources: "Floor markers", support: "Offer a hand.", stretch: "Try a different path.", questions: "What helps you balance?" };
+const entry: PlanEntry = { id: "entry", day: 0, frameworkId: "framework", statementId: "balance", objective: "Balances", area: "Physical", level: 2, target: "Tries different ways of balancing", activity: "Try a path.", resources: "Floor markers", support: "Offer a hand.", stretch: "Try a different path.", questions: "What helps you balance?", ...parseProvocation({}) };
+
+test("legacy plans gain blank provocation fields without losing teacher edits", () => {
+  const legacy = { ...entry } as Record<string, unknown>;
+  delete legacy.provocationSetup; delete legacy.provocationMaterials; delete legacy.provocationNotice;
+  assert.deepEqual(parsePlan({ week: "2026-10-19", notes: "Keep", entries: [legacy] }).entries[0], entry);
+  const filled = { ...entry, provocationSetup: "Make a floor path.", provocationMaterials: "Tape", provocationNotice: "Notice weight shifts. What helps?" };
+  assert.deepEqual(parsePlan({ week: "2026-10-19", notes: "", entries: [filled] }).entries[0], filled);
+  assert.throws(() => parseProvocation({ provocationSetup: "x".repeat(1201) }));
+  assert.throws(() => parseProvocation({ provocationNotice: 4 }));
+});
+
+test("saved setup images reject external URLs, SVG and oversized payloads", () => {
+  assert.equal(parseProvocationImage(undefined), undefined);
+  for (const invalid of ["https://example.com/a.jpg", "data:image/svg+xml;base64,abcd", "data:image/jpeg;base64,/9j/" + "A".repeat(160000)]) assert.throws(() => parseProvocationImage(invalid));
+});
 
 test("weekly dates normalize to Monday across months and reject invalid dates", () => {
   assert.equal(mondayOf("2026-11-01"), "2026-10-26");

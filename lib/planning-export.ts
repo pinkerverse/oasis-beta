@@ -8,7 +8,7 @@ const fontSize = 9.5;
 const leading = 12;
 const clean = (text: string) => text.replace(/[\u2010-\u2015]/g, "-").replace(/\u2026/g, "...").replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
 
-export async function createPlanningPdf(plan: WeeklyPlan) {
+export async function createPlanningPdf(plan: WeeklyPlan, options: { includeSetupSheets?: boolean } = {}) {
   const doc = new PDFDocument({ size: "A4", layout: "landscape", margins: { top: margin, left: margin, right: margin, bottom: 14 }, bufferPages: true, info: { Title: `Weekly plan - ${plan.week}`, Author: "OASIS" } });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -81,6 +81,11 @@ export async function createPlanningPdf(plan: WeeklyPlan) {
       return entry ? `${entry.area}\n${entry.objective}${entry.target ? `\nLevel ${entry.level}: ${entry.target}` : ""}` : "";
     }));
     for (const [key, label] of [["activity", "Activity (3-5 min)"], ["resources", "Resources"], ["support", "Support"], ["stretch", "Stretch"], ["questions", "Questions to ask"]] as const) row(label, entries.map((items) => items[slot]?.[key] ?? ""));
+    row("Room provocation", entries.map((items) => {
+      const entry = items[slot];
+      if (!entry) return "";
+      return entry.provocationSetup || "";
+    }));
   }
   const notes = wrap(plan.notes, width - 20);
   let offset = 0;
@@ -94,6 +99,34 @@ export async function createPlanningPdf(plan: WeeklyPlan) {
     notes.slice(offset, offset + take).forEach((line, index) => text(line, margin + 10, y + 26 + index * leading, width - 20));
     y += height; offset += take;
   } while (offset < notes.length);
+  if (options.includeSetupSheets) for (const entry of plan.entries.filter((item) => item.provocationSetup || item.provocationMaterials || item.provocationNotice || item.provocationImage)) {
+    const imageWidth = entry.provocationImage ? 340 : 0;
+    const gap = entry.provocationImage ? 24 : 0;
+    const detailsX = margin + imageWidth + gap;
+    const detailsWidth = width - imageWidth - gap;
+    let detailsY = 80;
+    function setupHeading(continued = false) {
+      doc.addPage();
+      text(`ROOM PROVOCATION / ${days[entry.day]}${continued ? " (continued)" : ""}`, margin, 26, width, true, 16);
+      text(`Week beginning ${plan.week} | ${entry.provocationImage ? "AI-generated setup concept | " : ""}Review materials and safety`, margin, 52, width, false, 9);
+      detailsY = 80;
+    }
+    setupHeading();
+    if (entry.provocationImage) {
+      try { doc.image(Buffer.from(entry.provocationImage.split(",")[1], "base64"), margin, 80, { fit: [imageWidth, 300], align: "center" }); }
+      catch { text("Image unavailable. Use the written setup.", margin, 80, imageWidth, false, 10); }
+      text("Illustration only - not a photograph of your classroom.", margin, 398, imageWidth, false, 9);
+    }
+    for (const [label, value] of [["Learning objective", `${entry.objective}${entry.target ? `\n${entry.target}` : ""}`], ["Area & setup", entry.provocationSetup], ["Materials to prepare", entry.provocationMaterials], ["What to notice & ask", entry.provocationNotice]]) {
+      if (detailsY + 40 > bottom) setupHeading(true);
+      text(label, detailsX, detailsY, detailsWidth, true, 10); detailsY += 18;
+      for (const line of wrap(value || "", detailsWidth)) {
+        if (detailsY + leading > bottom) setupHeading(true);
+        text(line, detailsX, detailsY, detailsWidth); detailsY += leading;
+      }
+      detailsY += 12;
+    }
+  }
   const pages = doc.bufferedPageRange();
   for (let page = 0; page < pages.count; page++) {
     doc.switchToPage(page);
