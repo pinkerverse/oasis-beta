@@ -28,6 +28,7 @@ export default function DocumentUploader() {
   const [confirmed, setConfirmed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [expandedSections, setExpandedSections] = useState<Set<number>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const inFlight = useRef(false);
@@ -67,6 +68,7 @@ export default function DocumentUploader() {
     const body = await responseBody(response);
     if (!response.ok) throw new Error(body.error);
     setCurrent(body.document); setSections(body.document.sections); setLearners(body.learners); setConfirmed(false);
+    setExpandedSections(body.document.status === "draft" && body.document.sections.length ? new Set([0]) : new Set());
     requestAnimationFrame(() => reviewHeading.current?.focus());
   }
 
@@ -95,6 +97,7 @@ export default function DocumentUploader() {
         if (!response.ok) throw new Error(body.error);
         await open(body.id);
         setSections((previous) => previous.length ? previous : [emptyDocumentSection()]);
+        setExpandedSections(new Set([0]));
         setNotice("Choose the learner, copy an exact excerpt from the saved source, and check its meaning. Nothing is added until you confirm and save.");
       } else {
         // Reuse the normal privacy checks, duplicate protection and hourly read limit.
@@ -156,6 +159,7 @@ export default function DocumentUploader() {
       const body = await responseBody(response);
       if (!response.ok) throw new Error(body.error);
       setCurrent({ ...current, sections, status: "imported" });
+      setExpandedSections(new Set());
       setNotice(`Added to ${new Set(sections.map((section) => section.learnerId)).size} learner record(s) as private document context. No observations or assessment stars were changed.`);
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "The import could not be saved."); }
@@ -181,6 +185,10 @@ export default function DocumentUploader() {
   if (current && !readonly) {
     try { validateDocumentSections(sections, current.source_text, new Set(learners.map((learner) => learner.id))); }
     catch (e) { reviewIssue = e instanceof Error ? e.message : "Complete the learner matches and source excerpts."; }
+  }
+  function sectionTitle(section: DocumentSection) {
+    const learner = learners.find((item) => item.id === section.learnerId);
+    return learner?.label || (section.sourceLabel === "Unidentified learner" ? "Learner not matched yet" : section.sourceLabel);
   }
   return <div className="min-h-screen bg-slate-50 text-slate-900">
     <OasisHeader />
@@ -231,8 +239,11 @@ export default function DocumentUploader() {
           <div className="flex flex-wrap gap-3"><button className={button} disabled={Boolean(busy)} onClick={() => void recover(false)}>Retry automatic reading</button><button className={button} disabled={Boolean(busy)} onClick={() => void recover(true)}>Match learners myself</button></div>
         </div> : current.status === "reading" && <div className="space-y-3 rounded-xl bg-cyan-50 p-4"><p className="text-sm">Reading is still in progress. If it was interrupted, recovery options become available after three minutes.</p><button className={button} disabled={Boolean(busy)} onClick={() => void open(current.id).catch((e) => setError(e.message))}>Check reading status</button></div>}
         <details className="rounded-xl bg-slate-50 p-4"><summary className="cursor-pointer text-sm font-semibold">Read extracted source text</summary><pre className="mt-4 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-6">{current.source_text}</pre></details>
-        {sections.map((section, index) => <article key={index} className="space-y-4 rounded-2xl border border-slate-200 p-4 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold">{section.sourceLabel === "Unidentified learner" ? "Choose who this section belongs to" : `Found in document: ${section.sourceLabel}`}</h3>{!readonly && <button className={button} disabled={Boolean(busy)} onClick={() => { setSections((previous) => previous.filter((_, i) => i !== index)); setConfirmed(false); }}>Exclude this section</button>}</div>
+        {sections.length > 1 && <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">{sections.length} learners in this document</p><div className="flex flex-wrap gap-2"><button className={button} type="button" onClick={() => setExpandedSections(new Set(sections.map((_, index) => index)))}>Open all learners</button><button className={button} type="button" onClick={() => setExpandedSections(new Set())}>Close all learners</button></div></div>}
+        {sections.map((section, index) => <details key={`${current.id}-${index}`} open={expandedSections.has(index)} onToggle={(event) => { const open = event.currentTarget.open; setExpandedSections((previous) => { if (previous.has(index) === open) return previous; const next = new Set(previous); if (open) next.add(index); else next.delete(index); return next; }); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 marker:content-none hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-cyan-600 sm:p-5 [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block font-bold">{sectionTitle(section)}</span><span className="mt-1 block text-xs font-normal text-slate-500">{section.items.length} {section.items.length === 1 ? "point" : "points"}{!readonly && !section.learnerId ? " · Needs learner match" : ""}</span></span><span aria-hidden="true" className="shrink-0 text-xl text-slate-500 transition-transform group-open:rotate-180">⌄</span></summary>
+          <div className="space-y-4 border-t border-slate-200 p-4 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold">{section.sourceLabel === "Unidentified learner" ? "Choose who this section belongs to" : `Found in document: ${section.sourceLabel}`}</h3>{!readonly && <button className={button} disabled={Boolean(busy)} onClick={() => { setSections((previous) => previous.filter((_, i) => i !== index)); setExpandedSections((previous) => new Set([...previous].filter((item) => item !== index).map((item) => item > index ? item - 1 : item))); setConfirmed(false); }}>Exclude this section</button>}</div>
           <div className="grid min-w-0 gap-4 md:grid-cols-3">
             <label className="text-sm font-medium">Add to learner<select className={`${input} mt-2`} value={section.learnerId} disabled={readonly || Boolean(busy)} onChange={(event) => edit(index, { learnerId: event.target.value })}><option value="">Choose learner — match unclear</option>{learners.map((learner) => <option key={learner.id} value={learner.id}>{learner.label} · {learner.className}</option>)}</select></label>
             <label className="text-sm font-medium">Document status<select className={`${input} mt-2`} value={section.status} disabled={readonly || Boolean(busy)} onChange={(event) => edit(index, { status: event.target.value as DocumentSection["status"] })}><option value="unknown">Not confirmed</option><option value="final">Final · teacher reviewed</option><option value="draft">Draft · tentative</option></select></label>
@@ -245,8 +256,9 @@ export default function DocumentUploader() {
           </div>)}
           {!section.items.length && <p className="text-sm text-red-700">Keep at least one point, or exclude this section.</p>}
           {!readonly && <button className={button} disabled={Boolean(busy) || section.items.length >= 12} onClick={() => edit(index, { items: [...section.items, { kind: "context", text: "", quote: "" }] })}>Add a point from the source</button>}
-        </article>)}
-        {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5"><button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { setSections((previous) => [...previous, emptyDocumentSection()]); setConfirmed(false); }}>Add a learner section</button>{reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}<label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} />I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context, not as new observations or assessment scores.</label><button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !confirmed || Boolean(reviewIssue)} onClick={() => void save()}>Add to learner records</button></div>}
+          </div>
+        </details>)}
+        {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5"><button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { const nextIndex = sections.length; setSections((previous) => [...previous, emptyDocumentSection()]); setExpandedSections((previous) => new Set([...previous, nextIndex])); setConfirmed(false); }}>Add a learner section</button>{reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}<label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} />I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context, not as new observations or assessment scores.</label><button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !confirmed || Boolean(reviewIssue)} onClick={() => void save()}>Add to learner records</button></div>}
       </section>}
     </main>
   </div>;

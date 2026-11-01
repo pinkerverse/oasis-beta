@@ -14,6 +14,7 @@ import {
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import AccountSecurity from "@/app/components/AccountSecurity";
 import AsbPtcNotesModal from "@/app/components/AsbPtcNotesModal";
+import MidYearReportHelperModal from "@/app/components/MidYearReportHelperModal";
 import OasisHeader from "@/app/components/OasisHeader";
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import {
@@ -12357,93 +12358,11 @@ onClick={() => {
 )}
 
 {showReportHelper && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="report-helper-title"
-      className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl"
-    >
-
-      <div className="flex items-start justify-between">
-
-        <div>
-          <h2 id="report-helper-title" className="text-3xl font-bold text-slate-900">
-            Export Report Helper
-          </h2>
-
-          <p className="mt-2 text-slate-500">
-            Generate report writing support for the selected learners.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowReportHelper(false)}
-          className="text-slate-500 hover:text-slate-900"
-          aria-label="Close report helper"
-        >
-          ✕
-        </button>
-
-      </div>
-
-      <div className="mt-8 rounded-2xl bg-slate-100 p-5">
-
-        <h3 className="font-semibold text-slate-900">
-          Selected Learners
-        </h3>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {selectedChildren.map((id) => {
-
-  const learner = pupils.find((p) => p.id === id);
-
-  return (
-    <span
-      key={id}
-      className="rounded-full bg-white px-4 py-2 font-medium text-slate-800"
-    >
-      {learner
-        ? getLearnerInitials(learner)
-        : id}
-    </span>
-  );
-
-})}
-        </div>
-
-      </div>
-
-      <p className="mt-6 text-sm text-slate-500">
-        OASIS will generate one report helper sheet per selected learner.
-      </p>
-
-      <div className="mt-8 flex justify-end gap-3">
-
-        <button
-          type="button"
-          onClick={() => setShowReportHelper(false)}
-          className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          disabled
-          title="PDF export is not available yet"
-          className="cursor-not-allowed rounded-xl bg-slate-200 px-5 py-3 font-medium text-slate-500"
-        >
-          PDF export coming soon
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
+  <MidYearReportHelperModal
+    learners={pupils}
+    initialLearnerIds={selectedChildren}
+    onClose={() => setShowReportHelper(false)}
+  />
 )}
 
 {showSettings && (
