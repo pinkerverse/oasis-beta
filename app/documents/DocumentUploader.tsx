@@ -84,8 +84,9 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
       setPrivacyDrafts((previous) => [...previous, { filename: body.filename, sourceText: body.sourceText, error: body.error, learnerId }]);
       return `${filename}: needs a privacy check before AI reading.`;
     }
-    // Both successful and failed readings have a useful next step in the review panel.
-    if (body.id) await open(body.id);
+    // New readings and interrupted readings have a useful next step in the review panel.
+    // Completed imports stay in the compact document history instead of reopening their saved details.
+    if (body.id && body.status !== "imported") await open(body.id);
     if (!response.ok) throw new Error(body.error);
     if (!body.id) throw new Error("The reading response was interrupted. Check Your documents for the saved reading and recovery options.");
     if (body.duplicate) return `${filename}: ${body.status === "imported" ? "already imported — no duplicate added" : body.status === "reading" ? "already being read; try again in a few minutes if interrupted" : "already has a review draft below"}.`;
@@ -165,7 +166,7 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
       const response = await fetch("/api/document-imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: current.id, sections, confirmed }) });
       const body = await responseBody(response);
       if (!response.ok) throw new Error(body.error);
-      setCurrent({ ...current, sections, status: "imported" });
+      setCurrent(null);
       setExpandedSections(new Set());
       setNotice(`Added to ${new Set(sections.map((section) => section.learnerId)).size} learner record(s) as private document context. No observations or assessment stars were changed.`);
       await refresh();
@@ -256,12 +257,12 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
         </div>
         {loading ? <p className="text-sm text-slate-500">Loading documents…</p> : documents.length === 0 ? <p className="text-sm text-slate-500">Your uploaded documents will appear here. Nothing has been added yet.</p> : <ul className="divide-y divide-slate-100">{documents.filter((doc) => !filter || doc.learner_ids.includes(filter)).map((doc) => <li key={doc.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="min-w-0 flex-1"><p className="font-semibold">{doc.filename}</p><p className="mt-1 text-xs text-slate-500">{doc.document_type} · {doc.status === "draft" ? "Needs your review — not yet added" : doc.status === "reading" ? "Reading — no learner changes yet" : doc.status === "failed" ? "Text saved — retry reading or match learners yourself" : `Private context · ${doc.learner_ids.map((id) => learners.find((l) => l.id === id)?.label || "Archived learner").join(", ")}`}</p></div>
-          <button className={button} disabled={Boolean(busy)} onClick={() => void open(doc.id).catch((e) => setError(e.message))}>{doc.status === "draft" ? "Review & match" : doc.status === "failed" ? "Continue review" : "View"}</button><button className={button} disabled={Boolean(busy)} onClick={() => void remove(doc.id)}>Remove</button>
+          {doc.status !== "imported" && <button className={button} disabled={Boolean(busy)} onClick={() => void open(doc.id).catch((e) => setError(e.message))}>{doc.status === "draft" ? "Review & match" : doc.status === "failed" ? "Continue review" : "Check status"}</button>}<button className={button} disabled={Boolean(busy)} onClick={() => void remove(doc.id)}>Remove</button>
         </li>)}</ul>}
       </section>
 
-      {current && <section aria-labelledby="document-review" className="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 sm:p-8">
-        <div><h2 ref={reviewHeading} tabIndex={-1} id="document-review" className="text-2xl font-bold">{current.status === "imported" ? "Saved private context" : current.status === "draft" ? "Review and match learners" : "Document reading — not added to learners"}</h2><p className="mt-2 text-sm text-slate-500">{current.filename} · {current.document_type}</p></div>
+      {current && current.status !== "imported" && <section aria-labelledby="document-review" className="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 sm:p-8">
+        <div><h2 ref={reviewHeading} tabIndex={-1} id="document-review" className="text-2xl font-bold">{current.status === "draft" ? "Review and match learners" : "Document reading — not added to learners"}</h2><p className="mt-2 text-sm text-slate-500">{current.filename} · {current.document_type}</p></div>
         <p className="text-sm leading-6 text-slate-600">Check who each section belongs to, the wording, and whether this is a final teacher-reviewed report or a draft. Targets stay separate from current skills. Unknown dates stay unknown—not today’s date.</p>
         {recoverable ? <div className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
           <h3 className="font-semibold">Your text is saved. Learner matching hasn’t finished.</h3>
