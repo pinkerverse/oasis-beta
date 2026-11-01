@@ -1,7 +1,7 @@
 import { getCurrentWorkspaceContext } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { documentImportLearners } from "@/lib/document-import-server";
-import { validateDocumentSections } from "@/lib/document-import";
+import { canRecoverDocument, validateDocumentSections } from "@/lib/document-import";
 import { privacyReviewResponse, reviewPrivacyText } from "@/lib/privacy-guardrails";
 
 export async function GET(request: Request) {
@@ -27,11 +27,20 @@ export async function POST(request: Request) {
   if (!context) return Response.json({ error: "Sign in to review documents." }, { status: 401 });
   try {
     const body = await request.json();
-    if (body.confirmed !== true) return Response.json({ error: "Review the learner matches and points before saving." }, { status: 400 });
     const db = await createClient();
-    const { data: draft, error } = await db.from("learner_document_imports").select("id, status, source_text")
+    const { data: draft, error } = await db.from("learner_document_imports").select("id, status, source_text, created_at")
       .eq("id", body.id).eq("school_id", context.schoolId).eq("workspace_id", context.workspaceId).maybeSingle();
     if (error || !draft) return Response.json({ error: "Document not found." }, { status: 404 });
+    if (body.action === "manual_review") {
+      if (!canRecoverDocument(draft)) return Response.json({ error: "This document is still being read or already has a review. Reopen it to see its latest status." }, { status: 409 });
+      // Keep the source intact. This only opens a review; it adds nothing to learners.
+      // RLS restricts this transition to the author or a school administrator.
+      const result = await db.from("learner_document_imports").update({ status: "draft" })
+        .eq("id", draft.id).eq("school_id", context.schoolId).eq("workspace_id", context.workspaceId).eq("status", draft.status).select("id").maybeSingle();
+      if (result.error || !result.data) return Response.json({ error: result.error?.code === "23505" ? "This document already has another reading or review. Open that copy in Your documents." : "This document changed or you do not have permission to review it. Reopen it and try again." }, { status: 409 });
+      return Response.json({ id: draft.id, readyForReview: true });
+    }
+    if (body.confirmed !== true) return Response.json({ error: "Review the learner matches and points before saving." }, { status: 400 });
     if (draft.status === "imported") return Response.json({ saved: true, alreadySaved: true });
     if (draft.status !== "draft") return Response.json({ error: "This document is not ready for review." }, { status: 409 });
     const { learners } = await documentImportLearners(context);

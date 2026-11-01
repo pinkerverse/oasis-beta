@@ -6,7 +6,7 @@ import { privacyReviewResponse, reviewPrivacyText } from "@/lib/privacy-guardrai
 import { documentImportLearners } from "@/lib/document-import-server";
 import { readLearnerDocument } from "@/lib/document-import-reader";
 import { analyzeLearnerDocument } from "@/lib/document-import-ai";
-import { documentText, matchDocumentLearner, MAX_DOCUMENT_BYTES, MAX_DOCUMENT_TEXT } from "@/lib/document-import";
+import { canRecoverDocument, documentText, matchDocumentLearner, MAX_DOCUMENT_BYTES, MAX_DOCUMENT_TEXT } from "@/lib/document-import";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -42,9 +42,10 @@ export async function POST(request: Request) {
     const { data: existing, error: lookupError } = await db.from("learner_document_imports").select("id, status, created_at")
       .eq("school_id", context.schoolId).eq("workspace_id", context.workspaceId).eq("content_hash", hash).in("status", ["reading", "draft", "imported"]).maybeSingle();
     if (lookupError) throw new Error("Document storage is not ready. Ask your administrator to apply the document-import migration.");
-    if (existing?.status === "reading" && Date.now() - Date.parse(existing.created_at) > 180000) {
+    if (existing && canRecoverDocument(existing)) {
       // Recover a timed-out read belonging to this user (RLS also enforces ownership).
-      await db.from("learner_document_imports").update({ status: "failed" }).eq("id", existing.id).eq("created_by", context.userId).eq("status", "reading");
+      const recovered = await db.from("learner_document_imports").update({ status: "failed" }).eq("id", existing.id).eq("created_by", context.userId).eq("status", "reading").select("id").maybeSingle();
+      if (recovered.error || !recovered.data) throw new Error("The document changed or could not be recovered. Reopen it to check its status.");
     } else if (existing) {
       return Response.json({ id: existing.id, duplicate: true, status: existing.status });
     }
@@ -59,14 +60,14 @@ export async function POST(request: Request) {
     const sections = result.sections.map((section) => ({ ...section, learnerId: matchDocumentLearner(section.sourceLabel, learners) }));
     const outputPrivacy = reviewPrivacyText(sections.flatMap((section) => section.items.map((item) => item.text)).join("\n"));
     if (outputPrivacy.requiresReview) throw new Error("The reading includes sensitive details. Remove those details from the source and try again.");
-    const { error } = await db.from("learner_document_imports").update({ document_type: result.documentType, sections, status: "draft" }).eq("id", draftId).eq("status", "reading");
-    if (error) throw new Error("The review draft could not be saved. Please try again.");
+    const { data: saved, error } = await db.from("learner_document_imports").update({ document_type: result.documentType, sections, status: "draft" }).eq("id", draftId).eq("status", "reading").select("id").maybeSingle();
+    if (error || !saved) throw new Error("The review draft could not be saved. Reopen the document to check its status.");
     return Response.json({ id: draftId, warnings: result.warnings });
   } catch (error) {
     if (draftId) await db.from("learner_document_imports").update({ status: "failed" }).eq("id", draftId).eq("status", "reading");
     // Do not return parser/model errors that could contain document text or credentials.
     const message = error instanceof Error ? error.message : "";
     const safe = /^(Choose |This |No readable |No learner-specific |Use 20|Split |The (CSV|class|document|review draft|reading)|Document (storage|reading)|An extracted|Each section|Keep 1|Invalid |Confirm )/.test(message);
-    return Response.json({ error: safe ? message : "The document could not be read safely. Try a smaller Word or text-based PDF file. Nothing was added to learners." }, { status: 400 });
+    return Response.json({ id: draftId || undefined, error: safe ? message : draftId ? "Automatic reading could not finish. Open the saved document to retry or match its text to learners yourself. Nothing was added to learners." : "The document could not be read. Try a Word or text-based PDF file. Nothing was added to learners." }, { status: 400 });
   }
 }

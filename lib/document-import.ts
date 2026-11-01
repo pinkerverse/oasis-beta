@@ -18,6 +18,15 @@ export type DocumentImport = {
   source_text: string; sections: DocumentSection[]; created_at: string;
 };
 
+// A read has a 120-second server limit. Leave a margin before allowing recovery.
+export function canRecoverDocument(document: Pick<DocumentImport, "status" | "created_at">, now = Date.now()) {
+  return document.status === "failed" || (document.status === "reading" && now - Date.parse(document.created_at) > 180000);
+}
+
+export function emptyDocumentSection(): DocumentSection {
+  return { sourceLabel: "Unidentified learner", learnerId: "", documentDate: "", status: "unknown", items: [{ kind: "context", text: "", quote: "" }] };
+}
+
 export function documentText(value: unknown) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }

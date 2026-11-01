@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DOCUMENT_CONTEXT_RULES, matchDocumentLearner, validateDocumentFile, validateDocumentSections } from "./document-import.ts";
+import { canRecoverDocument, emptyDocumentSection, DOCUMENT_CONTEXT_RULES, matchDocumentLearner, validateDocumentFile, validateDocumentSections } from "./document-import.ts";
 
 const source = "AB takes turns with a verbal prompt. Next steps: AB will name basic shapes. CD enjoys building.";
 const section = { sourceLabel: "AB", learnerId: "learner-a", status: "unknown", documentDate: "", items: [
@@ -42,4 +42,27 @@ test("imported context cannot establish scores or double-count observations", ()
   assert.match(DOCUMENT_CONTEXT_RULES, /Future targets are NOT attained skills/);
   assert.match(DOCUMENT_CONTEXT_RULES, /Do not change assessment stars/);
   assert.match(DOCUMENT_CONTEXT_RULES, /not independent evidence/);
+});
+
+test("recovery is limited to failed or interrupted readings, never saved imports or active reads", () => {
+  const now = Date.parse("2026-11-01T12:00:00Z");
+  const old = "2026-11-01T11:56:59Z";
+  assert.equal(canRecoverDocument({ status: "failed", created_at: old }, now), true);
+  assert.equal(canRecoverDocument({ status: "reading", created_at: old }, now), true);
+  assert.equal(canRecoverDocument({ status: "reading", created_at: "2026-11-01T11:57:00Z" }, now), false);
+  assert.equal(canRecoverDocument({ status: "reading", created_at: "invalid" }, now), false);
+  for (const status of ["draft", "imported", "removed"] as const) assert.equal(canRecoverDocument({ status, created_at: old }, now), false);
+});
+
+test("manual review starts unmatched and cannot bypass source or class validation", () => {
+  const manual = emptyDocumentSection();
+  assert.equal(manual.learnerId, "");
+  assert.equal(manual.documentDate, "");
+  assert.equal(manual.status, "unknown");
+  assert.throws(() => validateDocumentSections([manual], source, new Set(["learner-a"])), /current-class/);
+  manual.learnerId = "learner-a";
+  assert.throws(() => validateDocumentSections([manual], source, new Set(["learner-a"])), /traced/);
+  manual.items = [{ ...section.items[0], kind: "support" }];
+  assert.equal(validateDocumentSections([manual], source, new Set(["learner-a"]))[0].items[0].kind, "support");
+  assert.equal(emptyDocumentSection().items[0].text, "");
 });
