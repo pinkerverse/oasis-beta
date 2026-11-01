@@ -119,6 +119,102 @@ export function countReportWords(value: unknown) {
   ).length;
 }
 
+const PRIOR_REPORT_COMPARISON_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "he",
+  "her",
+  "his",
+  "in",
+  "is",
+  "it",
+  "of",
+  "on",
+  "or",
+  "she",
+  "that",
+  "the",
+  "their",
+  "them",
+  "they",
+  "this",
+  "to",
+  "was",
+  "when",
+  "while",
+  "who",
+  "with",
+]);
+
+function reportSentences(value: string) {
+  return (
+    value
+      .match(/[^.!?]+(?:[.!?]+|$)/g)
+      ?.map((sentence) => sentence.replace(/\s+/g, " ").trim())
+      .filter(Boolean) ?? []
+  );
+}
+
+function comparisonTerms(value: string) {
+  return (
+    value
+      .toLocaleLowerCase()
+      .match(/[\p{L}\p{N}]+(?:[’'-][\p{L}\p{N}]+)*/gu) ?? []
+  ).filter((term) => !PRIOR_REPORT_COMPARISON_STOP_WORDS.has(term));
+}
+
+export function findPriorPtcPortraitReuse(
+  reportText: string,
+  priorPtcPortrait: string
+) {
+  if (!reportText.trim() || !priorPtcPortrait.trim()) return [];
+
+  const reusedSentences = new Set<string>();
+  const priorSentences = reportSentences(priorPtcPortrait);
+
+  for (const reportSentence of reportSentences(reportText)) {
+    const reportTerms = comparisonTerms(reportSentence);
+    if (reportTerms.length < 5) continue;
+
+    const reportTermSet = new Set(reportTerms);
+
+    for (const priorSentence of priorSentences) {
+      const priorTerms = comparisonTerms(priorSentence);
+      if (priorTerms.length < 5) continue;
+
+      const priorTermSet = new Set(priorTerms);
+      const sharedTerms = [...reportTermSet].filter((term) =>
+        priorTermSet.has(term)
+      ).length;
+      const smallerSentenceCoverage =
+        sharedTerms / Math.min(reportTermSet.size, priorTermSet.size);
+      const combinedCoverage =
+        sharedTerms / new Set([...reportTermSet, ...priorTermSet]).size;
+
+      if (
+        sharedTerms >= 5 &&
+        smallerSentenceCoverage >= 0.7 &&
+        combinedCoverage >= 0.45
+      ) {
+        reusedSentences.add(reportSentence);
+        break;
+      }
+    }
+  }
+
+  return [...reusedSentences];
+}
+
 function cleanReportText(value: unknown) {
   let text = typeof value === "string" ? value : "";
 

@@ -9,6 +9,7 @@ import {
   ASB_MIDYEAR_TEACHER_WORD_LIMIT,
   asbMidYearReportToPlainText,
   countReportWords,
+  findPriorPtcPortraitReuse,
   getMidYearReportTemplateForSchool,
   normaliseGeneratedAsbMidYearReport,
 } from "./asb-midyear-report.ts";
@@ -119,4 +120,22 @@ test("normalization changes common British spellings to American English", () =>
     report.introduction.text,
     "AB recognizes favorite colors and organizes materials in the center."
   );
+});
+
+test("report review catches a copied or lightly paraphrased PTC portrait", () => {
+  const priorPtc =
+    "AB is a warm and engaged member of the classroom community who enjoys sharing discoveries and participating in group activities.";
+  const midyear =
+    "AB is a warm, engaged member of our classroom community and enjoys sharing discoveries while participating in group activities.";
+
+  assert.deepEqual(findPriorPtcPortraitReuse(midyear, priorPtc), [midyear]);
+});
+
+test("report review allows a genuinely different update with new evidence", () => {
+  const priorPtc =
+    "AB is a warm and engaged member of the classroom community who enjoys sharing discoveries and participating in group activities.";
+  const midyear =
+    "During collaborative construction, AB now negotiates where materials belong and adjusts a plan after listening to a peer's suggestion.";
+
+  assert.deepEqual(findPriorPtcPortraitReuse(midyear, priorPtc), []);
 });

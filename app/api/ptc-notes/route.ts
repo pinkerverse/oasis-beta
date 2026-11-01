@@ -923,6 +923,29 @@ Return a completely fresh draft. Use only ${learnerInitials} as the learner iden
       report = safeFallbackReport();
     }
 
+    const { error: reportHistoryError } = await authenticatedSupabase
+      .from("learner_report_history")
+      .insert({
+        school_id: context.schoolId,
+        workspace_id: context.workspaceId,
+        learner_id: learnerId,
+        created_by: context.userId,
+        report_kind: "ptc",
+        report_data: report,
+        generated_at: report.generatedAt,
+      });
+
+    if (reportHistoryError) {
+      console.error("PTC report history save failed:", reportHistoryError);
+      return Response.json(
+        {
+          error:
+            "The PTC draft was prepared but could not be saved to private report history. Please try again.",
+        },
+        { status: 500 }
+      );
+    }
+
     return Response.json({ report });
   } catch (error) {
     console.error("PTC note generation failed:", error);

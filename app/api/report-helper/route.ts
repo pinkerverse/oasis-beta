@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import {
   ASB_MIDYEAR_ACTIVE_UNITS,
   ASB_MIDYEAR_TEACHER_WORD_LIMIT,
+  findPriorPtcPortraitReuse,
   normaliseGeneratedAsbMidYearReport,
   asbMidYearReportToPlainText,
   getMidYearReportTemplateForSchool,
@@ -87,6 +88,21 @@ function normaliseFrameworkMatches(value: unknown) {
       },
     ];
   });
+}
+
+function priorPtcPortrait(value: unknown) {
+  if (!value || typeof value !== "object") return "";
+
+  const learnerProfile = (value as Record<string, unknown>).learnerProfile;
+  if (!Array.isArray(learnerProfile)) return "";
+
+  return learnerProfile
+    .flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const text = normaliseText((item as Record<string, unknown>).text, 1800);
+      return text ? [text] : [];
+    })
+    .join(" ");
 }
 
 export async function POST(request: Request) {
@@ -175,7 +191,12 @@ export async function POST(request: Request) {
         )
       : observationQuery.eq("workspace_id", context.workspaceId);
 
-    const [classLearnerResult, observationResult, calibrationResult] =
+    const [
+      classLearnerResult,
+      observationResult,
+      calibrationResult,
+      priorPtcResult,
+    ] =
       await Promise.all([
         classLearnerQuery,
         observationQuery
@@ -192,6 +213,16 @@ export async function POST(request: Request) {
           .eq("learner_id", learnerId)
           .order("observed_on", { ascending: false })
           .limit(30),
+        db
+          .from("learner_report_history")
+          .select("report_data, generated_at")
+          .eq("school_id", context.schoolId)
+          .eq("workspace_id", context.workspaceId)
+          .eq("learner_id", learnerId)
+          .eq("report_kind", "ptc")
+          .order("generated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
 
     if (classLearnerResult.error || observationResult.error) {
@@ -209,6 +240,20 @@ export async function POST(request: Request) {
       console.error(
         "Report helper teacher-note lookup failed; continuing without it:",
         calibrationResult.error
+      );
+    }
+
+    if (priorPtcResult.error) {
+      console.error(
+        "Report helper prior PTC lookup failed:",
+        priorPtcResult.error
+      );
+      return Response.json(
+        {
+          error:
+            "OASIS could not check this learner's private PTC history before writing the report.",
+        },
+        { status: 500 }
       );
     }
 
@@ -322,6 +367,23 @@ export async function POST(request: Request) {
       learnerId,
       privacyIdentities
     );
+    const previousPtcPortrait = priorPtcPortrait(
+      priorPtcResult.data?.report_data
+    );
+    const importedPtcContext = normaliseText(
+      importedDocumentContext
+        .filter((document) =>
+          /\bptc\b|parent.?teacher|conference|student summary|(?:teacher|learner) observation report/i.test(
+            document.documentType
+          )
+        )
+        .flatMap((document) => document.items.map((item) => item.text))
+        .join(" "),
+      12000
+    );
+    const priorPtcExclusionText = [previousPtcPortrait, importedPtcContext]
+      .filter(Boolean)
+      .join(" ");
     const supplementalReportingItems =
       getRelevantAsbSupplementalReportingItems(
         JSON.stringify({
@@ -377,7 +439,8 @@ VOICE AND ACCURACY
 - Do not exaggerate independence, consistency, leadership, mastery, or attainment. Preserve phrases such as with support, with a reminder, sometimes, beginning to, or consistently when the evidence requires them.
 - Current skills and future targets are different. Never present an imported next step as something already achieved.
 - Teacher notes are private calibration evidence. They may temper a claim or help select a realistic goal, but they must never be quoted, cited, or described as a note.
-- Reviewed imported PTC/report context may help preserve the teacher's established understanding and voice, but newer direct observations take priority.
+- Reviewed imported reports may help preserve the teacher's established understanding and voice, but newer direct observations take priority.
+- The PRIOR PTC PORTRAIT below is an exclusion baseline, not prose or evidence to recycle. The mid-year report must not copy, closely paraphrase, or reuse its sentence structure, descriptive sequence, concrete examples, activities, anecdotes, or learning moments. Select different documented evidence and show development since the PTC. A broad disposition may remain true, but express it through a different synthesis and different examples.
 - Give the communication and thinking paragraphs enough detail to be useful: normally three or four connected sentences, each grounded in supplied evidence. Do not pad a paragraph by repeating the same example or restating a framework label.
 - Do not include dates, full names, diagnoses, medical information, safeguarding information, family case details, IDs, citations, headings, bullet points, or source labels in the prose.
 
@@ -389,6 +452,13 @@ ${JSON.stringify(observations, null, 2)}
 
 PRIVATE TEACHER NOTES — INTERNAL CALIBRATION ONLY; NEVER QUOTE OR CITE
 ${JSON.stringify(teacherNotes, null, 2)}
+
+PRIOR PTC PORTRAIT — EXCLUSION BASELINE ONLY; DO NOT REUSE ITS CONTENT OR WORDING
+${JSON.stringify({
+  generatedAt: priorPtcResult.data?.generated_at ?? null,
+  savedPortrait: previousPtcPortrait,
+  reviewedImportedPtcContext: importedPtcContext,
+}, null, 2)}
 
 ${DOCUMENT_CONTEXT_RULES}
 IMPORTED REVIEWED DOCUMENT CONTEXT — INTERNAL USE ONLY
@@ -471,7 +541,7 @@ ${JSON.stringify(supplementalReportingItems, null, 2)}
     }
 
     let report = await generate(reportPrompt);
-    let contractIssues = reviewReportContract(report);
+    let contractIssues = reviewReportContract(report, priorPtcExclusionText);
 
     if (contractIssues.length > 0) {
       report = await generate(`${reportPrompt}
@@ -479,8 +549,8 @@ ${JSON.stringify(supplementalReportingItems, null, 2)}
 REPORT CONTRACT CORRECTION
 The previous draft was rejected for these reasons:
 ${contractIssues.map((issue) => `- ${issue}`).join("\n")}
-Rewrite the complete report using the same strongest evidence. Keep exactly two distinct active UOI units and stay within the word contract.`);
-      contractIssues = reviewReportContract(report);
+Rewrite the complete report using the same strongest evidence. Keep exactly two distinct active UOI units and stay within the word contract. Replace every sentence or classroom example that overlaps with the prior PTC portrait; use different documented moments instead.`);
+      contractIssues = reviewReportContract(report, priorPtcExclusionText);
     }
 
     if (contractIssues.length > 0) {
@@ -513,6 +583,31 @@ Rewrite the complete report using the same strongest evidence. Keep exactly two 
       return Response.json(privacyReviewResponse(outputPrivacyReview), {
         status: 422,
       });
+    }
+
+    const { error: reportHistoryError } = await db
+      .from("learner_report_history")
+      .insert({
+        school_id: context.schoolId,
+        workspace_id: context.workspaceId,
+        learner_id: learnerId,
+        created_by: context.userId,
+        report_kind: "midyear",
+        report_data: report,
+      });
+
+    if (reportHistoryError) {
+      console.error(
+        "Mid-year report history save failed:",
+        reportHistoryError
+      );
+      return Response.json(
+        {
+          error:
+            "The mid-year draft was prepared but could not be saved to private report history. Please try again.",
+        },
+        { status: 500 }
+      );
     }
 
     return Response.json({ report });
@@ -550,7 +645,8 @@ function paragraphSchema() {
 }
 
 function reviewReportContract(
-  report: ReturnType<typeof normaliseGeneratedAsbMidYearReport>
+  report: ReturnType<typeof normaliseGeneratedAsbMidYearReport>,
+  previousPtcPortrait = ""
 ) {
   const issues: string[] = [];
   const paragraphs = [
@@ -586,6 +682,17 @@ function reviewReportContract(
     asbMidYearReportToPlainText(report)
   )) {
     issues.push("The draft included the unit that has not started.");
+  }
+
+  const reusedPtcSentences = findPriorPtcPortraitReuse(
+    asbMidYearReportToPlainText(report),
+    previousPtcPortrait
+  );
+
+  if (reusedPtcSentences.length > 0) {
+    issues.push(
+      "The draft repeats or closely paraphrases content from the prior PTC portrait. Use different evidence, examples, and sentence construction."
+    );
   }
 
   return issues;

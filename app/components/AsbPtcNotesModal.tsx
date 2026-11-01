@@ -248,7 +248,8 @@ export default function AsbPtcNotesModal({
               school&apos;s required sections, including one warm, personal
               learner portrait written as a flowing narrative. The output is
               unbranded and uses initials only, ready to review and copy into
-              the official form.
+              the official form. Each generated draft is saved privately so a
+              later report can build on new evidence without repeating it.
             </p>
           </div>
           <button

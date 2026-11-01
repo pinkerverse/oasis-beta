@@ -255,8 +255,10 @@ export default function MidYearReportHelperModal({
             <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500">
               OASIS combines observations, reviewed uploads, PTC context and
               private teacher notes into the school&apos;s mid-year narrative.
-              It selects two evidence-supported units from the three currently
-              underway. Specialist contributions stay separate.
+              It checks the learner&apos;s latest saved PTC and deliberately uses
+              different evidence and examples. It selects two evidence-supported
+              units from the three currently underway. Specialist contributions
+              stay separate.
             </p>
           </div>
           <button
@@ -493,8 +495,8 @@ export default function MidYearReportHelperModal({
               Select the learners and generate their first mid-year drafts.
             </p>
             <p className="mt-2 text-sm text-slate-500">
-              Nothing is saved over observations, PTC notes, uploads or teacher
-              notes.
+              Drafts are saved privately in report history. Observations, PTC
+              notes, uploads and teacher notes are never overwritten.
             </p>
           </div>
         )}
