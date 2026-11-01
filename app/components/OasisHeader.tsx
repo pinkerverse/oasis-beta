@@ -23,6 +23,7 @@ type OasisHeaderProps = {
   accountEmail?: string;
   onPTCNotes?: () => void;
   onReportHelper?: () => void;
+  onUploadDocuments?: () => void;
   onAddObservation?: () => void;
   onTeacherNote?: () => void;
   onTodaysFocus?: () => void;
@@ -30,6 +31,7 @@ type OasisHeaderProps = {
   ptcNotesRequiresLearnerSelection?: boolean;
   ptcNotesActive?: boolean;
   reportHelperActive?: boolean;
+  documentUploadActive?: boolean;
   addObservationActive?: boolean;
   teacherNoteActive?: boolean;
   todaysFocusActive?: boolean;
@@ -90,6 +92,7 @@ export default function OasisHeader({
   accountEmail: suppliedAccountEmail = "",
   onPTCNotes,
   onReportHelper,
+  onUploadDocuments,
   onAddObservation,
   onTeacherNote,
   onTodaysFocus,
@@ -97,6 +100,7 @@ export default function OasisHeader({
   ptcNotesRequiresLearnerSelection = true,
   ptcNotesActive = false,
   reportHelperActive = false,
+  documentUploadActive = false,
   addObservationActive = false,
   teacherNoteActive = false,
   todaysFocusActive = false,
@@ -386,13 +390,13 @@ export default function OasisHeader({
             <div ref={toolsRef} className="relative">
               <button ref={toolsButtonRef} type="button" aria-label="Tools" title="Tools" aria-expanded={showToolsMenu} aria-controls={toolsMenuId}
                 onClick={() => { setShowToolsMenu((current) => !current); setShowProfileMenu(false); }}
-                className={actionButtonClasses(showToolsMenu || ptcNotesActive || reportHelperActive || settingsActive)}>
+                className={actionButtonClasses(showToolsMenu || ptcNotesActive || reportHelperActive || documentUploadActive || settingsActive)}>
                 <span aria-hidden="true" className="text-xl leading-none">⋯</span>
                 <span className="hidden xl:inline">Tools</span>
               </button>
               {showToolsMenu && <nav id={toolsMenuId} aria-label="Class tools" className="absolute right-0 top-full mt-3 max-h-[min(75dvh,640px)] w-80 max-w-[calc(100vw-5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.24)]">
                 <div className="px-3 pb-2 pt-2"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700">Classroom tools</p></div>
-                <Link href="/documents" onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="upload" label="Upload documents" description="Bring learner context together" /></Link>
+                <button type="button" aria-label="Upload documents" onClick={() => runPanelAction("documents", onUploadDocuments)} className={toolItemClasses}><ToolMenuContent icon="upload" label="Upload documents" description="Add private learner context" /></button>
                 <div className="mx-3 mb-2 mt-3 border-t border-slate-100 pt-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Reports & reflection</p></div>
                 <button type="button" aria-label="PTC Notes" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={toolItemClasses}><ToolMenuContent icon="report" label="PTC Notes" description={ptcNotesRequiresLearnerSelection && !hasLearnerSelection ? "Select a learner in My Class" : "Prepare conference summaries"} /></button>
                 <button type="button" aria-label="Report Helper" onClick={() => runPanelAction("report", onReportHelper)} className={toolItemClasses}><ToolMenuContent icon="report" label="Report Helper" description="Prepare and export mid-year reports" /></button>

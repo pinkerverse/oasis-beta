@@ -55,8 +55,8 @@ test("Word export labels every school report paragraph in order", async () => {
   assert.ok(documentXml);
   const expectedHeadings = [
     "First paragraph - Learner portrait and self management",
-    "Second paragraph - Collaboration and communication",
-    "Third paragraph - Research and thinking",
+    "Second paragraph - Collaboration, communication and early literacy",
+    "Third paragraph - Research, thinking and emerging math",
     "Fourth paragraph - Specialist contribution",
     "Fifth paragraph - Units of inquiry",
     "Conclusion paragraph - Strengths and next steps",

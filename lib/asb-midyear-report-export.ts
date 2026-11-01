@@ -105,13 +105,13 @@ function reportChildren(report: AsbMidYearReport, index: number) {
     ),
     reportParagraph(report.introduction.text),
     ...sectionHeading(
-      "Second paragraph - Collaboration and communication",
-      "Listening, speaking, exchanging information and expression"
+      "Second paragraph - Collaboration, communication and early literacy",
+      "Listening, speaking, exchanging information, expression and emergent literacy"
     ),
     reportParagraph(report.communication.text),
     ...sectionHeading(
-      "Third paragraph - Research and thinking",
-      "Information literacy, creative and critical thinking, transfer and reflection"
+      "Third paragraph - Research, thinking and emerging math",
+      "Research, creative and critical thinking, mathematical thinking, transfer and reflection"
     ),
     reportParagraph(report.thinking.text),
     ...sectionHeading(

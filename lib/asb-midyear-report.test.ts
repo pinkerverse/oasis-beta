@@ -86,8 +86,16 @@ test("normalization keeps two distinct active units and stays within 466 words",
     ["who_we_are", "how_we_express_ourselves"]
   );
   assert.deepEqual(report.introduction.evidenceEntryIds, ["entry-1"]);
+  assert.equal(countReportWords(report.introduction.text), 100);
+  assert.equal(countReportWords(report.communication.text), 65);
+  assert.equal(countReportWords(report.thinking.text), 75);
+  assert.deepEqual(
+    report.unitsOfInquiry.map((unit) => countReportWords(unit.text)),
+    [84, 84]
+  );
+  assert.equal(countReportWords(report.conclusion.text), 58);
   assert.equal(report.wordCount, countReportWords(asbMidYearReportToPlainText(report)));
-  assert.ok(report.wordCount <= ASB_MIDYEAR_TEACHER_WORD_LIMIT);
+  assert.equal(report.wordCount, ASB_MIDYEAR_TEACHER_WORD_LIMIT);
   assert.equal(asbMidYearReportToPlainText(report).includes("Not started"), false);
 });
 

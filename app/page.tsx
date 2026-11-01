@@ -15,6 +15,7 @@ import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/clie
 import AccountSecurity from "@/app/components/AccountSecurity";
 import AsbPtcNotesModal from "@/app/components/AsbPtcNotesModal";
 import MidYearReportHelperModal from "@/app/components/MidYearReportHelperModal";
+import DocumentUploader from "@/app/documents/DocumentUploader";
 import OasisHeader from "@/app/components/OasisHeader";
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import {
@@ -624,6 +625,7 @@ function handleRemoveManualLearningArea(strand: string) {
 
   const [showPTCNotes, setShowPTCNotes] = useState(false);
   const [showReportHelper, setShowReportHelper] = useState(false);
+  const [showDocumentUploader, setShowDocumentUploader] = useState(false);
   const [showTeacherNote, setShowTeacherNote] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
@@ -4777,6 +4779,8 @@ useEffect(() => {
     setShowPTCNotes(true);
   } else if (panel === "report") {
     setShowReportHelper(true);
+  } else if (panel === "documents") {
+    setShowDocumentUploader(true);
   }
 
   headerIntentHandled.current = true;
@@ -6360,6 +6364,7 @@ if (checkingOnboarding) {
   accountEmail={accountEmail}
   onPTCNotes={() => setShowPTCNotes(true)}
   onReportHelper={() => setShowReportHelper(true)}
+  onUploadDocuments={() => setShowDocumentUploader(true)}
   onAddObservation={openObservationComposer}
   onTeacherNote={() => setShowTeacherNote(true)}
   onTodaysFocus={openTodaysFocus}
@@ -6367,6 +6372,7 @@ if (checkingOnboarding) {
   ptcNotesRequiresLearnerSelection={ptcTemplate !== "asb_pre_k"}
   ptcNotesActive={showPTCNotes}
   reportHelperActive={showReportHelper}
+  documentUploadActive={showDocumentUploader}
   addObservationActive={showObservationModal}
   teacherNoteActive={showTeacherNote}
   todaysFocusActive={showTodaysFocus}
@@ -12362,6 +12368,14 @@ onClick={() => {
     learners={pupils}
     initialLearnerIds={selectedChildren}
     onClose={() => setShowReportHelper(false)}
+  />
+)}
+
+{showDocumentUploader && (
+  <DocumentUploader
+    modal
+    initialLearnerId={selectedChildren[0] ?? ""}
+    onClose={() => setShowDocumentUploader(false)}
   />
 )}
 

@@ -111,7 +111,7 @@ test("automatic rereading returns a recovery ID on failure and cannot report a l
     const mocks: Record<string, unknown> = {
       "@/lib/supabase/current-workspace": { getCurrentWorkspaceContext: async () => ({ schoolId: "school", workspaceId: "class", userId: "teacher" }) },
       "@/lib/supabase/server": { createClient: async () => db },
-      "@/lib/document-import-server": { documentImportLearners: async () => ({ learners: [{ id: "a", label: "AB" }], identities: [] }) },
+      "@/lib/document-import-server": { documentImportLearners: async () => ({ learners: [{ id: "a", label: "AB" }, { id: "b", label: "MM" }], identities: [] }) },
       "@/lib/document-import": documents,
       "@/lib/learner-privacy": { replaceLearnerNamesWithInitials: (text: string) => text },
       "@/lib/privacy-guardrails": { reviewPrivacyText: () => ({ requiresReview: false }) },
@@ -126,7 +126,7 @@ test("automatic rereading returns a recovery ID on failure and cannot report a l
     const exports: { POST?: (request: Request) => Promise<Response> } = {};
     const require = createRequire(import.meta.url);
     new Function("require", "exports", compiled)((name: string) => mocks[name] ?? require(name), exports);
-    const response = await exports.POST!(new Request("http://localhost/api/document-imports/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: "Saved report.docx", text: source }) }));
+    const response = await exports.POST!(new Request("http://localhost/api/document-imports/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: "Saved report.docx", text: source, ...(mode === "success" ? { learnerId: "b" } : {}) }) }));
     const body = await response.json();
     assert.equal(response.status, mode === "success" || mode === "duplicate" ? 200 : mode === "quota" ? 429 : 400);
     assert.equal(analyzed, mode === "quota" || mode === "duplicate" ? 0 : 1);
@@ -137,7 +137,7 @@ test("automatic rereading returns a recovery ID on failure and cannot report a l
     }
     if (mode === "success") {
       const draft = calls.find((call) => call.value?.status === "draft")?.value;
-      assert.equal((draft?.sections as documents.DocumentSection[])[0].learnerId, "a");
+      assert.equal((draft?.sections as documents.DocumentSection[])[0].learnerId, "b");
     }
     if (mode === "duplicate") assert.equal(body.id, "existing");
   }

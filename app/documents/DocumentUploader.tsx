@@ -7,14 +7,19 @@ import { canRecoverDocument, emptyDocumentSection, DOCUMENT_ACCEPT, DOCUMENT_KIN
 const button = "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-cyan-600 disabled:cursor-not-allowed disabled:opacity-50";
 const input = "w-full min-w-0 rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-800 focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100";
 type History = Omit<DocumentImport, "source_text" | "sections"> & { learner_ids: string[] };
-type PrivacyDraft = { filename: string; sourceText: string; error: string };
+type PrivacyDraft = { filename: string; sourceText: string; error: string; learnerId: string };
+type DocumentUploaderProps = {
+  modal?: boolean;
+  initialLearnerId?: string;
+  onClose?: () => void;
+};
 
 async function responseBody(response: Response) {
   const body = await response.json().catch(() => ({ error: "The request did not finish. Please try again." }));
   return body;
 }
 
-export default function DocumentUploader() {
+export default function DocumentUploader({ modal = false, initialLearnerId = "", onClose }: DocumentUploaderProps) {
   const [learners, setLearners] = useState<ImportLearner[]>([]);
   const [documents, setDocuments] = useState<History[]>([]);
   const [current, setCurrent] = useState<DocumentImport | null>(null);
@@ -28,6 +33,7 @@ export default function DocumentUploader() {
   const [confirmed, setConfirmed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [selectedLearnerId, setSelectedLearnerId] = useState(initialLearnerId);
   const [expandedSections, setExpandedSections] = useState<Set<number>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
@@ -72,10 +78,10 @@ export default function DocumentUploader() {
     requestAnimationFrame(() => reviewHeading.current?.focus());
   }
 
-  async function read(response: Response, filename: string) {
+  async function read(response: Response, filename: string, learnerId = "") {
     const body = await responseBody(response);
     if (response.status === 422 && body.sourceText) {
-      setPrivacyDrafts((previous) => [...previous, { filename: body.filename, sourceText: body.sourceText, error: body.error }]);
+      setPrivacyDrafts((previous) => [...previous, { filename: body.filename, sourceText: body.sourceText, error: body.error, learnerId }]);
       return `${filename}: needs a privacy check before AI reading.`;
     }
     // Both successful and failed readings have a useful next step in the review panel.
@@ -113,6 +119,7 @@ export default function DocumentUploader() {
 
   async function upload(files: File[]) {
     if (inFlight.current || !files.length) return;
+    if (!selectedLearnerId) { setError("Choose the learner this document belongs to before uploading it."); return; }
     if (files.length > 10) { setError("Drop up to 10 documents at a time."); return; }
     inFlight.current = true; setError(""); setNotice("");
     const messages: string[] = [];
@@ -121,8 +128,8 @@ export default function DocumentUploader() {
         setBusy(`Reading ${index + 1} of ${files.length}: ${file.name}`);
         try {
           validateDocumentFile(file.name, file.size);
-          const form = new FormData(); form.append("file", file);
-          messages.push(await read(await fetch("/api/document-imports/preview", { method: "POST", body: form }), file.name));
+          const form = new FormData(); form.append("file", file); form.append("learnerId", selectedLearnerId);
+          messages.push(await read(await fetch("/api/document-imports/preview", { method: "POST", body: form }), file.name, selectedLearnerId));
         } catch (e) { messages.push(`${file.name}: ${e instanceof Error ? e.message : "Could not read this file."}`); }
         setNotice(messages.join("\n"));
       }
@@ -136,7 +143,7 @@ export default function DocumentUploader() {
     inFlight.current = true; setError(""); setBusy("Reading the reviewed text…");
     const draft = privacyDrafts[index];
     try {
-      const response = await fetch("/api/document-imports/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: draft.filename, text: draft.sourceText }) });
+      const response = await fetch("/api/document-imports/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: draft.filename, text: draft.sourceText, learnerId: draft.learnerId }) });
       const body = await responseBody(response);
       if (!response.ok) throw new Error(body.error);
       setPrivacyDrafts((previous) => previous.filter((_, i) => i !== index));
@@ -190,22 +197,45 @@ export default function DocumentUploader() {
     const learner = learners.find((item) => item.id === section.learnerId);
     return learner?.label || (section.sourceLabel === "Unidentified learner" ? "Learner not matched yet" : section.sourceLabel);
   }
-  return <div className="min-h-screen bg-slate-50 text-slate-900">
-    <OasisHeader />
-    <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 [overflow-wrap:anywhere]">
+  return <div className={modal ? "fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-3 text-slate-900 backdrop-blur-sm sm:p-6" : "min-h-screen bg-slate-50 text-slate-900"}>
+    {!modal && <OasisHeader />}
+    <main role={modal ? "dialog" : undefined} aria-modal={modal ? "true" : undefined} aria-labelledby={modal ? "document-upload-title" : undefined} className={modal ? "max-h-[94vh] w-full max-w-6xl space-y-6 overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl [overflow-wrap:anywhere] sm:p-8" : "mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 [overflow-wrap:anywhere]"}>
+      {modal && <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">Private classroom context</p>
+          <h1 id="document-upload-title" className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">Upload documents</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Choose the learner first, then add a completed report, longer teacher summary or other useful learner data. OASIS prepares it for your review before anything is added.</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-900" aria-label="Close document uploader">✕</button>
+      </div>}
+
+      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <h2 className="font-bold text-slate-900">Choose the learner</h2>
+        <p className="mt-1 text-xs text-slate-500">The document will be reviewed as private context for this learner and can inform PTC notes and future reports.</p>
+        <div className="mt-4 flex flex-wrap gap-5 sm:gap-6">
+          {learners.map((learner) => {
+            const selected = selectedLearnerId === learner.id;
+            return <button key={learner.id} type="button" aria-pressed={selected} disabled={Boolean(busy)} onClick={() => { setSelectedLearnerId(learner.id); setFilter(learner.id); setError(""); }} className="group flex w-16 flex-col items-center disabled:opacity-50">
+              <span className={`flex h-16 w-16 items-center justify-center rounded-full border-4 bg-slate-300 transition ${selected ? "border-blue-500 shadow-sm" : "border-slate-200 group-hover:border-cyan-300"}`}><span className="text-xl font-bold text-slate-600">{learner.label}</span></span>
+              <span className={`mt-2 text-sm ${selected ? "font-semibold text-blue-700" : "text-slate-700"}`}>{learner.label}</span>
+            </button>;
+          })}
+        </div>
+      </section>
+
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="bg-gradient-to-r from-cyan-50 to-indigo-50 p-6 sm:p-8">
+        {!modal && <div className="bg-gradient-to-r from-cyan-50 to-indigo-50 p-6 sm:p-8">
           <p className="text-sm font-semibold text-cyan-700">Private classroom context</p>
           <h1 className="mt-2 text-3xl font-bold">Upload documents</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Bring completed reports and learner data into the picture. OASIS reads the document, suggests learner matches, and organizes what it finds. You check it before anything is added.</p>
-        </div>
+        </div>}
         <div className="p-6 sm:p-8">
           <div onDragOver={(event) => { event.preventDefault(); if (!busy) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void upload(Array.from(event.dataTransfer.files)); }}
             className={`rounded-2xl border-2 border-dashed p-8 text-center ${dragging ? "border-cyan-500 bg-cyan-50" : "border-slate-300 bg-slate-50"}`}>
             <p className="text-lg font-semibold">Drop your documents here</p>
             <p className="my-3 text-sm text-slate-500">Word (.docx), text-based PDF, CSV, or TXT · up to 4 MB each</p>
-            <input ref={fileInput} type="file" accept={DOCUMENT_ACCEPT} multiple className="sr-only" aria-label="Choose learner documents" disabled={Boolean(busy) || loading} onChange={(event) => void upload(Array.from(event.target.files ?? []))} />
-            <button type="button" className={button} disabled={Boolean(busy) || loading} onClick={() => fileInput.current?.click()}>Choose documents</button>
+            <input ref={fileInput} type="file" accept={DOCUMENT_ACCEPT} multiple className="sr-only" aria-label="Choose learner documents" disabled={Boolean(busy) || loading || !selectedLearnerId} onChange={(event) => void upload(Array.from(event.target.files ?? []))} />
+            <button type="button" className={button} disabled={Boolean(busy) || loading || !selectedLearnerId} onClick={() => fileInput.current?.click()}>{selectedLearnerId ? "Choose documents" : "Choose a learner first"}</button>
           </div>
           <p className="mt-4 text-xs leading-5 text-slate-500">Teacher-only. Readable text is processed by OASIS’s AI service (OpenAI); known learner names are replaced with initials first. Keep medical, safeguarding, and family contact details out of uploads. The reviewed source text is retained privately; original files stay on your device. Nothing is sent to parents or another platform.</p>
         </div>
@@ -239,7 +269,7 @@ export default function DocumentUploader() {
           <div className="flex flex-wrap gap-3"><button className={button} disabled={Boolean(busy)} onClick={() => void recover(false)}>Retry automatic reading</button><button className={button} disabled={Boolean(busy)} onClick={() => void recover(true)}>Match learners myself</button></div>
         </div> : current.status === "reading" && <div className="space-y-3 rounded-xl bg-cyan-50 p-4"><p className="text-sm">Reading is still in progress. If it was interrupted, recovery options become available after three minutes.</p><button className={button} disabled={Boolean(busy)} onClick={() => void open(current.id).catch((e) => setError(e.message))}>Check reading status</button></div>}
         <details className="rounded-xl bg-slate-50 p-4"><summary className="cursor-pointer text-sm font-semibold">Read extracted source text</summary><pre className="mt-4 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-6">{current.source_text}</pre></details>
-        {sections.length > 1 && <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">{sections.length} learners in this document</p><div className="flex flex-wrap gap-2"><button className={button} type="button" onClick={() => setExpandedSections(new Set(sections.map((_, index) => index)))}>Open all learners</button><button className={button} type="button" onClick={() => setExpandedSections(new Set())}>Close all learners</button></div></div>}
+        {sections.length > 1 && <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">{sections.length} review sections found in this document</p><div className="flex flex-wrap gap-2"><button className={button} type="button" onClick={() => setExpandedSections(new Set(sections.map((_, index) => index)))}>Open all sections</button><button className={button} type="button" onClick={() => setExpandedSections(new Set())}>Close all sections</button></div></div>}
         {sections.map((section, index) => <details key={`${current.id}-${index}`} open={expandedSections.has(index)} onToggle={(event) => { const open = event.currentTarget.open; setExpandedSections((previous) => { if (previous.has(index) === open) return previous; const next = new Set(previous); if (open) next.add(index); else next.delete(index); return next; }); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 marker:content-none hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-cyan-600 sm:p-5 [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block font-bold">{sectionTitle(section)}</span><span className="mt-1 block text-xs font-normal text-slate-500">{section.items.length} {section.items.length === 1 ? "point" : "points"}{!readonly && !section.learnerId ? " · Needs learner match" : ""}</span></span><span aria-hidden="true" className="shrink-0 text-xl text-slate-500 transition-transform group-open:rotate-180">⌄</span></summary>
           <div className="space-y-4 border-t border-slate-200 p-4 sm:p-6">
@@ -260,6 +290,7 @@ export default function DocumentUploader() {
         </details>)}
         {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5"><button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { const nextIndex = sections.length; setSections((previous) => [...previous, emptyDocumentSection()]); setExpandedSections((previous) => new Set([...previous, nextIndex])); setConfirmed(false); }}>Add a learner section</button>{reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}<label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} />I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context, not as new observations or assessment scores.</label><button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !confirmed || Boolean(reviewIssue)} onClick={() => void save()}>Add to learner records</button></div>}
       </section>}
+      {modal && <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" onClick={onClose} className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-100">Close</button></div>}
     </main>
   </div>;
 }

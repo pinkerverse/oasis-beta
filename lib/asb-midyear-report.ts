@@ -76,11 +76,11 @@ export type AsbMidYearReport = {
 };
 
 const SECTION_WORD_LIMITS = {
-  introduction: 118,
-  communication: 51,
-  thinking: 51,
-  unit: 97,
-  conclusion: 52,
+  introduction: 100,
+  communication: 65,
+  thinking: 75,
+  unit: 84,
+  conclusion: 58,
 } as const;
 
 const AMERICAN_ENGLISH_REPLACEMENTS: Array<[RegExp, string]> = [

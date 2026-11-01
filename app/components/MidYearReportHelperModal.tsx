@@ -23,11 +23,7 @@ type Props = {
   onClose: () => void;
 };
 
-type SimpleSectionKey =
-  | "introduction"
-  | "communication"
-  | "thinking"
-  | "conclusion";
+type SimpleSectionKey = "introduction" | "communication" | "thinking";
 
 const SECTION_LABELS: Array<{
   key: SimpleSectionKey;
@@ -41,13 +37,13 @@ const SECTION_LABELS: Array<{
   },
   {
     key: "communication",
-    label: "2. Collaboration & communication",
-    helper: "Listening, speaking, exchanging information and expression",
+    label: "2. Collaboration, communication & early literacy",
+    helper: "Listening, speaking, exchanging information, expression and emergent literacy",
   },
   {
     key: "thinking",
-    label: "3. Research & thinking",
-    helper: "Information literacy, creative and critical thinking, transfer and reflection",
+    label: "3. Research, thinking & emerging math",
+    helper: "Research, creative and critical thinking, mathematical thinking, transfer and reflection",
   },
 ] as const;
 
@@ -172,44 +168,6 @@ export default function MidYearReportHelperModal({
     if (failures.length > 0) setError(failures.join(" "));
   }
 
-  function updateSimpleSection(key: SimpleSectionKey, text: string) {
-    if (!activeReport) return;
-
-    setReports((current) =>
-      current.map((report) => {
-        if (report.learnerId !== activeReport.learnerId) return report;
-
-        const updated = {
-          ...report,
-          [key]: { ...report[key], text },
-        };
-        return {
-          ...updated,
-          wordCount: countReportWords(asbMidYearReportToPlainText(updated)),
-        };
-      })
-    );
-  }
-
-  function updateUnit(index: number, text: string) {
-    if (!activeReport) return;
-
-    setReports((current) =>
-      current.map((report) => {
-        if (report.learnerId !== activeReport.learnerId) return report;
-
-        const unitsOfInquiry = report.unitsOfInquiry.map((unit, unitIndex) =>
-          unitIndex === index ? { ...unit, text } : unit
-        );
-        const updated = { ...report, unitsOfInquiry };
-        return {
-          ...updated,
-          wordCount: countReportWords(asbMidYearReportToPlainText(updated)),
-        };
-      })
-    );
-  }
-
   async function handleCopy() {
     if (!activeReport) return;
 
@@ -316,7 +274,7 @@ export default function MidYearReportHelperModal({
             <div>
               <h3 className="font-bold text-slate-900">Choose learners</h3>
               <p className="mt-1 text-xs text-slate-500">
-                Generate one editable report draft for each selected learner.
+                Generate one report draft for each selected learner, then download the editable Word file.
               </p>
             </div>
             <div className="flex gap-2">
@@ -418,12 +376,8 @@ export default function MidYearReportHelperModal({
         )}
 
         {reports.length > 0 && (
-          <div className="mt-6 grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <aside className="rounded-2xl border border-slate-200 p-3">
-              <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                Generated reports
-              </p>
-              <div className="mt-2 space-y-1">
+          <div className="mt-6">
+            <div className="flex flex-wrap gap-3 border-b border-slate-200 pb-5">
                 {reports.map((report) => (
                   <button
                     key={report.learnerId}
@@ -432,23 +386,20 @@ export default function MidYearReportHelperModal({
                       setActiveLearnerId(report.learnerId);
                       setCopyMessage("");
                     }}
-                    className={`w-full rounded-xl px-3 py-3 text-left text-sm font-semibold ${
+                    className={`flex h-14 w-14 items-center justify-center rounded-full border-4 text-sm font-bold transition ${
                       activeReport?.learnerId === report.learnerId
-                        ? "bg-slate-950 text-white"
-                        : "text-slate-700 hover:bg-slate-100"
+                        ? "border-blue-500 bg-slate-300 text-slate-700"
+                        : "border-slate-200 bg-slate-200 text-slate-600 hover:border-cyan-300"
                     }`}
+                    aria-label={`View ${report.learnerInitials}'s report`}
                   >
                     {report.learnerInitials}
-                    <span className="mt-1 block text-xs font-normal opacity-70">
-                      {countReportWords(asbMidYearReportToPlainText(report))} words
-                    </span>
                   </button>
                 ))}
-              </div>
-            </aside>
+            </div>
 
             {activeReport && (
-              <section className="min-w-0 rounded-2xl border border-slate-200 p-4 sm:p-6">
+              <section className="mt-5 min-w-0 rounded-2xl border border-slate-200 p-4 sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
                   <div>
                     <h3 className="text-xl font-bold text-slate-900">
@@ -489,12 +440,11 @@ export default function MidYearReportHelperModal({
 
                 <div className="mt-5 space-y-5">
                   {SECTION_LABELS.map((section) => (
-                    <ReportTextarea
+                    <ReportSection
                       key={section.key}
                       label={section.label}
                       helper={section.helper}
                       value={activeReport[section.key].text}
-                      onChange={(text) => updateSimpleSection(section.key, text)}
                     />
                   ))}
 
@@ -503,23 +453,21 @@ export default function MidYearReportHelperModal({
                       5. Units of inquiry · two strongest evidence links
                     </p>
                     <div className="mt-4 space-y-4">
-                      {activeReport.unitsOfInquiry.map((unit, index) => (
-                        <ReportTextarea
+                      {activeReport.unitsOfInquiry.map((unit) => (
+                        <ReportSection
                           key={unit.unitKey}
                           label={getMidYearUnitTitle(unit.unitKey)}
                           helper="Uses the current 2026–27 central idea and documented learner experiences"
                           value={unit.text}
-                          onChange={(text) => updateUnit(index, text)}
                         />
                       ))}
                     </div>
                   </div>
 
-                  <ReportTextarea
+                  <ReportSection
                     label="Conclusion paragraph"
                     helper="Distinctive strengths, relationships, growth and a proportionate forward-looking goal"
                     value={activeReport.conclusion.text}
-                    onChange={(text) => updateSimpleSection("conclusion", text)}
                   />
                 </div>
 
@@ -550,34 +498,37 @@ export default function MidYearReportHelperModal({
             </p>
           </div>
         )}
+
+        <div className="mt-7 flex justify-end border-t border-slate-200 pt-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function ReportTextarea({
+function ReportSection({
   label,
   helper,
   value,
-  onChange,
 }: {
   label: string;
   helper: string;
   value: string;
-  onChange: (value: string) => void;
 }) {
   return (
-    <label className="block">
-      <span className="block text-sm font-bold text-slate-900">{label}</span>
-      <span className="mt-1 block text-xs leading-5 text-slate-500">
+    <section className="rounded-2xl bg-slate-50 p-4 sm:p-5">
+      <h4 className="text-sm font-bold text-slate-900">{label}</h4>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
         {helper}
-      </span>
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={5}
-        className="mt-2 w-full resize-y rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 text-slate-800 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-      />
-    </label>
+      </p>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">{value}</p>
+    </section>
   );
 }

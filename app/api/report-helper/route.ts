@@ -356,8 +356,8 @@ Write a warm, precise report that sounds like a teacher who knows the learner we
 
 FIXED REPORT STRUCTURE
 1. INTRODUCTION: one paragraph about the whole learner, how they have settled, their approach to classroom life, relationships, self-management, organization, and social-emotional development. Begin with ${learnerInitials} as a person and learner, not with an academic skill or favorite activity.
-2. COMMUNICATION: one paragraph about collaboration, social communication, listening, speaking, exchanging information, expression, and interpretation.
-3. THINKING: one paragraph about research and thinking skills, information literacy, creative and critical thinking, transfer, reflection, metacognition, mindset, and relevant literacy or mathematical learning when directly evidenced.
+2. COMMUNICATION AND EARLY LITERACY: one substantial paragraph about collaboration, social communication, listening, speaking, exchanging information, expression, interpretation, and emergent literacy. Include concrete examples from conversations, group experiences, play, books, storytelling, mark-making, phonological awareness, or early reading and writing only when they are directly evidenced. Show how the learner communicates with children and adults, not only how they participate in a group.
+3. RESEARCH, THINKING AND EMERGING MATH: one substantial paragraph about research skills, information literacy, creative and critical thinking, transfer, reflection, metacognition, mindset, and mathematical thinking. Treat the Thinking Skills (Emergent Math) framework as part of this paragraph. Include directly evidenced examples of number sense, shape, pattern, measurement, classification, spatial reasoning, comparison, or mathematical problem solving. Do not omit mathematical learning when relevant evidence is supplied.
 4. UNITS OF INQUIRY: exactly two separate paragraphs. Choose the two most strongly evidenced units from the three active units supplied below. Name each unit and use its current 2026-27 central idea accurately. Connect documented learner actions to the unit without claiming participation or understanding that is not in the evidence.
 5. CONCLUSION: one concise paragraph bringing together distinctive interests, strengths, relationships, growth, and a proportionate forward-looking goal.
 
@@ -365,7 +365,7 @@ Do not write a specialist paragraph. Art, music, physical education, and swimmin
 
 WORD CONTRACT
 - The complete teacher-written narrative must be 400-${ASB_MIDYEAR_TEACHER_WORD_LIMIT} words.
-- Aim for roughly 100-118 words in the introduction, 40-51 words in communication, 40-51 words in thinking, 80-97 words in each UOI paragraph, and 35-52 words in the conclusion.
+- Aim for roughly 85-100 words in the introduction, 55-65 words in communication and early literacy, 65-75 words in research/thinking/emerging math, 72-84 words in each UOI paragraph, and 45-58 words in the conclusion.
 - Be selective rather than listing every observation.
 
 VOICE AND ACCURACY
@@ -378,6 +378,7 @@ VOICE AND ACCURACY
 - Current skills and future targets are different. Never present an imported next step as something already achieved.
 - Teacher notes are private calibration evidence. They may temper a claim or help select a realistic goal, but they must never be quoted, cited, or described as a note.
 - Reviewed imported PTC/report context may help preserve the teacher's established understanding and voice, but newer direct observations take priority.
+- Give the communication and thinking paragraphs enough detail to be useful: normally three or four connected sentences, each grounded in supplied evidence. Do not pad a paragraph by repeating the same example or restating a framework label.
 - Do not include dates, full names, diagnoses, medical information, safeguarding information, family case details, IDs, citations, headings, bullet points, or source labels in the prose.
 
 CURRENT 2026-27 POI — ONLY THESE THREE UNITS HAVE STARTED

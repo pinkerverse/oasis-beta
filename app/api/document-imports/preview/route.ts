@@ -22,17 +22,21 @@ export async function POST(request: Request) {
     if (!learners.length) return Response.json({ error: "Add learners to this class before importing documents." }, { status: 400 });
     let text: string;
     let filename: string;
+    let requestedLearnerId = "";
     if (request.headers.get("content-type")?.includes("multipart/form-data")) {
       const form = await request.formData();
       const file = form.get("file");
       if (!(file instanceof File)) throw new Error("Choose a document to read.");
       text = await readLearnerDocument(file);
       filename = file.name;
+      requestedLearnerId = typeof form.get("learnerId") === "string" ? String(form.get("learnerId")) : "";
     } else {
       const body = await request.json();
       text = typeof body.text === "string" ? body.text.trim() : "";
       filename = typeof body.filename === "string" ? body.filename : "Document";
+      requestedLearnerId = typeof body.learnerId === "string" ? body.learnerId : "";
     }
+    if (requestedLearnerId && !learners.some((learner) => learner.id === requestedLearnerId)) throw new Error("Choose a current-class learner for this document.");
     text = replaceLearnerNamesWithInitials(text, identities);
     filename = filename.replace(/[\x00-\x1f/\\]/g, " ").trim().slice(0, 180) || "Document";
     if (text.length < 20 || text.length > MAX_DOCUMENT_TEXT) throw new Error("Use 20–60,000 characters of readable learner text. Split longer documents into smaller files.");
@@ -57,7 +61,10 @@ export async function POST(request: Request) {
     if (insertError || !draft) throw new Error(insertError?.code === "23505" ? "This document is already being read. Refresh the document list." : "The document draft could not be saved.");
     draftId = draft.id;
     const result = await analyzeLearnerDocument(text);
-    const sections = result.sections.map((section) => ({ ...section, learnerId: matchDocumentLearner(section.sourceLabel, learners) }));
+    const sections = result.sections.map((section) => ({
+      ...section,
+      learnerId: requestedLearnerId || matchDocumentLearner(section.sourceLabel, learners),
+    }));
     const outputPrivacy = reviewPrivacyText(sections.flatMap((section) => section.items.map((item) => item.text)).join("\n"));
     if (outputPrivacy.requiresReview) throw new Error("The reading includes sensitive details. Remove those details from the source and try again.");
     const { data: saved, error } = await db.from("learner_document_imports").update({ document_type: result.documentType, sections, status: "draft" }).eq("id", draftId).eq("status", "reading").select("id").maybeSingle();
