@@ -70,6 +70,7 @@ export default function MidYearReportHelperModal({
   const [activeLearnerId, setActiveLearnerId] = useState("");
   const [generating, setGenerating] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const activeReport =
@@ -214,6 +215,54 @@ export default function MidYearReportHelperModal({
     }
   }
 
+  async function handleDownloadDocx() {
+    if (reports.length === 0 || exporting) return;
+
+    setExporting(true);
+    setError("");
+    setCopyMessage("");
+
+    try {
+      const response = await fetch("/api/report-helper/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reports }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof result.error === "string"
+            ? result.error
+            : "The Word document could not be prepared."
+        );
+      }
+
+      const file = await response.blob();
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `oasis-mid-year-report-helper-${new Date()
+        .toISOString()
+        .slice(0, 10)}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setCopyMessage(
+        `${reports.length} editable Word report${reports.length === 1 ? "" : "s"} downloaded.`
+      );
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "The Word document could not be prepared."
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const activeWordCount = activeReport
     ? countReportWords(asbMidYearReportToPlainText(activeReport))
     : 0;
@@ -354,13 +403,27 @@ export default function MidYearReportHelperModal({
                       {activeWordCount} / {ASB_MIDYEAR_TEACHER_WORD_LIMIT} teacher words
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Copy full report
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Copy full report
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadDocx}
+                      disabled={exporting}
+                      className="rounded-xl bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {exporting
+                        ? "Preparing Word document..."
+                        : reports.length === 1
+                          ? "Download Word document"
+                          : `Download ${reports.length} reports as Word`}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-5 space-y-5">
@@ -376,7 +439,7 @@ export default function MidYearReportHelperModal({
 
                   <div className="rounded-2xl bg-cyan-50 p-4 sm:p-5">
                     <p className="text-xs font-bold uppercase tracking-wide text-cyan-800">
-                      4. Units of inquiry · two strongest evidence links
+                      5. Units of inquiry · two strongest evidence links
                     </p>
                     <div className="mt-4 space-y-4">
                       {activeReport.unitsOfInquiry.map((unit, index) => (
@@ -392,7 +455,7 @@ export default function MidYearReportHelperModal({
                   </div>
 
                   <ReportTextarea
-                    label="5. Conclusion"
+                    label="Conclusion paragraph"
                     helper="Distinctive strengths, relationships, growth and a proportionate forward-looking goal"
                     value={activeReport.conclusion.text}
                     onChange={(text) => updateSimpleSection("conclusion", text)}
