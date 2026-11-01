@@ -4775,7 +4775,7 @@ useEffect(() => {
     void openSettings();
   } else if (panel === "ptc" && validLearnerId) {
     setShowPTCNotes(true);
-  } else if (panel === "report" && validLearnerId) {
+  } else if (panel === "report") {
     setShowReportHelper(true);
   }
 

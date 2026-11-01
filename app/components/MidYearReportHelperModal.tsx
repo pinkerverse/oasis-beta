@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   ASB_MIDYEAR_TEACHER_WORD_LIMIT,
@@ -60,11 +60,7 @@ export default function MidYearReportHelperModal({
     learners.some((learner) => learner.id === learnerId)
   );
   const [selectedLearnerIds, setSelectedLearnerIds] = useState<string[]>(
-    validInitialIds.length > 0
-      ? validInitialIds
-      : learners[0]
-        ? [learners[0].id]
-        : []
+    validInitialIds
   );
   const [reports, setReports] = useState<AsbMidYearReport[]>([]);
   const [activeLearnerId, setActiveLearnerId] = useState("");
@@ -77,18 +73,30 @@ export default function MidYearReportHelperModal({
     reports.find((report) => report.learnerId === activeLearnerId) ??
     reports[0] ??
     null;
-  function toggleLearner(learnerId: string) {
+  const selectedLearners = useMemo(
+    () =>
+      learners.filter((learner) => selectedLearnerIds.includes(learner.id)),
+    [learners, selectedLearnerIds]
+  );
+
+  function replaceSelection(learnerIds: string[]) {
     if (generating) return;
 
-    setSelectedLearnerIds((current) =>
-      current.includes(learnerId)
-        ? current.filter((id) => id !== learnerId)
-        : [...current, learnerId]
-    );
+    setSelectedLearnerIds(learnerIds);
     setReports([]);
     setActiveLearnerId("");
     setError("");
     setCopyMessage("");
+  }
+
+  function toggleLearner(learnerId: string) {
+    if (generating) return;
+
+    replaceSelection(
+      selectedLearnerIds.includes(learnerId)
+        ? selectedLearnerIds.filter((id) => id !== learnerId)
+        : [...selectedLearnerIds, learnerId]
+    );
   }
 
   async function generateOne(learnerId: string) {
@@ -303,33 +311,41 @@ export default function MidYearReportHelperModal({
           </button>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-slate-900">Choose learners</h3>
+              <h3 className="font-bold text-slate-900">Choose learners</h3>
               <p className="mt-1 text-xs text-slate-500">
-                Reports are drafts for teacher review and use initials only.
+                Generate one editable report draft for each selected learner.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={selectedLearnerIds.length === 0 || generating}
-              className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {generating
-                ? `Writing ${completedCount} of ${selectedLearnerIds.length}`
-                : reports.length > 0
-                  ? "Regenerate selected reports"
-                  : `Generate ${selectedLearnerIds.length || ""} report${
-                      selectedLearnerIds.length === 1 ? "" : "s"
-                    }`}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  replaceSelection(learners.map((learner) => learner.id))
+                }
+                disabled={generating}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => replaceSelection([])}
+                disabled={generating}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Clear
+              </button>
+            </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-5 sm:gap-6">
             {learners.map((learner) => {
               const selected = selectedLearnerIds.includes(learner.id);
+              const initials = getLearnerInitials(learner);
+
               return (
                 <button
                   key={learner.id}
@@ -337,18 +353,63 @@ export default function MidYearReportHelperModal({
                   onClick={() => toggleLearner(learner.id)}
                   disabled={generating}
                   aria-pressed={selected}
-                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
-                    selected
-                      ? "border-cyan-700 bg-cyan-700 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-cyan-300"
-                  }`}
+                  aria-label={`${selected ? "Deselect" : "Select"} learner ${initials}`}
+                  className="group flex w-16 flex-col items-center disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {getLearnerInitials(learner)}
+                  <span
+                    className={`flex h-16 w-16 items-center justify-center rounded-full border-4 bg-slate-300 transition ${
+                      selected
+                        ? "border-blue-500 shadow-sm"
+                        : "border-slate-200 group-hover:border-cyan-300"
+                    }`}
+                  >
+                    <span className="text-xl font-bold text-slate-600">
+                      {initials}
+                    </span>
+                  </span>
+                  <span
+                    className={`mt-2 text-sm ${
+                      selected
+                        ? "font-semibold text-blue-700"
+                        : "text-slate-700"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {initials}
+                  </span>
                 </button>
               );
             })}
           </div>
-        </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <p className="text-sm text-slate-500">
+              {selectedLearners.length} of {learners.length} learners selected
+            </p>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={selectedLearnerIds.length === 0 || generating}
+              className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {generating
+                ? `Writing ${completedCount} of ${selectedLearnerIds.length}...`
+                : reports.length > 0
+                  ? "Regenerate selected reports"
+                  : `Generate ${selectedLearnerIds.length} report${
+                      selectedLearnerIds.length === 1 ? "" : "s"
+                    }`}
+            </button>
+          </div>
+        </section>
+
+        {generating && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-cyan-200 border-t-cyan-700" />
+            OASIS is preparing the selected mid-year report drafts. You can
+            keep this window open while it works through the class.
+          </div>
+        )}
 
         {error && (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
