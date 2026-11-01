@@ -17,6 +17,10 @@ import {
   privacyReviewResponse,
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
+import {
+  ASB_SUPPLEMENTAL_REPORTING_RULES,
+  getRelevantAsbSupplementalReportingItems,
+} from "@/lib/asb-supplemental-reporting-framework";
 import { recordSecurityEvent } from "@/lib/security-audit";
 import {
   getCurrentWorkspaceContext,
@@ -318,6 +322,17 @@ export async function POST(request: Request) {
       learnerId,
       privacyIdentities
     );
+    const supplementalReportingItems =
+      getRelevantAsbSupplementalReportingItems(
+        JSON.stringify({
+          observations: observations.map((entry) => ({
+            observation: entry.observation,
+            teacherNotes: entry.teacherNotes,
+          })),
+          privateTeacherNotes: teacherNotes.map((note) => note.note),
+          importedDocumentContext,
+        })
+      );
 
     if (
       observations.length === 0 &&
@@ -377,6 +392,10 @@ ${JSON.stringify(teacherNotes, null, 2)}
 ${DOCUMENT_CONTEXT_RULES}
 IMPORTED REVIEWED DOCUMENT CONTEXT — INTERNAL USE ONLY
 ${JSON.stringify(importedDocumentContext, null, 2)}
+
+${ASB_SUPPLEMENTAL_REPORTING_RULES}
+RELEVANT OPTIONAL SUPPLEMENTAL STATEMENTS — USE ONLY WHEN DIRECTLY EVIDENCED
+${JSON.stringify(supplementalReportingItems, null, 2)}
 `;
     const responseRequest = {
       model:

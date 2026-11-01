@@ -19,6 +19,10 @@ import {
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import { frameworks, type FrameworkDefinition } from "@/lib/framework";
 import {
+  ASB_SUPPLEMENTAL_REPORTING_RULES,
+  getRelevantAsbSupplementalReportingItems,
+} from "@/lib/asb-supplemental-reporting-framework";
+import {
   getLearnerInitials,
   replaceLearnerNamesWithInitials,
 } from "@/lib/learner-privacy";
@@ -424,6 +428,19 @@ export async function POST(request: Request) {
     }
 
     const importedDocumentContext = await loadImportedLearnerContext(context, learnerId, privacyIdentities);
+    const supplementalReportingItems =
+      getRelevantAsbSupplementalReportingItems(
+        JSON.stringify({
+          observations: entries.map((entry) => ({
+            observation: entry.observation,
+            teacherNotes: entry.teacherNotes,
+          })),
+          privateCalibrationNotes: privateCalibrationNotes.map((note) =>
+            note.note
+          ),
+          importedDocumentContext,
+        })
+      );
     const ptcPrompt = `
 You are an experienced Pre-K pedagogical documentation lead preparing concise parent-teacher conference notes for learner ${learnerInitials}.
 
@@ -538,6 +555,10 @@ ${JSON.stringify(privateCalibrationNotes, null, 2)}
 ${DOCUMENT_CONTEXT_RULES}
 IMPORTED DOCUMENT CONTEXT — INTERNAL USE ONLY
 ${JSON.stringify(importedDocumentContext)}
+
+${ASB_SUPPLEMENTAL_REPORTING_RULES}
+RELEVANT OPTIONAL SUPPLEMENTAL STATEMENTS — USE ONLY WHEN DIRECTLY EVIDENCED
+${JSON.stringify(supplementalReportingItems, null, 2)}
     `;
     const responseRequest = {
       model: process.env.PTC_NOTES_MODEL || "gpt-4.1-mini",
