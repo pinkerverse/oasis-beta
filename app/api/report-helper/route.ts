@@ -19,6 +19,10 @@ import {
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
 import {
+  EARLY_YEARS_REPORT_WRITING_PROMPT,
+  reportFrameworkBridgePrompt,
+} from "@/lib/report-writing-quality";
+import {
   ASB_SUPPLEMENTAL_REPORTING_RULES,
   getRelevantAsbSupplementalReportingItems,
 } from "@/lib/asb-supplemental-reporting-framework";
@@ -415,6 +419,10 @@ export async function POST(request: Request) {
 You are an experienced Pre-K teacher writing an ASB mid-year narrative report for learner ${learnerInitials}.
 
 Write a warm, precise report that sounds like a teacher who knows the learner well. Use only the supplied evidence. Use ${learnerInitials} and they/their; never infer a full name or gender.
+
+${EARLY_YEARS_REPORT_WRITING_PROMPT}
+
+${reportFrameworkBridgePrompt(null)}
 
 FIXED REPORT STRUCTURE
 1. INTRODUCTION: one paragraph about the whole learner, how they have settled, their approach to classroom life, relationships, self-management, organization, and social-emotional development. Begin with ${learnerInitials} as a person and learner, not with an academic skill or favorite activity.

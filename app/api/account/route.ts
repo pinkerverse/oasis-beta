@@ -20,6 +20,7 @@ export async function GET() {
   const [
     { data: school, error: schoolError },
     { data: workspaces },
+    { data: activeReportFormats },
   ] =
     await Promise.all([
       supabaseAdmin
@@ -34,6 +35,11 @@ export async function GET() {
             .in("id", context.workspaceIds)
             .order("created_at", { ascending: true })
         : Promise.resolve({ data: [] }),
+      supabaseAdmin
+        .from("school_report_templates")
+        .select("id, report_kind, name")
+        .eq("school_id", context.schoolId)
+        .eq("status", "active"),
     ]);
 
   const platformOwner = await isPlatformAdministrator(context.userId);
@@ -59,7 +65,11 @@ export async function GET() {
     mfaRequired: context.isSchoolAdmin || platformOwner,
     mfaVerified: context.assuranceLevel === "aal2",
     currentWorkspaceId: context.workspaceId,
-    ptcTemplate: getPtcTemplateForSchool(context.schoolId),
+    ptcTemplate:
+      (activeReportFormats ?? []).find((format) => format.report_kind === "ptc")?.id ??
+      getPtcTemplateForSchool(context.schoolId) ??
+      null,
+    schoolReportFormats: activeReportFormats ?? [],
     workspaces: workspaces ?? [],
   });
 }

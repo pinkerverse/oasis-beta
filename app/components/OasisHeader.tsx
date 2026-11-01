@@ -24,6 +24,7 @@ type OasisHeaderProps = {
   onPTCNotes?: () => void;
   onReportHelper?: () => void;
   onUploadDocuments?: () => void;
+  onReportFormats?: () => void;
   onAddObservation?: () => void;
   onTeacherNote?: () => void;
   onTodaysFocus?: () => void;
@@ -32,6 +33,7 @@ type OasisHeaderProps = {
   ptcNotesActive?: boolean;
   reportHelperActive?: boolean;
   documentUploadActive?: boolean;
+  reportFormatsActive?: boolean;
   addObservationActive?: boolean;
   teacherNoteActive?: boolean;
   todaysFocusActive?: boolean;
@@ -93,6 +95,7 @@ export default function OasisHeader({
   onPTCNotes,
   onReportHelper,
   onUploadDocuments,
+  onReportFormats,
   onAddObservation,
   onTeacherNote,
   onTodaysFocus,
@@ -101,6 +104,7 @@ export default function OasisHeader({
   ptcNotesActive = false,
   reportHelperActive = false,
   documentUploadActive = false,
+  reportFormatsActive = false,
   addObservationActive = false,
   teacherNoteActive = false,
   todaysFocusActive = false,
@@ -390,7 +394,7 @@ export default function OasisHeader({
             <div ref={toolsRef} className="relative">
               <button ref={toolsButtonRef} type="button" aria-label="Tools" title="Tools" aria-expanded={showToolsMenu} aria-controls={toolsMenuId}
                 onClick={() => { setShowToolsMenu((current) => !current); setShowProfileMenu(false); }}
-                className={actionButtonClasses(showToolsMenu || ptcNotesActive || reportHelperActive || documentUploadActive || settingsActive)}>
+                className={actionButtonClasses(showToolsMenu || ptcNotesActive || reportHelperActive || documentUploadActive || reportFormatsActive || settingsActive)}>
                 <span aria-hidden="true" className="text-xl leading-none">⋯</span>
                 <span className="hidden xl:inline">Tools</span>
               </button>
@@ -400,6 +404,7 @@ export default function OasisHeader({
                 <div className="mx-3 mb-2 mt-3 border-t border-slate-100 pt-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Reports & reflection</p></div>
                 <button type="button" aria-label="PTC Notes" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={toolItemClasses}><ToolMenuContent icon="report" label="PTC Notes" description={ptcNotesRequiresLearnerSelection && !hasLearnerSelection ? "Select a learner in My Class" : "Prepare conference summaries"} /></button>
                 <button type="button" aria-label="Report Helper" onClick={() => runPanelAction("report", onReportHelper)} className={toolItemClasses}><ToolMenuContent icon="report" label="Report Helper" description="Prepare and export mid-year reports" /></button>
+                <button type="button" aria-label="School report formats" onClick={() => runPanelAction("report-formats", onReportFormats)} className={toolItemClasses}><ToolMenuContent icon="settings" label="School report formats" description="Teach OASIS your required structure" /></button>
                 <div className="mt-2 border-t border-slate-100 pt-2 sm:hidden">
                   <button type="button" aria-label="Teacher Note" onClick={() => runPanelAction("teacher-note", onTeacherNote)} className={toolItemClasses}><ToolMenuContent icon="note" label="Teacher Note" /></button>
                   <Link href="/learner-intelligence" aria-current={learnerIntelligenceActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="insight" label="Learner Insight" /></Link>

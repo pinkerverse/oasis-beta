@@ -30,6 +30,10 @@ import {
   privacyReviewResponse,
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
+import {
+  EARLY_YEARS_REPORT_WRITING_PROMPT,
+  reportFrameworkBridgePrompt,
+} from "@/lib/report-writing-quality";
 import { recordSecurityEvent } from "@/lib/security-audit";
 import {
   getCurrentWorkspaceContext,
@@ -445,6 +449,10 @@ export async function POST(request: Request) {
 You are an experienced Pre-K pedagogical documentation lead preparing concise parent-teacher conference notes for learner ${learnerInitials}.
 
 Use only the supplied OASIS observations. The learner identifier is initials, and you must use only ${learnerInitials}. Never infer or include a full name, parent name, diagnosis, personality label, family detail, medical information, safeguarding information, or unsupported developmental claim.
+
+${EARLY_YEARS_REPORT_WRITING_PROMPT}
+
+${reportFrameworkBridgePrompt(activeFramework)}
 
 PURPOSE
 Create an evidence-grounded draft that follows this school's conference structure while remaining easy for the teacher to copy into the official document. The four domain sections should read as a concise developmental snapshot: what the learner can currently do, followed by the most relevant next step.

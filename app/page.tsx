@@ -15,8 +15,10 @@ import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/clie
 import AccountSecurity from "@/app/components/AccountSecurity";
 import AsbPtcNotesModal from "@/app/components/AsbPtcNotesModal";
 import MidYearReportHelperModal from "@/app/components/MidYearReportHelperModal";
+import GenericSchoolReportModal from "@/app/components/GenericSchoolReportModal";
 import DocumentUploader from "@/app/documents/DocumentUploader";
 import OasisHeader from "@/app/components/OasisHeader";
+import SchoolReportFormatsModal from "@/app/components/SchoolReportFormatsModal";
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import {
   createFallbackFocusGuidance,
@@ -626,6 +628,7 @@ function handleRemoveManualLearningArea(strand: string) {
   const [showPTCNotes, setShowPTCNotes] = useState(false);
   const [showReportHelper, setShowReportHelper] = useState(false);
   const [showDocumentUploader, setShowDocumentUploader] = useState(false);
+  const [showReportFormats, setShowReportFormats] = useState(false);
   const [showTeacherNote, setShowTeacherNote] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
@@ -1724,6 +1727,7 @@ const [accountMode, setAccountMode] = useState("");
 const [accountTemporaryOwner, setAccountTemporaryOwner] = useState(false);
 const [accountPlatformOwner, setAccountPlatformOwner] = useState(false);
 const [ptcTemplate, setPtcTemplate] = useState("");
+const [midyearTemplate, setMidyearTemplate] = useState("");
 const [accountContextLoading, setAccountContextLoading] =
   useState(false);
 const [accountSaving, setAccountSaving] = useState(false);
@@ -1753,6 +1757,11 @@ const loadAccount = useCallback(async () => {
     setAccountPlatformOwner(context.isPlatformOwner === true);
     setPtcTemplate(
       typeof context.ptcTemplate === "string" ? context.ptcTemplate : ""
+    );
+    setMidyearTemplate(
+      Array.isArray(context.schoolReportFormats)
+        ? context.schoolReportFormats.find((format: { report_kind?: string; id?: string }) => format.report_kind === "midyear")?.id ?? ""
+        : ""
     );
   }
 
@@ -4781,6 +4790,8 @@ useEffect(() => {
     setShowReportHelper(true);
   } else if (panel === "documents") {
     setShowDocumentUploader(true);
+  } else if (panel === "report-formats") {
+    setShowReportFormats(true);
   }
 
   headerIntentHandled.current = true;
@@ -6365,14 +6376,16 @@ if (checkingOnboarding) {
   onPTCNotes={() => setShowPTCNotes(true)}
   onReportHelper={() => setShowReportHelper(true)}
   onUploadDocuments={() => setShowDocumentUploader(true)}
+  onReportFormats={() => setShowReportFormats(true)}
   onAddObservation={openObservationComposer}
   onTeacherNote={() => setShowTeacherNote(true)}
   onTodaysFocus={openTodaysFocus}
   onSettings={() => void openSettings()}
-  ptcNotesRequiresLearnerSelection={ptcTemplate !== "asb_pre_k"}
+  ptcNotesRequiresLearnerSelection={false}
   ptcNotesActive={showPTCNotes}
   reportHelperActive={showReportHelper}
   documentUploadActive={showDocumentUploader}
+  reportFormatsActive={showReportFormats}
   addObservationActive={showObservationModal}
   teacherNoteActive={showTeacherNote}
   todaysFocusActive={showTodaysFocus}
@@ -12363,11 +12376,21 @@ onClick={() => {
   </div>
 )}
 
-{showReportHelper && (
+{showReportHelper && (!midyearTemplate && ptcTemplate === "asb_pre_k") && (
   <MidYearReportHelperModal
     learners={pupils}
     initialLearnerIds={selectedChildren}
     onClose={() => setShowReportHelper(false)}
+  />
+)}
+
+{showReportHelper && (Boolean(midyearTemplate) || ptcTemplate !== "asb_pre_k") && (
+  <GenericSchoolReportModal
+    learners={pupils}
+    initialLearnerIds={selectedChildren}
+    reportKind="midyear"
+    onClose={() => setShowReportHelper(false)}
+    onOpenFormats={() => { setShowReportHelper(false); setShowReportFormats(true); }}
   />
 )}
 
@@ -12376,6 +12399,15 @@ onClick={() => {
     modal
     initialLearnerId={selectedChildren[0] ?? ""}
     onClose={() => setShowDocumentUploader(false)}
+  />
+)}
+
+{showReportFormats && (
+  <SchoolReportFormatsModal
+    onClose={() => {
+      setShowReportFormats(false);
+      void loadAccount();
+    }}
   />
 )}
 
@@ -13409,93 +13441,13 @@ onClick={() => {
 )}
 
 {showPTCNotes && ptcTemplate !== "asb_pre_k" && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="ptc-notes-title"
-      className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl"
-    >
-
-      <div className="flex items-start justify-between">
-
-        <div>
-          <h2 id="ptc-notes-title" className="text-3xl font-bold text-slate-900">
-            Export PTC Notes
-          </h2>
-
-          <p className="mt-2 text-slate-500">
-            Generate parent-teacher conference notes for the selected learners.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowPTCNotes(false)}
-          className="text-slate-500 hover:text-slate-900"
-          aria-label="Close PTC notes"
-        >
-          ✕
-        </button>
-
-      </div>
-
-      <div className="mt-8 rounded-2xl bg-slate-100 p-5">
-
-        <h3 className="font-semibold text-slate-900">
-          Selected Learners
-        </h3>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {selectedChildren.map((id) => {
-
-  const learner = pupils.find((p) => p.id === id);
-
-  return (
-    <span
-      key={id}
-      className="rounded-full bg-white px-4 py-2 font-medium text-slate-800"
-    >
-      {learner
-        ? getLearnerInitials(learner)
-        : id}
-    </span>
-  );
-
-})}
-        </div>
-
-      </div>
-
-      <p className="mt-6 text-sm text-slate-500">
-        OASIS will generate one PTC note sheet per selected learner.
-      </p>
-
-      <div className="mt-8 flex justify-end gap-3">
-
-        <button
-          type="button"
-          onClick={() => setShowPTCNotes(false)}
-          className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          disabled
-          title="PDF export is not available yet"
-          className="cursor-not-allowed rounded-xl bg-slate-200 px-5 py-3 font-medium text-slate-500"
-        >
-          PDF export coming soon
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
+  <GenericSchoolReportModal
+    learners={pupils}
+    initialLearnerIds={selectedChildren}
+    reportKind="ptc"
+    onClose={() => setShowPTCNotes(false)}
+    onOpenFormats={() => { setShowPTCNotes(false); setShowReportFormats(true); }}
+  />
 )}
 
     </main>
