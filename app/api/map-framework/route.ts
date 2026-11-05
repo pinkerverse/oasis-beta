@@ -5,7 +5,13 @@ import {
 } from "@/lib/framework-api-usage";
 import {
   defaultAssessmentLevels,
+  type AssessmentLevelDefinition,
   type FrameworkDefinition,
+  type FrameworkExpectationBand,
+  type FrameworkExpectedProgressionRange,
+  type FrameworkProgressionLevel,
+  type FrameworkStage,
+  type FrameworkStatement,
 } from "@/lib/framework";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 import { getSchoolAdminContext } from "@/lib/supabase/current-workspace";
@@ -20,6 +26,71 @@ function createSlug(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+  );
+}
+
+function recordArray(
+  value: unknown
+): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(isRecord)
+    : [];
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string"
+      )
+    : [];
+}
+
+function parseAssessmentLevels(
+  value: unknown
+): AssessmentLevelDefinition[] {
+  return recordArray(value)
+    .map((level) => {
+      const id =
+        typeof level.id === "string"
+          ? level.id.trim()
+          : "";
+      const label =
+        typeof level.label === "string"
+          ? level.label.trim()
+          : "";
+      const description =
+        typeof level.description === "string"
+          ? level.description.trim()
+          : "";
+      const order = Number(level.order);
+
+      if (
+        !id ||
+        !label ||
+        !description ||
+        !Number.isInteger(order)
+      ) {
+        return null;
+      }
+
+      return { id, label, description, order };
+    })
+    .filter(
+      (
+        level
+      ): level is AssessmentLevelDefinition =>
+        level !== null
+    );
 }
 
 export async function POST(request: Request) {
@@ -43,23 +114,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const requestBody: unknown = await request.json();
+    const body = isRecord(requestBody)
+      ? requestBody
+      : {};
 const frameworkExtraction =
-  body.frameworkExtraction &&
-  typeof body.frameworkExtraction === "object"
+  isRecord(body.frameworkExtraction)
     ? body.frameworkExtraction
     : null;
 
 const frameworkTables =
-  Array.isArray(
-    (frameworkExtraction as any)?.tables
-  )
-    ? (frameworkExtraction as any).tables
-    : [];
+  recordArray(frameworkExtraction?.tables);
 
 const frameworkTableText =
   frameworkTables
-    .map((table: any) => {
+    .map((table) => {
       const pageNumber =
         table?.pageNumber ?? "?";
 
@@ -554,52 +623,53 @@ expectationBands: {
       );
     }
 
-    const parsed = JSON.parse(outputText);
-// Safety net:
-// progression-column markers must never become
-// developmental stages or age bands.
-if (Array.isArray(parsed.stages)) {
-  parsed.stages = parsed.stages.filter(
-    (stage: any) => {
-      const label =
-        typeof stage?.label === "string"
-          ? stage.label.trim()
-          : "";
+    const parsedValue: unknown = JSON.parse(outputText);
 
-      const isStarProgressionLabel =
-        /^\*{1,6}$/.test(label);
-
-      if (isStarProgressionLabel) {
-        console.warn(
-          "REMOVED INVALID PROGRESSION STAGE",
-          label
-        );
-
-        return false;
-      }
-
-      return true;
+    if (!isRecord(parsedValue)) {
+      return Response.json(
+        { error: "AI returned an invalid framework mapping." },
+        { status: 422 }
+      );
     }
-  );
-}
-    const validStageIds = new Set(
-      Array.isArray(parsed.stages)
-        ? parsed.stages
-            .map((stage: any) =>
-              typeof stage?.id === "string"
-                ? stage.id.trim()
-                : ""
-            )
-            .filter(Boolean)
-        : []
+
+    const parsed = parsedValue;
+
+    // Progression-column markers must never become developmental stages.
+    const stages = recordArray(parsed.stages).filter(
+      (stage) => {
+        const label =
+          typeof stage.label === "string"
+            ? stage.label.trim()
+            : "";
+        const isStarProgressionLabel =
+          /^\*{1,6}$/.test(label);
+
+        if (isStarProgressionLabel) {
+          console.warn(
+            "REMOVED INVALID PROGRESSION STAGE",
+            label
+          );
+        }
+
+        return !isStarProgressionLabel;
+      }
     );
 
-    const expectationBands =
-  Array.isArray(parsed.expectationBands)
-    ? parsed.expectationBands
-        .map((band: any, bandIndex: number) => {
+    const validStageIds = new Set(
+      stages
+        .map((stage) =>
+          typeof stage.id === "string"
+            ? stage.id.trim()
+            : ""
+        )
+        .filter(Boolean)
+    );
+
+    const expectationBands: FrameworkExpectationBand[] =
+      recordArray(parsed.expectationBands)
+        .map((band, bandIndex): FrameworkExpectationBand | null => {
           const label =
-            typeof band?.label === "string"
+            typeof band.label === "string"
               ? band.label.trim()
               : "";
 
@@ -607,20 +677,19 @@ if (Array.isArray(parsed.stages)) {
             return null;
           }
 
-          const checkpoints =
-            Array.isArray(band.checkpoints)
-              ? band.checkpoints
+          const checkpoints: FrameworkExpectationBand["checkpoints"] =
+            recordArray(band.checkpoints)
                   .map(
                     (
-                      checkpoint: any,
+                      checkpoint,
                       checkpointIndex: number
-                    ) => {
+                    ): FrameworkExpectationBand["checkpoints"][number] | null => {
                       const minExpectedLevel = Number(
-                        checkpoint?.minExpectedLevel
+                        checkpoint.minExpectedLevel
                       );
 
                       const maxExpectedLevel = Number(
-                        checkpoint?.maxExpectedLevel
+                        checkpoint.maxExpectedLevel
                       );
 
                       if (
@@ -633,7 +702,7 @@ if (Array.isArray(parsed.stages)) {
                       }
 
                       const checkpointLabel =
-                        typeof checkpoint?.label ===
+                        typeof checkpoint.label ===
                           "string"
                           ? checkpoint.label.trim()
                           : "";
@@ -644,7 +713,11 @@ if (Array.isArray(parsed.stages)) {
 
                       return {
                         id:
-                          createSlug(checkpoint?.id) ||
+                          createSlug(
+                            typeof checkpoint.id === "string"
+                              ? checkpoint.id
+                              : ""
+                          ) ||
                           `checkpoint-${
                             checkpointIndex + 1
                           }`,
@@ -654,8 +727,12 @@ if (Array.isArray(parsed.stages)) {
                       };
                     }
                   )
-                  .filter(Boolean)
-              : [];
+                  .filter(
+                    (
+                      checkpoint
+                    ): checkpoint is FrameworkExpectationBand["checkpoints"][number] =>
+                      checkpoint !== null
+                  );
 
           if (checkpoints.length === 0) {
             return null;
@@ -663,7 +740,11 @@ if (Array.isArray(parsed.stages)) {
 
           return {
             id:
-              createSlug(band?.id) ||
+              createSlug(
+                typeof band.id === "string"
+                  ? band.id
+                  : ""
+              ) ||
               `expectation-band-${bandIndex + 1}`,
             label,
             minAgeMonths:
@@ -674,24 +755,24 @@ if (Array.isArray(parsed.stages)) {
               typeof band.maxAgeMonths === "number"
                 ? band.maxAgeMonths
                 : undefined,
-            stageIds: Array.isArray(band.stageIds)
-              ? band.stageIds.filter(
-                  (stageId: unknown) =>
-                    typeof stageId === "string" &&
-                    validStageIds.has(stageId)
-                )
-              : [],
+            stageIds: stringArray(band.stageIds).filter(
+              (stageId) => validStageIds.has(stageId)
+            ),
             checkpoints,
           };
         })
-        .filter(Boolean)
-    : [];
+        .filter(
+          (
+            band
+          ): band is FrameworkExpectationBand =>
+            band !== null
+        );
 
-    const areas = Array.isArray(parsed.areas)
-      ? parsed.areas
-          .map((area: any, areaIndex: number) => {
+    const areas: FrameworkDefinition["areaDefinitions"] =
+      recordArray(parsed.areas)
+          .map((area, areaIndex): FrameworkDefinition["areaDefinitions"][number] | null => {
             const name =
-              typeof area?.name === "string"
+              typeof area.name === "string"
                 ? area.name.trim()
                 : "";
 
@@ -706,17 +787,15 @@ if (Array.isArray(parsed.stages)) {
                 : createSlug(name) ||
                   `area-${areaIndex + 1}`;
 
-            const statements = Array.isArray(
-              area.statements
-            )
-              ? area.statements
+            const statements: FrameworkStatement[] =
+              recordArray(area.statements)
                   .map(
                     (
-                      statement: any,
+                      statement,
                       statementIndex: number
-                    ) => {
+                    ): FrameworkStatement | null => {
                       const text =
-                        typeof statement?.text ===
+                        typeof statement.text ===
                         "string"
                           ? statement.text.trim()
                           : "";
@@ -736,25 +815,16 @@ if (Array.isArray(parsed.stages)) {
                               statementIndex + 1
                             }`;
 
-                      const stageIds =
-                        Array.isArray(
-                          statement.stageIds
-                        )
-                          ? statement.stageIds.filter(
-                              (stageId: unknown) =>
-                                typeof stageId ===
-                                  "string" &&
-                                validStageIds.has(
-                                  stageId
-                                )
-                            )
-                          : [];
-const progression =
-  Array.isArray(statement.progression)
-    ? statement.progression
-        .map((level: any) => {
+                      const stageIds = stringArray(
+                        statement.stageIds
+                      ).filter((stageId) =>
+                        validStageIds.has(stageId)
+                      );
+const progression: FrameworkProgressionLevel[] =
+  recordArray(statement.progression)
+        .map((level): FrameworkProgressionLevel | null => {
           const levelNumber =
-            Number(level?.level);
+            Number(level.level);
 
           const descriptors =
             Array.isArray(level?.descriptors)
@@ -781,7 +851,7 @@ const progression =
             level: levelNumber,
 
             label:
-              typeof level?.label === "string" &&
+              typeof level.label === "string" &&
               level.label.trim()
                 ? level.label.trim()
                 : undefined,
@@ -789,25 +859,28 @@ const progression =
             descriptors,
           };
         })
-        .filter(Boolean)
-        .sort(
-          (first: any, second: any) =>
-            first.level - second.level
+        .filter(
+          (
+            level
+          ): level is FrameworkProgressionLevel =>
+            level !== null
         )
-    : [];
-const expectedProgression =
-  Array.isArray(statement.expectedProgression)
-    ? statement.expectedProgression
-        .map((expectation: any) => {
+        .sort(
+          (first, second) =>
+            first.level - second.level
+        );
+const expectedProgression: FrameworkExpectedProgressionRange[] =
+  recordArray(statement.expectedProgression)
+        .map((expectation): FrameworkExpectedProgressionRange | null => {
           const stageId =
-            typeof expectation?.stageId === "string"
+            typeof expectation.stageId === "string"
               ? expectation.stageId.trim()
               : "";
           const minExpectedLevel = Number(
-            expectation?.minExpectedLevel
+            expectation.minExpectedLevel
           );
           const maxExpectedLevel = Number(
-            expectation?.maxExpectedLevel
+            expectation.maxExpectedLevel
           );
 
           if (
@@ -826,8 +899,12 @@ const expectedProgression =
             maxExpectedLevel,
           };
         })
-        .filter(Boolean)
-    : [];
+        .filter(
+          (
+            expectation
+          ): expectation is FrameworkExpectedProgressionRange =>
+            expectation !== null
+        );
                       return {
   id: statementId,
   text,
@@ -861,8 +938,12 @@ const expectedProgression =
 };
                     }
                   )
-                  .filter(Boolean)
-              : [];
+                  .filter(
+                    (
+                      statement
+                    ): statement is FrameworkStatement =>
+                      statement !== null
+                  );
 
             return {
               id: areaId,
@@ -870,8 +951,12 @@ const expectedProgression =
               statements,
             };
           })
-          .filter(Boolean)
-      : [];
+          .filter(
+            (
+              area
+            ): area is FrameworkDefinition["areaDefinitions"][number] =>
+              area !== null
+          );
 
     if (areas.length === 0) {
       return Response.json(
@@ -885,7 +970,11 @@ const expectedProgression =
 
     const mappedFramework: FrameworkDefinition = {
       key:
-        createSlug(parsed.name) ||
+        createSlug(
+          typeof parsed.name === "string"
+            ? parsed.name
+            : ""
+        ) ||
         `framework-${crypto.randomUUID()}`,
       name:
         typeof parsed.name === "string" &&
@@ -897,14 +986,23 @@ const expectedProgression =
         parsed.version.trim()
           ? parsed.version.trim()
           : undefined,
-      stages: Array.isArray(parsed.stages)
-        ? parsed.stages.map(
-            (stage: any, index: number) => ({
+      stages: stages.map(
+            (stage, index): FrameworkStage => ({
               id:
-                createSlug(stage.id) ||
+                createSlug(
+                  typeof stage.id === "string"
+                    ? stage.id
+                    : ""
+                ) ||
                 `stage-${index + 1}`,
-              label: stage.label.trim(),
-              aliases: stage.aliases,
+              label:
+                typeof stage.label === "string"
+                  ? stage.label.trim()
+                  : `Stage ${index + 1}`,
+              aliases:
+                stringArray(stage.aliases).length > 0
+                  ? stringArray(stage.aliases)
+                  : undefined,
               minAgeMonths:
                 typeof stage.minAgeMonths ===
                 "number"
@@ -915,7 +1013,10 @@ const expectedProgression =
                 "number"
                   ? stage.maxAgeMonths
                   : undefined,
-              order: stage.order,
+              order:
+                typeof stage.order === "number"
+                  ? stage.order
+                  : index + 1,
               description:
                 typeof stage.description ===
                   "string" &&
@@ -923,8 +1024,7 @@ const expectedProgression =
                   ? stage.description.trim()
                   : undefined,
             })
-       )
-    : [],
+       ),
 
 expectationBands:
   expectationBands.length > 0
@@ -932,16 +1032,11 @@ expectationBands:
     : undefined,
 
 assessmentLevels:
-        Array.isArray(
-          parsed.assessmentLevels
-        ) &&
-        parsed.assessmentLevels.length > 0
-          ? parsed.assessmentLevels
+        parseAssessmentLevels(parsed.assessmentLevels).length > 0
+          ? parseAssessmentLevels(parsed.assessmentLevels)
           : defaultAssessmentLevels,
-      areas: areas.map(
-        (area: any) => area.name
-      ),
-      areaDefinitions: areas as FrameworkDefinition["areaDefinitions"],
+      areas: areas.map((area) => area.name),
+      areaDefinitions: areas,
     };
 
     logFrameworkApiUsage({

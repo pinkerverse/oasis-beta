@@ -5,7 +5,6 @@ import {
   type FrameworkDefinition,
 } from "@/lib/framework";
 
-import { supabase } from "@/lib/supabase";
 import {
   getCurrentWorkspaceContext,
   isSchoolAdmin,
@@ -969,6 +968,16 @@ type ValidatedLearnerAnalysis = {
   nextSteps: string[];
 };
 
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+  );
+}
+
 function validateFrameworkMatches(
   rawMatches: unknown
 ): ValidatedFrameworkMatch[] {
@@ -987,7 +996,7 @@ function validateFrameworkMatches(
       continue;
     }
 
-    const match = rawMatch as any;
+    const match = rawMatch as Record<string, unknown>;
 
     if (typeof match.strand !== "string") {
       continue;
@@ -1013,10 +1022,14 @@ const suggestedLevel = assessmentStatus;
         ? match.statementMatches
             .map(
               (
-                statementMatch: any
+                statementMatch: unknown
               ): ValidatedStatementMatch | null => {
+                if (!isRecord(statementMatch)) {
+                  return null;
+                }
+
                 const statementId =
-                  typeof statementMatch?.statementId ===
+                  typeof statementMatch.statementId ===
                   "string"
                     ? statementMatch.statementId.trim()
                     : "";
@@ -1027,7 +1040,7 @@ const suggestedLevel = assessmentStatus;
                   );
 
                 const evidence =
-                  typeof statementMatch?.evidence ===
+                  typeof statementMatch.evidence ===
                   "string"
                     ? statementMatch.evidence.trim()
                     : "";
@@ -1040,12 +1053,13 @@ const suggestedLevel = assessmentStatus;
 }
 
 const requestedDevelopmentalLevel =
-  statementMatch?.developmentalLevel;
+  statementMatch.developmentalLevel;
 
 const developmentalLevel =
   requestedDevelopmentalLevel === null
     ? null
-    : Number.isInteger(
+    : typeof requestedDevelopmentalLevel === "number" &&
+      Number.isInteger(
         requestedDevelopmentalLevel
       ) &&
       validStatement.progressionLevels.includes(
@@ -1215,9 +1229,10 @@ const validatedLearnerAnalyses:
   learners.map((learner) => {
     const rawAnalysis =
       rawLearnerAnalyses.find(
-        (item: any) =>
-          item &&
-          typeof item === "object" &&
+        (
+          item: unknown
+        ): item is Record<string, unknown> =>
+          isRecord(item) &&
           item.learnerId === learner.id
       );
 

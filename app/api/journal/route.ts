@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 import {
   getCurrentWorkspaceContext,
   isSchoolAdmin,
@@ -68,17 +67,13 @@ function normalizeObservationDate(value: unknown) {
   return value;
 }
 
-function learnerIdsMatch(
-  firstLearnerIds: string[],
-  secondLearnerIds: string[]
-) {
-  return (
-    firstLearnerIds.length ===
-      secondLearnerIds.length &&
-    firstLearnerIds.every(
-      (learnerId, index) =>
-        learnerId === secondLearnerIds[index]
-    )
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
   );
 }
 
@@ -112,15 +107,17 @@ const authenticatedSupabase =
     const normalizedObservation =
       normalizeObservationText(observationText);
 
+    const rawLearnerEntries: unknown =
+      body.learner_entries;
     const learnerEntries =
-  Array.isArray(body.learner_entries)
-    ? body.learner_entries
+  Array.isArray(rawLearnerEntries)
+    ? rawLearnerEntries.filter(isRecord)
     : [];
 
 const learnerEntryIds =
   normalizeLearnerIds(
     learnerEntries.map(
-      (entry: any) => entry?.learner_id
+      (entry) => entry.learner_id
     )
   );
 
@@ -328,8 +325,8 @@ const matchingLearnerId =
 const matchingLearnerEntry =
   matchingLearnerId
     ? learnerEntries.find(
-        (entry: any) =>
-          entry?.learner_id === matchingLearnerId
+        (entry) =>
+          entry.learner_id === matchingLearnerId
       )
     : null;
 
@@ -369,22 +366,23 @@ return (
 
 // Remove request-only properties before
 // sending rows to Supabase.
-const {
-  allow_duplicate: _allowDuplicate,
-  observationDate: _observationDate,
-  observation_date: _observationDateSnake,
-  learner_entries: _learnerEntries,
-  learner_ids: _learnerIds,
+const observationToSave = { ...body };
 
-  framework_version_id:
-    _frameworkVersionId,
-  framework_key:
-    _frameworkKey,
-  framework_version:
-    _frameworkVersion,
-
-  ...observationToSave
-} = body;
+for (const requestOnlyKey of [
+  "allow_duplicate",
+  "observationDate",
+  "observation_date",
+  "learner_entries",
+  "learner_ids",
+  "framework_version_id",
+  "framework_key",
+  "framework_version",
+  "school_id",
+  "workspace_id",
+  "created_by",
+]) {
+  delete observationToSave[requestOnlyKey];
+}
 
 const frameworkVersionId =
   typeof body.framework_version_id === "string" &&
@@ -409,14 +407,14 @@ const rowsToInsert =
     ? normalizedLearnerIds.map((learnerId) => {
         const learnerEntry =
           learnerEntries.find(
-            (entry: any) =>
-              entry?.learner_id === learnerId
+            (entry) =>
+              entry.learner_id === learnerId
           ) ?? {};
 
        return {
+  ...observationToSave,
   school_id: context.schoolId,
   workspace_id: context.workspaceId,
-  ...observationToSave,
   created_by: context.userId,
 
   framework_version_id:
@@ -472,9 +470,9 @@ const rowsToInsert =
       })
    : [
     {
+      ...observationToSave,
       school_id: context.schoolId,
       workspace_id: context.workspaceId,
-      ...observationToSave,
       created_by: context.userId,
       observation: observationText,
       observation_date: observationDate,
