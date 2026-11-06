@@ -53,6 +53,10 @@ import {
   ASB_PTC_TEMPLATE_KEY,
   getAsbPreKTargetLevelMaximum,
 } from "@/lib/asb-ptc";
+import {
+  matchContextTextToFrameworkAreas,
+  teacherNoteCanSetOverviewAttainment,
+} from "@/lib/learner-overview-evidence";
 
 
 
@@ -68,6 +72,41 @@ type ImportedLearnerPreview = {
 };
 
 type CsvLearnerRow = Record<string, string | undefined>;
+
+type OverviewFrameworkMatch = {
+  strand?: string;
+  source?: "ai" | "teacher";
+  finalLevel?: string;
+  teacherOverride?: string;
+  suggestedLevel?: string;
+  assessmentStatus?: string;
+  statementMatches?: Array<{ statementId?: string }>;
+};
+
+type LearnerOverviewSources = {
+  teacherNotes: Array<{
+    id?: string;
+    observed_on?: string;
+    created_at?: string;
+    attainment_signal?: string;
+    support_level?: string;
+    pattern?: string;
+    framework_matches?: OverviewFrameworkMatch[];
+  }>;
+  ptcReports: Array<{
+    id?: string;
+    generated_at?: string;
+    report_data?: {
+      domains?: Record<string, { observations?: Array<{ text?: unknown }> }>;
+    };
+  }>;
+  importedDocuments: Array<{
+    sourceId?: string;
+    documentType?: string;
+    sourceDate?: string;
+    items?: Array<{ kind?: string; text?: string }>;
+  }>;
+};
 
 type FrameworkProcessingStage =
   | FrameworkUploadProgress
@@ -219,6 +258,12 @@ const [deletingObservation, setDeletingObservation] =
 const [observationDeleteError, setObservationDeleteError] =
   useState("");
 const [learnerObservations, setLearnerObservations] = useState<any[]>([]);
+const [learnerOverviewSources, setLearnerOverviewSources] =
+  useState<LearnerOverviewSources>({
+    teacherNotes: [],
+    ptcReports: [],
+    importedDocuments: [],
+  });
 const [classObservations, setClassObservations] = useState<any[]>([]);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
@@ -910,45 +955,210 @@ useEffect(() => {
   schoolAssessmentSettings,
   activeSavedFramework,
 ]);
-const evidenceCoverage = learnerObservations.reduce(
-  (acc: any[], entry: any) => {
-    entry.framework_matches?.forEach((match: any) => {
-      const area = resolveActiveFrameworkArea(match);
-      if (!area) return;
+type OverviewSourceKind =
+  | "observation"
+  | "baseline"
+  | "teacher_note"
+  | "ptc"
+  | "uploaded_document";
 
-      const existing = acc.find(
-        (item: any) => item.area === area
+type OverviewAreaEvidence = {
+  area: string;
+  sourceKind: OverviewSourceKind;
+  sourceId: string;
+  sourceLabel: string;
+  date: string;
+};
+
+const supportingAreaEvidence: OverviewAreaEvidence[] = [];
+const addSupportingAreaEvidence = (
+  area: string | null,
+  sourceKind: Exclude<OverviewSourceKind, "observation">,
+  sourceId: string,
+  sourceLabel: string,
+  date: string
+) => {
+  if (!area) return;
+
+  const duplicate = supportingAreaEvidence.some(
+    (item) =>
+      item.area === area &&
+      item.sourceKind === sourceKind &&
+      item.sourceId === sourceId
+  );
+  if (!duplicate) {
+    supportingAreaEvidence.push({ area, sourceKind, sourceId, sourceLabel, date });
+  }
+};
+
+for (const baselineEntry of learnerBaseline?.assessment_data ?? []) {
+  addSupportingAreaEvidence(
+    resolveActiveFrameworkArea({ strand: baselineEntry.area }),
+    "baseline",
+    learnerBaseline?.id ?? `baseline-${baselineEntry.area}`,
+    "Baseline",
+    learnerBaseline?.baseline_date ?? ""
+  );
+}
+
+for (const note of learnerOverviewSources.teacherNotes) {
+  for (const match of Array.isArray(note.framework_matches)
+    ? note.framework_matches
+    : []) {
+    addSupportingAreaEvidence(
+      resolveActiveFrameworkArea(match),
+      "teacher_note",
+      String(note.id ?? `${note.observed_on}-${match.strand ?? "area"}`),
+      "Teacher note",
+      String(note.observed_on ?? note.created_at ?? "")
+    );
+  }
+}
+
+for (const importedDocument of learnerOverviewSources.importedDocuments) {
+  const achievementText = (Array.isArray(importedDocument.items)
+    ? importedDocument.items
+    : [])
+    .filter((item) => item.kind !== "next_step")
+    .map((item) => String(item.text ?? ""))
+    .join(" ");
+
+  for (const area of matchContextTextToFrameworkAreas(
+    achievementText,
+    activeFramework.areaDefinitions
+  )) {
+    addSupportingAreaEvidence(
+      area,
+      "uploaded_document",
+      String(importedDocument.sourceId ?? importedDocument.documentType ?? "document"),
+      "Reviewed upload",
+      String(importedDocument.sourceDate ?? "")
+    );
+  }
+}
+
+const ptcFallbackAreas = (domainKey: string) => {
+  const termsByDomain: Record<string, string[]> = {
+    managingComplexity: ["managing complexity", "self-management"],
+    collaborationSocial: ["collaboration", "social skills", "communication"],
+    physical: ["physical", "motor"],
+    criticalThinking: ["critical thinking", "thinking skills", "creativity", "innovation"],
+  };
+  const terms = termsByDomain[domainKey] ?? [];
+
+  return activeFramework.areaDefinitions
+    .filter((area) =>
+      terms.some((term) => area.name.toLocaleLowerCase().includes(term))
+    )
+    .map((area) => area.name);
+};
+
+for (const ptcReport of learnerOverviewSources.ptcReports) {
+  const domains = ptcReport.report_data?.domains ?? {};
+
+  for (const [domainKey, domainValue] of Object.entries(domains)) {
+    const text = (Array.isArray(domainValue.observations) ? domainValue.observations : [])
+      .map((point) => String(point.text ?? ""))
+      .join(" ");
+    if (!text) continue;
+
+    const matchedAreas = matchContextTextToFrameworkAreas(
+      text,
+      activeFramework.areaDefinitions
+    );
+    const areas = matchedAreas.length > 0 ? matchedAreas : ptcFallbackAreas(domainKey);
+
+    for (const area of areas) {
+      addSupportingAreaEvidence(
+        area,
+        "ptc",
+        String(ptcReport.id ?? ptcReport.generated_at ?? "ptc"),
+        "Saved PTC",
+        String(ptcReport.generated_at ?? "")
       );
+    }
+  }
+}
 
-      if (existing) {
-        existing.count++;
-        existing.lastAdded = new Date(
-  entry.observation_date || entry.created_at
-).toLocaleDateString();
-      } else {
-        acc.push({
-          area,
-          short: area
-            .split(" ")
-            .map((w: string) => w[0])
-            .join("")
-            .toUpperCase(),
-          count: 1,
-          lastAdded: new Date(
-  entry.observation_date || entry.created_at
-).toLocaleDateString(),
-        });
-      }
+const coverageByArea = new Map<
+  string,
+  {
+    area: string;
+    short: string;
+    count: number;
+    lastAdded: string;
+    latestTimestamp: number;
+    sourceLabels: Set<string>;
+  }
+>();
+
+const addCoverage = (evidence: OverviewAreaEvidence) => {
+  const existing = coverageByArea.get(evidence.area);
+  const parsedDate = new Date(evidence.date);
+  const displayDate = Number.isNaN(parsedDate.getTime())
+    ? "Date not recorded"
+    : parsedDate.toLocaleDateString();
+
+  if (existing) {
+    existing.count += 1;
+    existing.sourceLabels.add(evidence.sourceLabel);
+    if (!Number.isNaN(parsedDate.getTime()) && parsedDate.getTime() > existing.latestTimestamp) {
+      existing.latestTimestamp = parsedDate.getTime();
+      existing.lastAdded = displayDate;
+    }
+    return;
+  }
+
+  coverageByArea.set(evidence.area, {
+    area: evidence.area,
+    short: evidence.area
+      .split(" ")
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase(),
+    count: 1,
+    lastAdded: displayDate,
+    latestTimestamp: Number.isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime(),
+    sourceLabels: new Set([evidence.sourceLabel]),
+  });
+};
+
+for (const entry of learnerObservations) {
+  const areasInObservation = new Set<string>();
+  for (const match of Array.isArray(entry.framework_matches)
+    ? entry.framework_matches
+    : []) {
+    const area = resolveActiveFrameworkArea(match);
+    if (area) areasInObservation.add(area);
+  }
+  for (const area of areasInObservation) {
+    addCoverage({
+      area,
+      sourceKind: "observation",
+      sourceId: String(entry.id ?? entry.created_at),
+      sourceLabel: "Observation",
+      date: String(entry.observation_date ?? entry.created_at ?? ""),
     });
+  }
+}
 
-    return acc;
-  },
-  []
+supportingAreaEvidence.forEach(addCoverage);
+
+const frameworkAreaOrder = new Map(
+  activeFramework.areaDefinitions.map((area, index) => [area.name, index])
 );
+const evidenceCoverage = [...coverageByArea.values()].sort(
+  (first, second) =>
+    (frameworkAreaOrder.get(first.area) ?? Number.MAX_SAFE_INTEGER) -
+    (frameworkAreaOrder.get(second.area) ?? Number.MAX_SAFE_INTEGER)
+);
+const supportingRecordCount = new Set(
+  supportingAreaEvidence.map((item) => `${item.sourceKind}:${item.sourceId}`)
+).size;
 
 const maxEvidenceCount =
   evidenceCoverage.length > 0
-    ? Math.max(...evidenceCoverage.map((item: any) => item.count))
+    ? Math.max(...evidenceCoverage.map((item) => item.count))
     : 1;
 const liveLearnerProgress = (() => {
   const orderedLevels =
@@ -960,8 +1170,27 @@ const liveLearnerProgress = (() => {
       area: string;
       level: string;
       score: number;
+      source: string;
     }
   >();
+
+  const addJudgement = (area: string, level: string, source: string) => {
+    if (!area || latestJudgementByArea.has(area) || !level.trim()) return;
+
+    const displayLevel = getAssessmentDisplayLabel(level);
+    const levelIndex = orderedLevels.findIndex(
+      (assessmentLevel) =>
+        assessmentLevel.trim().toLowerCase() === displayLevel.trim().toLowerCase()
+    );
+    if (levelIndex < 0 || orderedLevels.length === 0) return;
+
+    latestJudgementByArea.set(area, {
+      area,
+      level: displayLevel,
+      score: Math.round(((levelIndex + 1) / orderedLevels.length) * 100),
+      source,
+    });
+  };
 
   // Journal entries arrive newest first.
   for (const entry of learnerObservations) {
@@ -994,53 +1223,33 @@ const liveLearnerProgress = (() => {
         continue;
       }
 
-const displayLevel =
-  getAssessmentDisplayLabel(level);
-
-const levelIndex =
-  orderedLevels.findIndex(
-    (assessmentLevel) =>
-      assessmentLevel
-        .trim()
-        .toLowerCase() ===
-      displayLevel
-        .trim()
-        .toLowerCase()
-  );
-
-const score =
-  levelIndex >= 0 &&
-  orderedLevels.length > 0
-    ? Math.round(
-        ((levelIndex + 1) /
-          orderedLevels.length) *
-          100
-      )
-    : 0;
-  levelIndex >= 0 && orderedLevels.length > 0
-    ? Math.round(
-        ((levelIndex + 1) /
-          orderedLevels.length) *
-          100
-      )
-    : 0;
-
-latestJudgementByArea.set(area, {
-  area,
-  level: displayLevel,
-  score,
-});
+      addJudgement(area, level, "Observation");
     }
+  }
+
+  // A structured teacher note may fill an otherwise empty area only when the
+  // teacher recorded demonstrated learning with little support and a pattern,
+  // or explicitly chose the framework match themselves.
+  for (const note of learnerOverviewSources.teacherNotes) {
+    for (const match of Array.isArray(note.framework_matches)
+      ? note.framework_matches
+      : []) {
+      if (!teacherNoteCanSetOverviewAttainment(note, match)) continue;
+      const area = resolveActiveFrameworkArea(match);
+      const level = match.finalLevel || match.teacherOverride || match.suggestedLevel || match.assessmentStatus;
+      if (area && typeof level === "string") addJudgement(area, level, "Teacher note");
+    }
+  }
+
+  // Baselines seed areas that still have no newer, direct judgement. Reports
+  // and uploads intentionally never assign attainment by themselves.
+  for (const baselineEntry of learnerBaseline?.assessment_data ?? []) {
+    const area = resolveActiveFrameworkArea({ strand: baselineEntry.area });
+    if (area) addJudgement(area, baselineEntry.level, "Baseline");
   }
 
 // Display known framework areas in framework order,
 // but do not discard saved areas if a name differs.
-const frameworkAreaOrder = new Map(
-  activeFramework.areaDefinitions.map(
-    (area, index) => [area.name, index]
-  )
-);
-
 return Array.from(
   latestJudgementByArea.values()
 ).sort(
@@ -1051,6 +1260,10 @@ return Array.from(
       Number.MAX_SAFE_INTEGER)
 );
 })();
+
+const contextOnlyAreas = evidenceCoverage.filter(
+  (coverage) => !liveLearnerProgress.some((progress) => progress.area === coverage.area)
+);
 
 function getSnapshotCutoffDate(
   selection: string
@@ -5936,28 +6149,61 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
+  let cancelled = false;
+
   async function loadLearnerObservations() {
     if (selectedChildren.length !== 1) {
       setLearnerObservations([]);
+      setLearnerOverviewSources({
+        teacherNotes: [],
+        ptcReports: [],
+        importedDocuments: [],
+      });
       return;
     }
 
     try {
-      const response = await fetch(
-        `/api/journal?learner=${encodeURIComponent(selectedChildren[0])}`
+      const learnerId = encodeURIComponent(selectedChildren[0]);
+      const [journalResponse, sourceResponse] = await Promise.all([
+        fetch(`/api/journal?learner=${learnerId}`, { cache: "no-store" }),
+        fetch(`/api/learner-overview-sources?learner=${learnerId}`, {
+          cache: "no-store",
+        }),
+      ]);
+      const [journalResult, sourceResult] = await Promise.all([
+        journalResponse.json(),
+        sourceResponse.json(),
+      ]);
+
+      if (cancelled) return;
+      setLearnerObservations(journalResult.entries || []);
+      setLearnerOverviewSources(
+        sourceResponse.ok
+          ? {
+              teacherNotes: sourceResult.teacherNotes ?? [],
+              ptcReports: sourceResult.ptcReports ?? [],
+              importedDocuments: sourceResult.importedDocuments ?? [],
+            }
+          : { teacherNotes: [], ptcReports: [], importedDocuments: [] }
       );
-
-      const result = await response.json();
-
-      setLearnerObservations(result.entries || []);
 
     } catch (error) {
       console.error(error);
+      if (cancelled) return;
       setLearnerObservations([]);
+      setLearnerOverviewSources({
+        teacherNotes: [],
+        ptcReports: [],
+        importedDocuments: [],
+      });
     }
   }
 
   loadLearnerObservations();
+
+  return () => {
+    cancelled = true;
+  };
 }, [selectedChildren]);
 
 async function refreshClassObservations() {
@@ -7408,6 +7654,9 @@ const hasOverride =
           <div className="mb-2 flex min-w-0 items-start justify-between gap-2 sm:items-center sm:gap-4">
             <span className="min-w-0 flex-1 break-words text-sm font-medium text-slate-900 sm:text-base">
               {item.area}
+              <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                From {item.source.toLocaleLowerCase()}
+              </span>
             </span>
 
             <span
@@ -7439,8 +7688,29 @@ const hasOverride =
       </p>
 
       <p className="mt-1 text-sm text-slate-500">
-        Save an observation for this learner to begin showing progress.
+        Add a baseline, observation or structured teacher note to begin showing progress.
       </p>
+    </div>
+  )}
+
+  {contextOnlyAreas.length > 0 && (
+    <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50 p-4">
+      <p className="text-sm font-semibold text-slate-800">
+        Supporting evidence to review
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-600">
+        These areas appear in saved PTCs, teacher notes or reviewed uploads, but OASIS has not assigned an attainment level from narrative text alone.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {contextOnlyAreas.map((item) => (
+          <span
+            key={item.area}
+            className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+          >
+            {item.area}
+          </span>
+        ))}
+      </div>
     </div>
   )}
 </div>
@@ -7459,7 +7729,7 @@ const hasOverride =
 </p>
 
 <p className="mt-1 text-slate-500">
-  Assessment evidence collected
+  Learner evidence collected across saved sources
 </p>
                 </div>
 
@@ -7474,9 +7744,13 @@ const hasOverride =
 
 <p className="mt-1 text-xs text-slate-500">
   {evidenceCoverage.reduce(
-    (sum: number, item: any) => sum + item.count,
+    (sum, item) => sum + item.count,
     0
   )} learning-area matches
+</p>
+
+<p className="mt-1 text-xs font-medium text-sky-700">
+  {supportingRecordCount} supporting {supportingRecordCount === 1 ? "record" : "records"}
 </p>
 
                 </div>
@@ -7508,6 +7782,10 @@ const hasOverride =
                       <p className="mt-2 text-xs text-slate-500">
                         Last added: {item.lastAdded}
                       </p>
+
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        {Array.from(item.sourceLabels).join(" · ")}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -7524,6 +7802,10 @@ const hasOverride =
     </span>
   ))}
 </div>
+
+              <p className="mt-4 text-xs leading-5 text-slate-500">
+                Baselines and structured teacher judgements can fill attainment gaps. Saved PTCs and reviewed uploads strengthen area coverage but never raise attainment on their own.
+              </p>
             </div>
 
             <div className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg sm:p-6">
