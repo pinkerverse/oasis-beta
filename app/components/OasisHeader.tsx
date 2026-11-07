@@ -269,17 +269,6 @@ export default function OasisHeader({
           {hasClass && (
             <>
               <Link
-                href="/planning"
-                aria-label="Weekly planning"
-                title="Weekly planning"
-                aria-current={activePage === "planning" ? "page" : undefined}
-                className={actionButtonClasses(activePage === "planning")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 10h18M7 14h3m4 0h3M7 17h3" /></svg>
-                <span className="hidden xl:inline">Planning</span>
-              </Link>
-
-              <Link
                 href="/learner-intelligence"
                 aria-label="Learner Insight"
                 aria-current={learnerIntelligenceActive ? "page" : undefined}
@@ -328,6 +317,17 @@ export default function OasisHeader({
                   className={iconClasses(classAttainmentActive)}
                   aria-hidden="true"
                 />
+              </Link>
+
+              <Link
+                href="/planning"
+                aria-label="Weekly planning"
+                title="Weekly planning"
+                aria-current={activePage === "planning" ? "page" : undefined}
+                className={actionButtonClasses(activePage === "planning")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 10h18M7 14h3m4 0h3M7 17h3" /></svg>
+                <span className="hidden xl:inline">Planning</span>
               </Link>
 
               <button
