@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   DICTATION_MAX_BYTES,
@@ -60,6 +60,8 @@ export default function VoiceDictation({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelId = useId();
 
   function clearTimers() {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -87,6 +89,26 @@ export default function VoiceDictation({
       chunksRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    if (!expanded || status !== "idle") return;
+
+    function closeWhenClickingOutside(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setExpanded(false);
+    }
+
+    function closeWithEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setExpanded(false);
+    }
+
+    document.addEventListener("mousedown", closeWhenClickingOutside);
+    document.addEventListener("keydown", closeWithEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", closeWhenClickingOutside);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [expanded, status]);
 
   async function sendRecording(blob: Blob) {
     const mediaType = blob.type || "audio/webm";
@@ -222,33 +244,88 @@ export default function VoiceDictation({
   }
 
   const busy = status !== "idle";
+  const buttonLabel =
+    status === "recording"
+      ? `Recording voice note, ${formatDuration(seconds)}`
+      : status === "transcribing"
+        ? "Transcribing voice note"
+        : "Dictate with microphone";
 
   return (
-    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div ref={rootRef} className="absolute right-3 top-3 z-30">
       <button
         type="button"
         onClick={() => setExpanded((current) => !current)}
         disabled={disabled || busy}
         aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
+        aria-controls={panelId}
+        aria-label={buttonLabel}
+        title={buttonLabel}
+        className={`relative flex h-9 w-9 items-center justify-center rounded-xl border bg-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+          status === "recording"
+            ? "border-red-300 text-red-600"
+            : status === "transcribing" || status === "requesting"
+              ? "border-cyan-300 text-cyan-700"
+              : expanded
+                ? "border-cyan-400 text-cyan-800"
+                : "border-slate-200 text-slate-600 hover:border-cyan-300 hover:text-cyan-800"
+        }`}
       >
-        <span className="flex items-center gap-2 text-sm font-bold text-slate-800">
-          <span
-            aria-hidden="true"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-800"
-          >
-            🎙
-          </span>
-          Dictate instead
-        </span>
-        <span className="text-sm text-slate-500" aria-hidden="true">
-          {expanded ? "⌃" : "⌄"}
-        </span>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-[18px] w-[18px]"
+        >
+          <rect x="9" y="3" width="6" height="11" rx="3" />
+          <path d="M6.5 10.5a5.5 5.5 0 0 0 11 0" />
+          <path d="M12 16v4" />
+          <path d="M9 20h6" />
+        </svg>
+        {status === "recording" && (
+          <span className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-white bg-red-500" />
+        )}
       </button>
 
       {expanded && (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <label className="flex items-start gap-2 rounded-xl bg-white p-3 text-xs leading-5 text-slate-600">
+        <div
+          id={panelId}
+          className="absolute right-0 top-12 w-80 max-w-[calc(100vw-3rem)] rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl sm:w-96"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-900">Voice dictation</p>
+              <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                OASIS will turn your recording into an editable draft.
+              </p>
+            </div>
+            {!busy && (
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                aria-label="Close voice dictation"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  className="h-4 w-4"
+                >
+                  <path d="m5 5 10 10M15 5 5 15" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <label className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
             <input
               type="checkbox"
               checked={privacyConfirmed}

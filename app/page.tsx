@@ -7114,7 +7114,7 @@ if (checkingOnboarding) {
   />
 </div>
         
-        <label className="block text-sm font-semibold text-slate-700">
+        <label htmlFor="new-observation-text" className="block text-sm font-semibold text-slate-700">
           Observation
         </label>
 
@@ -7122,31 +7122,34 @@ if (checkingOnboarding) {
           Use learner initials or school child IDs in your notes. Do not type full names or full dates of birth.
         </div>
 
-        <textarea
-          value={observation}
-          onChange={(e) => {
-            invalidateObservationAnalysis();
-            setObservationPrivacyError("");
-            setObservation(e.target.value);
-          }}
-          style={{
-            color: "#000000",
-            WebkitTextFillColor: "#000000",
-            opacity: 1,
-          }}
-          className="mt-3 h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
-          placeholder="Type or paste an observation using initials only..."
-        />
+        <div className="relative mt-3">
+          <textarea
+            id="new-observation-text"
+            value={observation}
+            onChange={(e) => {
+              invalidateObservationAnalysis();
+              setObservationPrivacyError("");
+              setObservation(e.target.value);
+            }}
+            style={{
+              color: "#000000",
+              WebkitTextFillColor: "#000000",
+              opacity: 1,
+            }}
+            className="h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 pr-14"
+            placeholder="Type or paste an observation using initials only..."
+          />
 
-        <VoiceDictation
-          mode="observation"
-          disabled={loading}
-          onTranscript={(text) => {
-            invalidateObservationAnalysis();
-            setObservationPrivacyError("");
-            setObservation((current) => appendDictationText(current, text));
-          }}
-        />
+          <VoiceDictation
+            mode="observation"
+            disabled={loading}
+            onTranscript={(text) => {
+              invalidateObservationAnalysis();
+              setObservationPrivacyError("");
+              setObservation((current) => appendDictationText(current, text));
+            }}
+          />
+        </div>
 
         {(() => {
           const privacyReview = reviewPrivacyText(observation);

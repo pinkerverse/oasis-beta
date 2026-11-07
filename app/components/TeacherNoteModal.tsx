@@ -340,8 +340,8 @@ export default function TeacherNoteModal({
               </div>
             </div>
 
-            <label className="mt-5 block">
-              <span className="text-sm font-bold text-slate-900">What did you notice?</span>
+            <div className="mt-5 block">
+              <label htmlFor="teacher-note-text" className="text-sm font-bold text-slate-900">What did you notice?</label>
               {focusPrompt && (
                 <span className="mt-2 block rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-slate-700">
                   <span className="block font-bold text-cyan-900">From Today’s Focus · {focusPrompt.area}</span>
@@ -349,30 +349,32 @@ export default function TeacherNoteModal({
                   <span className="mt-1 block text-slate-600">Look for: {focusPrompt.lookFor}</span>
                 </span>
               )}
-              <textarea
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                rows={5}
-                maxLength={2000}
-                placeholder="For example: During the game, AB waited after a verbal prompt but found it difficult to wait independently."
-                className="mt-2 w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
-              />
+              <div className="relative mt-2">
+                <textarea
+                  id="teacher-note-text"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  rows={5}
+                  maxLength={2000}
+                  placeholder="For example: During the game, AB waited after a verbal prompt but found it difficult to wait independently."
+                  className="w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 pr-14 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                />
+                <VoiceDictation
+                  mode="teacher_note"
+                  disabled={saving}
+                  onTranscript={(text) => {
+                    setError("");
+                    setMessage("");
+                    setNote((current) =>
+                      appendDictationText(current, text).slice(0, 2000)
+                    );
+                  }}
+                />
+              </div>
               <span className="mt-1 block text-right text-xs text-slate-400">
                 {note.length}/2000
               </span>
-            </label>
-
-            <VoiceDictation
-              mode="teacher_note"
-              disabled={saving}
-              onTranscript={(text) => {
-                setError("");
-                setMessage("");
-                setNote((current) =>
-                  appendDictationText(current, text).slice(0, 2000)
-                );
-              }}
-            />
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
