@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   ASB_MIDYEAR_TEACHER_WORD_LIMIT,
@@ -10,6 +10,10 @@ import {
   type AsbMidYearReport,
 } from "@/lib/asb-midyear-report";
 import { getLearnerInitials } from "@/lib/learner-privacy";
+import type {
+  LearnerReportReadiness,
+  ReportReadinessStatus,
+} from "@/lib/report-readiness";
 
 type Learner = {
   id: string;
@@ -20,6 +24,9 @@ type Learner = {
 type Props = {
   learners: Learner[];
   initialLearnerIds: string[];
+  onAddObservation?: (learnerId: string) => void;
+  onAddTeacherNote?: (learnerId: string) => void;
+  onViewEvidence?: (learnerId: string) => void;
   onClose: () => void;
 };
 
@@ -50,6 +57,9 @@ const SECTION_LABELS: Array<{
 export default function MidYearReportHelperModal({
   learners,
   initialLearnerIds,
+  onAddObservation,
+  onAddTeacherNote,
+  onViewEvidence,
   onClose,
 }: Props) {
   const validInitialIds = initialLearnerIds.filter((learnerId) =>
@@ -65,6 +75,10 @@ export default function MidYearReportHelperModal({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [readiness, setReadiness] = useState<LearnerReportReadiness[]>([]);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessError, setReadinessError] = useState("");
+  const [expandedReadinessId, setExpandedReadinessId] = useState("");
   const activeReport =
     reports.find((report) => report.learnerId === activeLearnerId) ??
     reports[0] ??
@@ -75,10 +89,67 @@ export default function MidYearReportHelperModal({
     [learners, selectedLearnerIds]
   );
 
+  useEffect(() => {
+    if (selectedLearnerIds.length === 0) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setReadinessLoading(true);
+        setReadinessError("");
+
+        const response = await fetch("/api/report-helper/readiness", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ learnerIds: selectedLearnerIds }),
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            typeof result.error === "string"
+              ? result.error
+              : "Report readiness could not be loaded."
+          );
+        }
+
+        setReadiness(
+          Array.isArray(result.readiness) ? result.readiness : []
+        );
+      } catch (loadError) {
+        if (controller.signal.aborted) return;
+        setReadiness([]);
+        setReadinessError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Report readiness could not be loaded."
+        );
+      } finally {
+        if (!controller.signal.aborted) setReadinessLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [selectedLearnerIds]);
+
   function replaceSelection(learnerIds: string[]) {
     if (generating) return;
 
     setSelectedLearnerIds(learnerIds);
+    if (learnerIds.length === 0) {
+      setReadiness([]);
+      setReadinessError("");
+      setReadinessLoading(false);
+      setExpandedReadinessId("");
+    } else if (!learnerIds.includes(expandedReadinessId)) {
+      setExpandedReadinessId("");
+    }
     setReports([]);
     setActiveLearnerId("");
     setError("");
@@ -342,6 +413,21 @@ export default function MidYearReportHelperModal({
             })}
           </div>
 
+          <ReportReadinessPanel
+            readiness={readiness}
+            loading={readinessLoading}
+            error={readinessError}
+            expandedLearnerId={expandedReadinessId}
+            onToggle={(learnerId) =>
+              setExpandedReadinessId((current) =>
+                current === learnerId ? "" : learnerId
+              )
+            }
+            onAddObservation={onAddObservation}
+            onAddTeacherNote={onAddTeacherNote}
+            onViewEvidence={onViewEvidence}
+          />
+
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
             <p className="text-sm text-slate-500">
               {selectedLearners.length} of {learners.length} learners selected
@@ -512,6 +598,182 @@ export default function MidYearReportHelperModal({
         </div>
       </div>
     </div>
+  );
+}
+
+const READINESS_STYLES: Record<
+  ReportReadinessStatus,
+  { dot: string; badge: string; label: string }
+> = {
+  strong: {
+    dot: "bg-emerald-500",
+    badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    label: "Strong",
+  },
+  moderate: {
+    dot: "bg-amber-400",
+    badge: "border-amber-200 bg-amber-50 text-amber-800",
+    label: "Usable",
+  },
+  limited: {
+    dot: "bg-slate-300",
+    badge: "border-slate-200 bg-slate-100 text-slate-700",
+    label: "Limited",
+  },
+};
+
+function ReportReadinessPanel({
+  readiness,
+  loading,
+  error,
+  expandedLearnerId,
+  onToggle,
+  onAddObservation,
+  onAddTeacherNote,
+  onViewEvidence,
+}: {
+  readiness: LearnerReportReadiness[];
+  loading: boolean;
+  error: string;
+  expandedLearnerId: string;
+  onToggle: (learnerId: string) => void;
+  onAddObservation?: (learnerId: string) => void;
+  onAddTeacherNote?: (learnerId: string) => void;
+  onViewEvidence?: (learnerId: string) => void;
+}) {
+  return (
+    <section className="mt-5 overflow-hidden rounded-2xl border border-cyan-200 bg-white">
+      <div className="flex flex-col gap-2 bg-cyan-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-slate-900">
+            Report readiness
+          </h4>
+          <p className="mt-0.5 text-xs leading-5 text-slate-600">
+            Advisory only. Readiness helps OASIS write carefully and never blocks report generation.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-cyan-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-cyan-800">
+          Generate anytime
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-3 px-4 py-5 text-sm text-slate-600">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-200 border-t-cyan-700" />
+          Checking the selected learners&apos; saved evidence…
+        </div>
+      ) : error ? (
+        <div className="px-4 py-4 text-sm leading-6 text-slate-600">
+          Readiness is temporarily unavailable. You can still generate every selected report.
+        </div>
+      ) : readiness.length === 0 ? (
+        <div className="px-4 py-4 text-sm text-slate-500">
+          Select a learner to review the evidence available for their report.
+        </div>
+      ) : (
+        <div className="max-h-[38vh] divide-y divide-slate-200 overflow-y-auto">
+          {readiness.map((learner) => {
+            const expanded = expandedLearnerId === learner.learnerId;
+            const style = READINESS_STYLES[learner.status];
+
+            return (
+              <article key={learner.learnerId}>
+                <button
+                  type="button"
+                  onClick={() => onToggle(learner.learnerId)}
+                  aria-expanded={expanded}
+                  className="flex w-full items-start gap-3 px-4 py-4 text-left transition hover:bg-slate-50"
+                >
+                  <span
+                    className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-slate-900">
+                        {learner.learnerInitials}
+                      </span>
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${style.badge}`}>
+                        {learner.label}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-600">
+                      {learner.summary}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-slate-500">
+                      {learner.journalCount} journal {learner.journalCount === 1 ? "observation" : "observations"}
+                      {" · "}
+                      {learner.supportingCount} supporting {learner.supportingCount === 1 ? "record" : "records"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-lg text-slate-400" aria-hidden="true">
+                    {expanded ? "⌃" : "⌄"}
+                  </span>
+                </button>
+
+                {expanded && (
+                  <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 sm:px-6">
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {learner.sections.map((section) => {
+                        const sectionStyle = READINESS_STYLES[section.status];
+                        return (
+                          <div key={section.key} className="rounded-xl border border-slate-200 bg-white p-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {section.label}
+                                </p>
+                                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                                  {section.journalCount} journal · {section.supportingCount} supporting
+                                  {section.latestDate
+                                    ? ` · latest ${new Date(`${section.latestDate}T00:00:00`).toLocaleDateString()}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${sectionStyle.badge}`}>
+                                {sectionStyle.label}
+                              </span>
+                            </div>
+                            {section.sourceLabels.length > 0 && (
+                              <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                                {section.sourceLabels.join(" · ")}
+                              </p>
+                            )}
+                            {section.status === "limited" && (
+                              <p className="mt-2 text-xs leading-5 text-amber-800">
+                                {section.guidance}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {onAddTeacherNote && (
+                        <button type="button" onClick={() => onAddTeacherNote(learner.learnerId)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                          Add teacher note
+                        </button>
+                      )}
+                      {onAddObservation && (
+                        <button type="button" onClick={() => onAddObservation(learner.learnerId)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                          Add observation
+                        </button>
+                      )}
+                      {onViewEvidence && learner.supportingCount > 0 && (
+                        <button type="button" onClick={() => onViewEvidence(learner.learnerId)} className="rounded-xl border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-900 hover:bg-cyan-100">
+                          View supporting evidence
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

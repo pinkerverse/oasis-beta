@@ -12886,6 +12886,22 @@ onClick={() => {
   <MidYearReportHelperModal
     learners={pupils}
     initialLearnerIds={selectedChildren}
+    onAddObservation={(learnerId) => {
+      setSelectedChildren([learnerId]);
+      setShowReportHelper(false);
+      openObservationComposer();
+    }}
+    onAddTeacherNote={(learnerId) => {
+      setSelectedChildren([learnerId]);
+      setShowReportHelper(false);
+      setTeacherNoteFocusPrompt(null);
+      setShowTeacherNote(true);
+    }}
+    onViewEvidence={(learnerId) => {
+      setSelectedChildren([learnerId]);
+      setShowReportHelper(false);
+      setShowSupportingRecords(true);
+    }}
     onClose={() => setShowReportHelper(false)}
   />
 )}
