@@ -20,6 +20,8 @@ import DocumentUploader from "@/app/documents/DocumentUploader";
 import OasisHeader from "@/app/components/OasisHeader";
 import SchoolReportFormatsModal from "@/app/components/SchoolReportFormatsModal";
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
+import VoiceDictation from "@/app/components/VoiceDictation";
+import { appendDictationText } from "@/lib/dictation";
 import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
@@ -7134,6 +7136,16 @@ if (checkingOnboarding) {
           }}
           className="mt-3 h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
           placeholder="Type or paste an observation using initials only..."
+        />
+
+        <VoiceDictation
+          mode="observation"
+          disabled={loading}
+          onTranscript={(text) => {
+            invalidateObservationAnalysis();
+            setObservationPrivacyError("");
+            setObservation((current) => appendDictationText(current, text));
+          }}
         />
 
         {(() => {

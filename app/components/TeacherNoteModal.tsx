@@ -21,6 +21,8 @@ import {
   TEACHER_NOTE_SUPPORT_LABELS,
   TEACHER_NOTE_SUPPORT_LEVELS,
 } from "@/lib/teacher-note";
+import VoiceDictation from "@/app/components/VoiceDictation";
+import { appendDictationText } from "@/lib/dictation";
 
 type LearnerOption = {
   id: string;
@@ -359,6 +361,18 @@ export default function TeacherNoteModal({
                 {note.length}/2000
               </span>
             </label>
+
+            <VoiceDictation
+              mode="teacher_note"
+              disabled={saving}
+              onTranscript={(text) => {
+                setError("");
+                setMessage("");
+                setNote((current) =>
+                  appendDictationText(current, text).slice(0, 2000)
+                );
+              }}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
