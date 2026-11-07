@@ -34,6 +34,8 @@ function fixture(options: { status?: string; writable?: boolean; signedIn?: bool
     "@/lib/supabase/server": { createClient: async () => db },
     "@/lib/document-import-server": { documentImportLearners: async () => ({ learners: [{ id: "a", label: "AB", className: "Pre-K" }] }) },
     "@/lib/document-import": documents,
+    "@/lib/document-framework-review": { mergeConfirmedDocumentFrameworkReviews: (_raw: unknown, sections: unknown) => sections },
+    "@/lib/planning-server": { loadPlanningFramework: async () => ({ definition: { assessmentLevels: [] } }) },
     "@/lib/privacy-guardrails": { reviewPrivacyText: () => ({ requiresReview: false }) },
   };
   const compiled = ts.transpileModule(readFileSync(new URL("../app/api/document-imports/route.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;

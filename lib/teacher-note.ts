@@ -92,6 +92,28 @@ export const TEACHER_NOTE_PATTERN_LABELS: Record<
   consistent: "Consistent pattern",
 };
 
+export function getTeacherNoteAssessmentLabel(
+  note: Pick<TeacherNoteInput, "attainmentSignal" | "supportLevel" | "pattern">,
+  orderedLabels: string[]
+) {
+  const labels = orderedLabels.map((label) => label.trim()).filter(Boolean);
+  if (labels.length === 0) return "";
+  if (note.attainmentSignal === "not_yet") return labels[0];
+
+  const developingIndex = Math.min(1, labels.length - 1);
+  if (note.attainmentSignal === "emerging") return labels[developingIndex];
+
+  const independentPattern =
+    (note.supportLevel === "independent" || note.supportLevel === "reminder") &&
+    (note.pattern === "repeated" || note.pattern === "consistent");
+
+  // A private note can establish secure/meeting evidence, but one note never
+  // assigns the school's highest extension label by itself.
+  return independentPattern
+    ? labels[Math.max(0, labels.length - 2)]
+    : labels[developingIndex];
+}
+
 function normaliseText(value: unknown, maximumLength: number) {
   return typeof value === "string"
     ? value.trim().replace(/\s+/g, " ").slice(0, maximumLength)

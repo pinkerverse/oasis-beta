@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   matchContextTextToFrameworkAreas,
+  observationOverviewLevel,
   teacherNoteCanSetOverviewAttainment,
 } from "./learner-overview-evidence.ts";
 
@@ -80,5 +81,27 @@ test("an explicitly teacher-matched note can establish attainment from one clear
       { source: "teacher" }
     ),
     true
+  );
+});
+
+test("overview reads assessmentStatus from older per-area observations", () => {
+  assert.equal(
+    observationOverviewLevel(
+      { assessmentStatus: "Meeting" },
+      { teacher_level: "Per-area judgements" },
+      2
+    ),
+    "Meeting"
+  );
+});
+
+test("legacy overall levels are limited to single-area observations", () => {
+  assert.equal(
+    observationOverviewLevel({}, { teacher_level: "Secure" }, 1),
+    "Secure"
+  );
+  assert.equal(
+    observationOverviewLevel({}, { teacher_level: "Secure" }, 2),
+    ""
   );
 });

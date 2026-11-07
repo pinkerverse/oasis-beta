@@ -44,6 +44,14 @@ type SavedTeacherNote = {
 type TeacherNoteModalProps = {
   learners: LearnerOption[];
   selectedLearnerIds: string[];
+  focusPrompt?: {
+    area: string;
+    frameworkStatementId: string | null;
+    frameworkStatement: string;
+    developmentalLevel: number | null;
+    lookFor: string;
+  } | null;
+  onSaved?: () => void | Promise<void>;
   onClose: () => void;
 };
 
@@ -69,6 +77,8 @@ function noteAreaLabels(note: SavedTeacherNote) {
 export default function TeacherNoteModal({
   learners,
   selectedLearnerIds,
+  focusPrompt = null,
+  onSaved,
   onClose,
 }: TeacherNoteModalProps) {
   const initialLearnerId =
@@ -171,6 +181,12 @@ export default function TeacherNoteModal({
             attainment_signal: parsed.input.attainmentSignal,
             support_level: parsed.input.supportLevel,
             pattern: parsed.input.pattern,
+            focus_reference: focusPrompt
+              ? {
+                  statement_id: focusPrompt.frameworkStatementId,
+                  developmental_level: focusPrompt.developmentalLevel,
+                }
+              : null,
           }),
         });
         const analysis = await analysisResponse.json().catch(() => ({}));
@@ -215,6 +231,7 @@ export default function TeacherNoteModal({
           : "Saved privately. The note will still inform the learner picture."
       );
       await loadNotes();
+      await onSaved?.();
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -273,7 +290,7 @@ export default function TeacherNoteModal({
               </span>
             </div>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-              Record a factual developmental moment that can calibrate OASIS without appearing in progress, coverage, journals or family exports.
+              Record a factual developmental moment. A clearly linked teacher judgement can update Learner Progress and Today’s Focus, while the note itself stays private and out of family exports.
             </p>
           </div>
           <button
@@ -323,6 +340,13 @@ export default function TeacherNoteModal({
 
             <label className="mt-5 block">
               <span className="text-sm font-bold text-slate-900">What did you notice?</span>
+              {focusPrompt && (
+                <span className="mt-2 block rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-slate-700">
+                  <span className="block font-bold text-cyan-900">From Today’s Focus · {focusPrompt.area}</span>
+                  <span className="mt-1 block">{focusPrompt.frameworkStatement}</span>
+                  <span className="mt-1 block text-slate-600">Look for: {focusPrompt.lookFor}</span>
+                </span>
+              )}
               <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}

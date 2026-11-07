@@ -11,6 +11,7 @@ type PrivacyDraft = { filename: string; sourceText: string; error: string; learn
 type DocumentUploaderProps = {
   modal?: boolean;
   initialLearnerId?: string;
+  onLearnerEvidenceChanged?: () => void | Promise<void>;
   onClose?: () => void;
 };
 
@@ -19,7 +20,7 @@ async function responseBody(response: Response) {
   return body;
 }
 
-export default function DocumentUploader({ modal = false, initialLearnerId = "", onClose }: DocumentUploaderProps) {
+export default function DocumentUploader({ modal = false, initialLearnerId = "", onLearnerEvidenceChanged, onClose }: DocumentUploaderProps) {
   const [learners, setLearners] = useState<ImportLearner[]>([]);
   const [documents, setDocuments] = useState<History[]>([]);
   const [current, setCurrent] = useState<DocumentImport | null>(null);
@@ -31,6 +32,8 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [frameworkReviewMode, setFrameworkReviewMode] = useState(false);
+  const [frameworkReviewConfirmed, setFrameworkReviewConfirmed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [selectedLearnerId, setSelectedLearnerId] = useState(initialLearnerId);
@@ -73,7 +76,13 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
     const response = await fetch(`/api/document-imports?id=${encodeURIComponent(id)}`, { cache: "no-store" });
     const body = await responseBody(response);
     if (!response.ok) throw new Error(body.error);
-    setCurrent(body.document); setSections(body.document.sections); setLearners(body.learners); setConfirmed(false);
+    const documentSections = body.document.sections as DocumentSection[];
+    const hasConfirmedFrameworkReview = documentSections.some(
+      (section) => section.frameworkReview?.confirmed
+    );
+    setCurrent(body.document); setSections(documentSections); setLearners(body.learners); setConfirmed(false);
+    setFrameworkReviewMode(hasConfirmedFrameworkReview);
+    setFrameworkReviewConfirmed(hasConfirmedFrameworkReview);
     setExpandedSections(body.document.status === "draft" && body.document.sections.length ? new Set([0]) : new Set());
     requestAnimationFrame(() => reviewHeading.current?.focus());
   }
@@ -156,20 +165,92 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
   }
 
   function edit(index: number, patch: Partial<DocumentSection>) {
-    setSections((previous) => previous.map((section, i) => i === index ? { ...section, ...patch } : section)); setConfirmed(false);
+    setSections((previous) => previous.map((section, i) => i === index ? { ...section, ...patch, frameworkReview: undefined } : section)); setConfirmed(false); setFrameworkReviewConfirmed(false);
+  }
+
+  async function analyzeFrameworkReview() {
+    if (!current || inFlight.current) return;
+    inFlight.current = true;
+    setBusy("Linking the framework walkthrough…");
+    setError("");
+    try {
+      const response = await fetch("/api/document-imports/framework-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: current.id, action: "analyze", sections }),
+      });
+      const body = await responseBody(response);
+      if (!response.ok) throw new Error(body.error);
+      setSections(body.sections);
+      setFrameworkReviewConfirmed(false);
+      setNotice("OASIS found framework links. Check the areas, objectives and attainment labels below before confirming them.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The framework walkthrough could not be analyzed.");
+    } finally {
+      setBusy("");
+      inFlight.current = false;
+    }
+  }
+
+  async function confirmImportedFrameworkReview() {
+    if (!current || current.status !== "imported" || inFlight.current) return;
+    inFlight.current = true;
+    setBusy("Saving the confirmed framework review…");
+    setError("");
+    try {
+      const confirmedSections = sections.map((section) => ({
+        ...section,
+        frameworkReview: section.frameworkReview
+          ? { ...section.frameworkReview, confirmed: true }
+          : undefined,
+      }));
+      const response = await fetch("/api/document-imports/framework-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: current.id,
+          action: "confirm",
+          sections: confirmedSections,
+        }),
+      });
+      const body = await responseBody(response);
+      if (!response.ok) throw new Error(body.error);
+      setSections(body.sections);
+      setFrameworkReviewConfirmed(true);
+      setNotice("Confirmed as a teacher framework review. Its exact matches can now update Learner Progress and Today’s Focus.");
+      await refresh();
+      await onLearnerEvidenceChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The framework review could not be confirmed.");
+    } finally {
+      setBusy("");
+      inFlight.current = false;
+    }
   }
 
   async function save() {
     if (!current || inFlight.current) return;
     inFlight.current = true; setBusy("Saving private learner context…"); setError("");
     try {
-      const response = await fetch("/api/document-imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: current.id, sections, confirmed }) });
+      const sectionsForSave = sections.map((section) => ({
+        ...section,
+        frameworkReview:
+          frameworkReviewMode && frameworkReviewConfirmed && section.frameworkReview
+            ? { ...section.frameworkReview, confirmed: true }
+            : undefined,
+      }));
+      const response = await fetch("/api/document-imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: current.id, sections: sectionsForSave, confirmed }) });
       const body = await responseBody(response);
       if (!response.ok) throw new Error(body.error);
       setCurrent(null);
       setExpandedSections(new Set());
-      setNotice(`Added to ${new Set(sections.map((section) => section.learnerId)).size} learner record(s) as private document context. No observations or assessment stars were changed.`);
+      setNotice(
+        frameworkReviewMode && frameworkReviewConfirmed
+          ? `Added to ${new Set(sections.map((section) => section.learnerId)).size} learner record(s) as a confirmed teacher framework review. Learner Progress and Today’s Focus can now use its exact matches.`
+          : `Added to ${new Set(sections.map((section) => section.learnerId)).size} learner record(s) as private document context. No observations or assessment stars were changed.`
+      );
       await refresh();
+      await onLearnerEvidenceChanged?.();
     } catch (e) { setError(e instanceof Error ? e.message : "The import could not be saved."); }
     finally { setBusy(""); inFlight.current = false; }
   }
@@ -182,7 +263,9 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
       const body = await responseBody(response);
       if (!response.ok) throw new Error(body.error);
       if (current?.id === id) setCurrent(null);
-      await refresh(); setNotice("Import removed from use. Existing observations and reports are unchanged.");
+      await refresh();
+      await onLearnerEvidenceChanged?.();
+      setNotice("Import removed from use. Existing observations and reports are unchanged.");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not remove the import."); }
     finally { setBusy(""); inFlight.current = false; }
   }
@@ -257,12 +340,12 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
         </div>
         {loading ? <p className="text-sm text-slate-500">Loading documents…</p> : documents.length === 0 ? <p className="text-sm text-slate-500">Your uploaded documents will appear here. Nothing has been added yet.</p> : <ul className="divide-y divide-slate-100">{documents.filter((doc) => !filter || doc.learner_ids.includes(filter)).map((doc) => <li key={doc.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="min-w-0 flex-1"><p className="font-semibold">{doc.filename}</p><p className="mt-1 text-xs text-slate-500">{doc.document_type} · {doc.status === "draft" ? "Needs your review — not yet added" : doc.status === "reading" ? "Reading — no learner changes yet" : doc.status === "failed" ? "Text saved — retry reading or match learners yourself" : `Private context · ${doc.learner_ids.map((id) => learners.find((l) => l.id === id)?.label || "Archived learner").join(", ")}`}</p></div>
-          {doc.status !== "imported" && <button className={button} disabled={Boolean(busy)} onClick={() => void open(doc.id).catch((e) => setError(e.message))}>{doc.status === "draft" ? "Review & match" : doc.status === "failed" ? "Continue review" : "Check status"}</button>}<button className={button} disabled={Boolean(busy)} onClick={() => void remove(doc.id)}>Remove</button>
+          <button className={button} disabled={Boolean(busy)} onClick={() => void open(doc.id).catch((e) => setError(e.message))}>{doc.status === "imported" ? "Review" : doc.status === "draft" ? "Review & match" : doc.status === "failed" ? "Continue review" : "Check status"}</button><button className={button} disabled={Boolean(busy)} onClick={() => void remove(doc.id)}>Remove</button>
         </li>)}</ul>}
       </section>
 
-      {current && current.status !== "imported" && <section aria-labelledby="document-review" className="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 sm:p-8">
-        <div><h2 ref={reviewHeading} tabIndex={-1} id="document-review" className="text-2xl font-bold">{current.status === "draft" ? "Review and match learners" : "Document reading — not added to learners"}</h2><p className="mt-2 text-sm text-slate-500">{current.filename} · {current.document_type}</p></div>
+      {current && <section aria-labelledby="document-review" className="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 sm:p-8">
+        <div><h2 ref={reviewHeading} tabIndex={-1} id="document-review" className="text-2xl font-bold">{current.status === "imported" ? "Saved private learner context" : current.status === "draft" ? "Review and match learners" : "Document reading — not added to learners"}</h2><p className="mt-2 text-sm text-slate-500">{current.filename} · {current.document_type}</p></div>
         <p className="text-sm leading-6 text-slate-600">Check who each section belongs to, the wording, and whether this is a final teacher-reviewed report or a draft. Targets stay separate from current skills. Unknown dates stay unknown—not today’s date.</p>
         {recoverable ? <div className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
           <h3 className="font-semibold">Your text is saved. Learner matching hasn’t finished.</h3>
@@ -287,9 +370,11 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
           </div>)}
           {!section.items.length && <p className="text-sm text-red-700">Keep at least one point, or exclude this section.</p>}
           {!readonly && <button className={button} disabled={Boolean(busy) || section.items.length >= 12} onClick={() => edit(index, { items: [...section.items, { kind: "context", text: "", quote: "" }] })}>Add a point from the source</button>}
+          {section.frameworkReview?.frameworkMatches?.length ? <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-cyan-800">Proposed framework review</p><div className="mt-3 space-y-3">{section.frameworkReview.frameworkMatches.map((match) => <div key={match.strand} className="rounded-xl bg-white p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-bold text-slate-900">{match.strand}</p><span className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-bold text-cyan-900">{match.suggestedLevel}</span></div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">{match.statementMatches.map((statement) => <li key={statement.statementId}>{statement.statementText}{statement.developmentalLevel ? ` · Level ${statement.developmentalLevel}` : ""}<span className="block text-slate-500">{statement.evidence}</span></li>)}</ul></div>)}</div></div> : null}
           </div>
         </details>)}
-        {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5"><button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { const nextIndex = sections.length; setSections((previous) => [...previous, emptyDocumentSection()]); setExpandedSections((previous) => new Set([...previous, nextIndex])); setConfirmed(false); }}>Add a learner section</button>{reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}<label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} />I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context, not as new observations or assessment scores.</label><button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !confirmed || Boolean(reviewIssue)} onClick={() => void save()}>Add to learner records</button></div>}
+        {(current.status === "draft" || current.status === "imported") && <div className="space-y-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 sm:p-5"><label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={frameworkReviewMode} disabled={Boolean(busy)} onChange={(event) => { setFrameworkReviewMode(event.target.checked); setFrameworkReviewConfirmed(false); }} /><span><span className="block font-bold text-slate-900">This is my teacher framework walkthrough</span><span className="block text-xs text-slate-600">Use this only when you deliberately described the learner’s current development against the framework. Final, dated and explicitly confirmed matches may update Learner Progress and Today’s Focus.</span></span></label>{frameworkReviewMode && <><button className={button} disabled={Boolean(busy)} onClick={() => void analyzeFrameworkReview()}>Analyze against the active framework</button>{sections.some((section) => section.frameworkReview?.frameworkMatches?.length) && <label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={frameworkReviewConfirmed} disabled={Boolean(busy)} onChange={(event) => setFrameworkReviewConfirmed(event.target.checked)} />I reviewed the proposed areas, objectives and attainment labels and confirm that they represent my professional judgement.</label>}{current.status === "imported" && <button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !frameworkReviewConfirmed} onClick={() => void confirmImportedFrameworkReview()}>Confirm framework review</button>}</>}</div>}
+        {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5"><button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { const nextIndex = sections.length; setSections((previous) => [...previous, emptyDocumentSection()]); setExpandedSections((previous) => new Set([...previous, nextIndex])); setConfirmed(false); setFrameworkReviewConfirmed(false); }}>Add a learner section</button>{reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}<label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} />I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context.</label><button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !confirmed || Boolean(reviewIssue) || (frameworkReviewMode && !frameworkReviewConfirmed)} onClick={() => void save()}>Add to learner records</button></div>}
       </section>}
       {modal && <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" onClick={onClose} className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-100">Close</button></div>}
     </main>

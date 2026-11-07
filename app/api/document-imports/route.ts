@@ -2,6 +2,8 @@ import { getCurrentWorkspaceContext } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { documentImportLearners } from "@/lib/document-import-server";
 import { canRecoverDocument, validateDocumentSections } from "@/lib/document-import";
+import { mergeConfirmedDocumentFrameworkReviews } from "@/lib/document-framework-review";
+import { loadPlanningFramework } from "@/lib/planning-server";
 import { privacyReviewResponse, reviewPrivacyText } from "@/lib/privacy-guardrails";
 
 export async function GET(request: Request) {
@@ -44,7 +46,48 @@ export async function POST(request: Request) {
     if (draft.status === "imported") return Response.json({ saved: true, alreadySaved: true });
     if (draft.status !== "draft") return Response.json({ error: "This document is not ready for review." }, { status: 409 });
     const { learners } = await documentImportLearners(context);
-    const sections = validateDocumentSections(body.sections, draft.source_text, new Set(learners.map((learner) => learner.id)));
+    let sections = validateDocumentSections(body.sections, draft.source_text, new Set(learners.map((learner) => learner.id)));
+    const requestedFrameworkReview = Array.isArray(body.sections) && body.sections.some(
+      (section: unknown) =>
+        section &&
+        typeof section === "object" &&
+        Boolean((section as Record<string, unknown>).frameworkReview)
+    );
+    if (requestedFrameworkReview) {
+      const [frameworkRecord, settingsResult] = await Promise.all([
+        loadPlanningFramework(context),
+        db
+          .from("school_assessment_settings")
+          .select("status_labels")
+          .eq("school_id", context.schoolId)
+          .maybeSingle(),
+      ]);
+      const savedLabels = Array.isArray(settingsResult.data?.status_labels)
+        ? settingsResult.data.status_labels.filter(
+            (label): label is string => typeof label === "string" && Boolean(label.trim())
+          )
+        : [];
+      const labels = savedLabels.length >= 2
+        ? savedLabels
+        : [...frameworkRecord.definition.assessmentLevels]
+            .sort((first, second) => first.order - second.order)
+            .map((level) => level.label);
+      sections = mergeConfirmedDocumentFrameworkReviews(
+        body.sections,
+        sections,
+        frameworkRecord.definition,
+        labels
+      );
+      if (!sections.some((section) => section.frameworkReview?.confirmed)) {
+        return Response.json(
+          {
+            error:
+              "The framework walkthrough needs final dated sections and confirmed framework matches.",
+          },
+          { status: 400 }
+        );
+      }
+    }
     const review = reviewPrivacyText(sections.flatMap((section) => section.items.map((item) => item.text)).join("\n"));
     if (review.requiresReview) return Response.json(privacyReviewResponse(review), { status: 422 });
     const result = await db.from("learner_document_imports").update({ sections, learner_ids: [...new Set(sections.map((section) => section.learnerId))], status: "imported", reviewed_by: context.userId, reviewed_at: new Date().toISOString() })

@@ -140,3 +140,41 @@ export function teacherNoteCanSetOverviewAttainment(note: {
     lightOrNoSupport &&
     (repeatedPattern || match?.source === "teacher");
 }
+
+function usableLevel(value: unknown) {
+  if (typeof value !== "string") return "";
+  const level = value.trim();
+  return level && level.toLocaleLowerCase() !== "per-area judgements"
+    ? level
+    : "";
+}
+
+/**
+ * Reads current and legacy observation judgement fields. An old overall level
+ * is usable only when that observation resolves to exactly one framework area.
+ */
+export function observationOverviewLevel(
+  match: {
+    finalLevel?: unknown;
+    teacherOverride?: unknown;
+    suggestedLevel?: unknown;
+    assessmentStatus?: unknown;
+  },
+  observation: { teacher_level?: unknown; ai_level?: unknown },
+  resolvedAreaCount: number
+) {
+  const exactLevel = [
+    match.finalLevel,
+    match.teacherOverride,
+    match.suggestedLevel,
+    match.assessmentStatus,
+  ]
+    .map(usableLevel)
+    .find(Boolean);
+  if (exactLevel) return exactLevel;
+  if (resolvedAreaCount !== 1) return "";
+
+  return [observation.teacher_level, observation.ai_level]
+    .map(usableLevel)
+    .find(Boolean) ?? "";
+}

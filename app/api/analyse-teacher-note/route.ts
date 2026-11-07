@@ -15,7 +15,10 @@ import {
   isSchoolAdmin,
 } from "@/lib/supabase/current-workspace";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
-import { normaliseTeacherNoteInput } from "@/lib/teacher-note";
+import {
+  getTeacherNoteAssessmentLabel,
+  normaliseTeacherNoteInput,
+} from "@/lib/teacher-note";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -42,6 +45,10 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const parsed = normaliseTeacherNoteInput(body);
+    const rawFocusReference =
+      body.focus_reference && typeof body.focus_reference === "object"
+        ? (body.focus_reference as Record<string, unknown>)
+        : null;
 
     if (!parsed.input) {
       return Response.json({ error: parsed.error }, { status: 400 });
@@ -73,7 +80,7 @@ export async function POST(request: Request) {
         )
       : classLearnerQuery.eq("workspace_id", context.workspaceId);
 
-    const [learnerResult, classLearnerResult, frameworkResult] =
+    const [learnerResult, classLearnerResult, frameworkResult, assessmentResult] =
       await Promise.all([
         learnerQuery.maybeSingle(),
         classLearnerQuery,
@@ -82,6 +89,11 @@ export async function POST(request: Request) {
           .select("definition")
           .eq("school_id", context.schoolId)
           .eq("status", "active")
+          .maybeSingle(),
+        supabase
+          .from("school_assessment_settings")
+          .select("status_labels")
+          .eq("school_id", context.schoolId)
           .maybeSingle(),
       ]);
 
@@ -105,6 +117,20 @@ export async function POST(request: Request) {
     )
       ? frameworkResult.data.definition
       : frameworks.eyfs;
+    const configuredLabels = Array.isArray(assessmentResult.data?.status_labels)
+      ? assessmentResult.data.status_labels.filter(
+          (label): label is string => typeof label === "string" && Boolean(label.trim())
+        )
+      : [];
+    const orderedAssessmentLabels = configuredLabels.length >= 2
+      ? configuredLabels
+      : [...activeFramework.assessmentLevels]
+          .sort((first, second) => first.order - second.order)
+          .map((level) => level.label);
+    const teacherAssessmentLabel = getTeacherNoteAssessmentLabel(
+      parsed.input,
+      orderedAssessmentLabels
+    );
     const privacyIdentities = (classLearnerResult.data ?? []).map(
       (learner) => ({
         firstName: learner.first_name,
@@ -172,6 +198,26 @@ export async function POST(request: Request) {
       firstName: learnerResult.data.first_name,
       lastName: learnerResult.data.last_name,
     });
+    const requestedFocusStatementId =
+      typeof rawFocusReference?.statement_id === "string"
+        ? rawFocusReference.statement_id.trim()
+        : "";
+    const focusDefinition = statementLookup.get(requestedFocusStatementId);
+    const requestedFocusLevel = rawFocusReference?.developmental_level;
+    const focusDevelopmentalLevel =
+      focusDefinition &&
+      typeof requestedFocusLevel === "number" &&
+      Number.isInteger(requestedFocusLevel) &&
+      focusDefinition.progressionLevels.has(requestedFocusLevel)
+        ? requestedFocusLevel
+        : null;
+    const focusReferenceText = focusDefinition
+      ? `${requestedFocusStatementId}: ${focusDefinition.statementText}${
+          focusDevelopmentalLevel === null
+            ? ""
+            : ` (suggested progression level ${focusDevelopmentalLevel})`
+        }`
+      : "No Today’s Focus reference was supplied.";
     const response = await openai.responses.create({
       model: process.env.TEACHER_NOTE_MODEL || "gpt-4.1-mini",
       store: false,
@@ -191,12 +237,16 @@ RULES
 - Use the structured status, support and frequency to understand the note, but do not change the teacher's status.
 - If no framework statement is clearly relevant, return an empty matches array.
 - Do not diagnose, infer a trait or add any information.
+- If a trusted Today’s Focus reference is supplied, prefer that exact statement when the factual note concerns it. Do not use the reference when the note contradicts it or concerns something else.
 
 STRUCTURED TEACHER CONTEXT
 Status: ${parsed.input.attainmentSignal}
 Support: ${parsed.input.supportLevel}
 Frequency: ${parsed.input.pattern}
 Context: ${parsed.input.context}
+
+TRUSTED TODAY'S FOCUS REFERENCE
+${focusReferenceText}
 
 PRIVATE NOTE
 ${privacySafeNote}
@@ -287,8 +337,8 @@ ${frameworkText}
             evidence: "Private teacher calibration note",
             developmentalLevel: match.developmentalLevel,
           })),
-          assessmentStatus: "",
-          suggestedLevel: "",
+          assessmentStatus: teacherAssessmentLabel,
+          suggestedLevel: teacherAssessmentLabel,
           confidence: null,
         })
       ),

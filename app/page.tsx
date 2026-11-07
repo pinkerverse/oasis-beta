@@ -55,6 +55,7 @@ import {
 } from "@/lib/asb-ptc";
 import {
   matchContextTextToFrameworkAreas,
+  observationOverviewLevel,
   teacherNoteCanSetOverviewAttainment,
 } from "@/lib/learner-overview-evidence";
 
@@ -104,8 +105,20 @@ type LearnerOverviewSources = {
     sourceId?: string;
     documentType?: string;
     sourceDate?: string;
+    status?: string;
     items?: Array<{ kind?: string; text?: string }>;
+    frameworkMatches?: OverviewFrameworkMatch[];
   }>;
+};
+
+type ClassTeacherEvidence = {
+  id: string;
+  learner_ids: string[];
+  observation_date: string;
+  created_at: string;
+  framework_matches?: OverviewFrameworkMatch[];
+  next_steps?: string[];
+  evidence_source?: "teacher_note" | "framework_review";
 };
 
 type FrameworkProcessingStage =
@@ -265,6 +278,8 @@ const [learnerOverviewSources, setLearnerOverviewSources] =
     importedDocuments: [],
   });
 const [classObservations, setClassObservations] = useState<any[]>([]);
+const [classTeacherEvidence, setClassTeacherEvidence] = useState<ClassTeacherEvidence[]>([]);
+const [learnerEvidenceRefreshKey, setLearnerEvidenceRefreshKey] = useState(0);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [previewLearnerId, setPreviewLearnerId] = useState<string | null>(null);
@@ -675,6 +690,23 @@ function handleRemoveManualLearningArea(strand: string) {
   const [showDocumentUploader, setShowDocumentUploader] = useState(false);
   const [showReportFormats, setShowReportFormats] = useState(false);
   const [showTeacherNote, setShowTeacherNote] = useState(false);
+  const [showSupportingRecords, setShowSupportingRecords] = useState(false);
+  const [teacherNoteFocusPrompt, setTeacherNoteFocusPrompt] = useState<{
+    area: string;
+    frameworkStatementId: string | null;
+    frameworkStatement: string;
+    developmentalLevel: number | null;
+    lookFor: string;
+  } | null>(null);
+  const [focusEvidenceChoice, setFocusEvidenceChoice] = useState<{
+    learnerId: string;
+    learnerName: string;
+    area: string;
+    frameworkStatementId: string | null;
+    frameworkStatement: string;
+    developmentalLevel: number | null;
+    lookFor: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [newLearnerFirstName, setNewLearnerFirstName] = useState("");
 const [newLearnerLastName, setNewLearnerLastName] = useState("");
@@ -970,7 +1002,11 @@ type OverviewAreaEvidence = {
   date: string;
 };
 
-const supportingAreaEvidence: OverviewAreaEvidence[] = [];
+type SupportingAreaEvidence = Omit<OverviewAreaEvidence, "sourceKind"> & {
+  sourceKind: Exclude<OverviewSourceKind, "observation">;
+};
+
+const supportingAreaEvidence: SupportingAreaEvidence[] = [];
 const addSupportingAreaEvidence = (
   area: string | null,
   sourceKind: Exclude<OverviewSourceKind, "observation">,
@@ -1023,15 +1059,25 @@ for (const importedDocument of learnerOverviewSources.importedDocuments) {
     .map((item) => String(item.text ?? ""))
     .join(" ");
 
-  for (const area of matchContextTextToFrameworkAreas(
-    achievementText,
-    activeFramework.areaDefinitions
-  )) {
+  const exactAreas = new Set(
+    (importedDocument.frameworkMatches ?? []).flatMap((match) => {
+      const area = resolveActiveFrameworkArea(match);
+      return area ? [area] : [];
+    })
+  );
+  const contextualAreas = exactAreas.size > 0
+    ? [...exactAreas]
+    : matchContextTextToFrameworkAreas(
+        achievementText,
+        activeFramework.areaDefinitions
+      );
+
+  for (const area of contextualAreas) {
     addSupportingAreaEvidence(
       area,
       "uploaded_document",
       String(importedDocument.sourceId ?? importedDocument.documentType ?? "document"),
-      "Reviewed upload",
+      exactAreas.size > 0 ? "Teacher framework review" : "Reviewed upload",
       String(importedDocument.sourceDate ?? "")
     );
   }
@@ -1142,7 +1188,24 @@ for (const entry of learnerObservations) {
   }
 }
 
-supportingAreaEvidence.forEach(addCoverage);
+// The coverage chart is deliberately parent-facing: only journal observations
+// belong here. Private records remain visible in their own supporting list.
+for (const area of activeFramework.areaDefinitions) {
+  if (!coverageByArea.has(area.name)) {
+    coverageByArea.set(area.name, {
+      area: area.name,
+      short: area.name
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .toUpperCase(),
+      count: 0,
+      lastAdded: "No journal observation yet",
+      latestTimestamp: 0,
+      sourceLabels: new Set(["Journal observation"]),
+    });
+  }
+}
 
 const frameworkAreaOrder = new Map(
   activeFramework.areaDefinitions.map((area, index) => [area.name, index])
@@ -1152,9 +1215,45 @@ const evidenceCoverage = [...coverageByArea.values()].sort(
     (frameworkAreaOrder.get(first.area) ?? Number.MAX_SAFE_INTEGER) -
     (frameworkAreaOrder.get(second.area) ?? Number.MAX_SAFE_INTEGER)
 );
-const supportingRecordCount = new Set(
-  supportingAreaEvidence.map((item) => `${item.sourceKind}:${item.sourceId}`)
-).size;
+const supportingRecordMap = new Map<
+  string,
+  {
+    key: string;
+    sourceKind: Exclude<OverviewSourceKind, "observation">;
+    sourceId: string;
+    sourceLabel: string;
+    date: string;
+    timestamp: number;
+    areas: Set<string>;
+  }
+>();
+for (const item of supportingAreaEvidence) {
+  const key = `${item.sourceKind}:${item.sourceId}`;
+  const parsedDate = new Date(item.date);
+  const timestamp = Number.isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
+  const existing = supportingRecordMap.get(key);
+  if (existing) {
+    existing.areas.add(item.area);
+    if (timestamp > existing.timestamp) {
+      existing.timestamp = timestamp;
+      existing.date = item.date;
+    }
+  } else {
+    supportingRecordMap.set(key, {
+      key,
+      sourceKind: item.sourceKind,
+      sourceId: item.sourceId,
+      sourceLabel: item.sourceLabel,
+      date: item.date,
+      timestamp,
+      areas: new Set([item.area]),
+    });
+  }
+}
+const supportingRecords = [...supportingRecordMap.values()].sort(
+  (first, second) => second.timestamp - first.timestamp
+);
+const supportingRecordCount = supportingRecords.length;
 
 const maxEvidenceCount =
   evidenceCoverage.length > 0
@@ -1199,7 +1298,14 @@ const liveLearnerProgress = (() => {
     )
       ? entry.framework_matches
       : [];
-
+    const resolvedAreas = [
+      ...new Set(
+        frameworkMatches.flatMap((match: OverviewFrameworkMatch) => {
+          const area = resolveActiveFrameworkArea(match);
+          return area ? [area] : [];
+        })
+      ),
+    ];
     for (const match of frameworkMatches) {
       const area = resolveActiveFrameworkArea(match) ?? "";
 
@@ -1211,10 +1317,11 @@ const liveLearnerProgress = (() => {
         continue;
       }
 
-      const level =
-        match.finalLevel ||
-        match.teacherOverride ||
-        match.suggestedLevel;
+      const level = observationOverviewLevel(
+        match,
+        entry,
+        resolvedAreas.length
+      );
 
       if (
         typeof level !== "string" ||
@@ -1241,6 +1348,22 @@ const liveLearnerProgress = (() => {
     }
   }
 
+  // A final, dated framework walkthrough reaches this point only after the
+  // teacher has reviewed and explicitly confirmed its exact framework links.
+  for (const importedDocument of learnerOverviewSources.importedDocuments) {
+    for (const match of importedDocument.frameworkMatches ?? []) {
+      const area = resolveActiveFrameworkArea(match);
+      const level =
+        match.finalLevel ||
+        match.teacherOverride ||
+        match.suggestedLevel ||
+        match.assessmentStatus;
+      if (area && typeof level === "string") {
+        addJudgement(area, level, "Teacher framework review");
+      }
+    }
+  }
+
   // Baselines seed areas that still have no newer, direct judgement. Reports
   // and uploads intentionally never assign attainment by themselves.
   for (const baselineEntry of learnerBaseline?.assessment_data ?? []) {
@@ -1261,9 +1384,9 @@ return Array.from(
 );
 })();
 
-const contextOnlyAreas = evidenceCoverage.filter(
-  (coverage) => !liveLearnerProgress.some((progress) => progress.area === coverage.area)
-);
+const contextOnlyAreas = [...new Set(supportingAreaEvidence.map((item) => item.area))]
+  .filter((area) => !liveLearnerProgress.some((progress) => progress.area === area))
+  .map((area) => ({ area }));
 
 function getSnapshotCutoffDate(
   selection: string
@@ -2539,7 +2662,9 @@ type TodaysFocusItem = {
   kind: "Observe" | "Support" | "Stretch";
   area: string;
   reason: string;
+  frameworkStatementId: string | null;
   frameworkStatement: string;
+  developmentalLevel: number | null;
   progressionLabel: string | null;
   readinessLabel: string;
   lookFor: string;
@@ -2749,7 +2874,7 @@ const buildFocusItems = (
 
   const learnerCandidates = pupils.map(
     (learner, learnerIndex) => {
-      const observations = classObservations
+      const directObservations = classObservations
         .filter(
           (entry) =>
             Array.isArray(entry.learner_ids) &&
@@ -2773,6 +2898,28 @@ const buildFocusItems = (
           (first, second) =>
             second.timestamp - first.timestamp
         );
+      const teacherEvidence = classTeacherEvidence
+        .filter(
+          (entry) =>
+            Array.isArray(entry.learner_ids) &&
+            entry.learner_ids.includes(learner.id)
+        )
+        .map((entry) => ({
+          entry,
+          timestamp: new Date(
+            /^\d{4}-\d{2}-\d{2}$/.test(entry.observation_date)
+              ? `${entry.observation_date}T00:00:00`
+              : entry.observation_date || entry.created_at
+          ).getTime(),
+        }))
+        .filter(
+          ({ timestamp }) =>
+            Number.isFinite(timestamp) && timestamp <= evidenceCutoff.getTime()
+        )
+        .sort((first, second) => second.timestamp - first.timestamp);
+      const observations = [...directObservations, ...teacherEvidence].sort(
+        (first, second) => second.timestamp - first.timestamp
+      );
 
       const latestAreaEvidence = new Map<
         string,
@@ -2902,7 +3049,7 @@ const buildFocusItems = (
       const frameworkLookFor =
         frameworkFocus?.lookFor ??
         `Notice naturally occurring evidence in ${focusArea?.name ?? "the active framework"}.`;
-      const weeklyObservationCount = observations.filter(
+      const weeklyObservationCount = directObservations.filter(
         ({ timestamp }) =>
           timestamp >= focusWeekStart.getTime()
       ).length;
@@ -3068,6 +3215,8 @@ const buildFocusItems = (
           frameworkFocus?.statement.text ||
           focusArea?.name ||
           "Active framework",
+        frameworkStatementId: frameworkFocus?.statement.id ?? null,
+        developmentalLevel: frameworkFocus?.progressionLevel?.level ?? null,
         progressionLabel:
           frameworkFocus?.progressionLevel
             ? `Level ${frameworkFocus.progressionLevel.level}${
@@ -3116,6 +3265,11 @@ const buildFocusItems = (
               reason: `Recent evidence in ${latestArea} was recorded as ${latestStatus}.`,
               frameworkStatement:
                 latestFrameworkStatement,
+              frameworkStatementId: latestStatementMatch?.statementId ?? null,
+              developmentalLevel:
+                typeof latestStatementMatch?.developmentalLevel === "number"
+                  ? latestStatementMatch.developmentalLevel
+                  : null,
               progressionLabel:
                 typeof latestStatementMatch?.developmentalLevel ===
                 "number"
@@ -3159,6 +3313,11 @@ const buildFocusItems = (
               reason: `Recent evidence in ${latestArea} was recorded as ${latestStatus}.`,
               frameworkStatement:
                 latestFrameworkStatement,
+              frameworkStatementId: latestStatementMatch?.statementId ?? null,
+              developmentalLevel:
+                typeof latestStatementMatch?.developmentalLevel === "number"
+                  ? latestStatementMatch.developmentalLevel
+                  : null,
               progressionLabel:
                 typeof latestStatementMatch?.developmentalLevel ===
                 "number"
@@ -6204,7 +6363,7 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, [selectedChildren]);
+}, [selectedChildren, learnerEvidenceRefreshKey]);
 
 async function refreshClassObservations() {
   try {
@@ -6242,8 +6401,29 @@ async function refreshClassObservations() {
   }
 }
 
+async function refreshClassTeacherEvidence() {
+  try {
+    const response = await fetch(
+      "/api/learner-overview-sources?scope=class",
+      { cache: "no-store" }
+    );
+    const result = await response.json().catch(() => ({}));
+    if (response.status === 401) return;
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to load class teacher evidence.");
+    }
+    setClassTeacherEvidence(
+      Array.isArray(result.focusEvidence) ? result.focusEvidence : []
+    );
+    setFocusScheduleNow(new Date());
+  } catch (error) {
+    console.error("Failed to load class teacher evidence:", error);
+  }
+}
+
 useEffect(() => {
   refreshClassObservations();
+  refreshClassTeacherEvidence();
 }, []);
 
 async function handleSaveToJournal() {
@@ -6624,7 +6804,10 @@ if (checkingOnboarding) {
   onUploadDocuments={() => setShowDocumentUploader(true)}
   onReportFormats={() => setShowReportFormats(true)}
   onAddObservation={openObservationComposer}
-  onTeacherNote={() => setShowTeacherNote(true)}
+  onTeacherNote={() => {
+    setTeacherNoteFocusPrompt(null);
+    setShowTeacherNote(true);
+  }}
   onTodaysFocus={openTodaysFocus}
   onSettings={() => void openSettings()}
   ptcNotesRequiresLearnerSelection={false}
@@ -7684,12 +7867,31 @@ const hasOverride =
   ) : (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
       <p className="font-medium text-slate-700">
-        No assessment judgements yet
+        {learnerObservations.length > 0 || supportingRecordCount > 0
+          ? "Evidence found — attainment needs review"
+          : "No assessment judgements yet"}
       </p>
 
       <p className="mt-1 text-sm text-slate-500">
-        Add a baseline, observation or structured teacher note to begin showing progress.
+        {learnerObservations.length > 0 || supportingRecordCount > 0
+          ? "The saved evidence does not yet contain a compatible confirmed level. Review a structured teacher note or framework walkthrough rather than assigning one automatically."
+          : "Add a baseline, observation or structured teacher note to begin showing progress."}
       </p>
+      {(learnerObservations.length > 0 || supportingRecordCount > 0) && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => {
+            setTeacherNoteFocusPrompt(null);
+            setShowTeacherNote(true);
+          }} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+            Add teacher judgement
+          </button>
+          {supportingRecordCount > 0 && (
+            <button type="button" onClick={() => setShowSupportingRecords(true)} className="rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100">
+              Review supporting records
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )}
 
@@ -7729,13 +7931,13 @@ const hasOverride =
 </p>
 
 <p className="mt-1 text-slate-500">
-  Learner evidence collected across saved sources
+  Parent-facing journal coverage, kept separate from private supporting records
 </p>
                 </div>
 
                 <div className="text-left sm:text-right">
                   <p className="text-sm text-slate-500">
-  Observations
+  Journal observations
 </p>
 
 <p className="text-3xl font-bold text-slate-900">
@@ -7749,9 +7951,14 @@ const hasOverride =
   )} learning-area matches
 </p>
 
-<p className="mt-1 text-xs font-medium text-sky-700">
+<button
+  type="button"
+  onClick={() => setShowSupportingRecords(true)}
+  disabled={supportingRecordCount === 0}
+  className="mt-1 text-xs font-semibold text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-900 disabled:cursor-default disabled:text-slate-400 disabled:no-underline"
+>
   {supportingRecordCount} supporting {supportingRecordCount === 1 ? "record" : "records"}
-</p>
+</button>
 
                 </div>
               </div>
@@ -7765,10 +7972,12 @@ const hasOverride =
                     <div
                       className="w-full max-w-10 rounded-t-xl bg-slate-900 transition-all hover:bg-slate-700"
                       style={{
-                        height: `${Math.max(
-                          (item.count / maxEvidenceCount) * 170,
-                          20
-                        )}px`,
+                        height: item.count === 0
+                          ? "4px"
+                          : `${Math.max(
+                              (item.count / maxEvidenceCount) * 170,
+                              20
+                            )}px`,
                       }}
                     />
 
@@ -7776,7 +7985,7 @@ const hasOverride =
                       <p className="font-bold text-slate-900">{item.area}</p>
 
                       <p className="mt-1 text-xs font-medium text-slate-900">
-                        {item.count} {item.count === 1 ? "match" : "matches"}
+                        {item.count} journal {item.count === 1 ? "match" : "matches"}
                       </p>
 
                       <p className="mt-2 text-xs text-slate-500">
@@ -7804,7 +8013,7 @@ const hasOverride =
 </div>
 
               <p className="mt-4 text-xs leading-5 text-slate-500">
-                Baselines and structured teacher judgements can fill attainment gaps. Saved PTCs and reviewed uploads strengthen area coverage but never raise attainment on their own.
+                This chart and the red, yellow and green learner dots use journal observations only. Teacher notes, framework walkthroughs, baselines, saved PTCs and reviewed uploads remain visible as separate supporting records.
               </p>
             </div>
 
@@ -12680,8 +12889,100 @@ onClick={() => {
   <DocumentUploader
     modal
     initialLearnerId={selectedChildren[0] ?? ""}
+    onLearnerEvidenceChanged={async () => {
+      setLearnerEvidenceRefreshKey((current) => current + 1);
+      await refreshClassTeacherEvidence();
+    }}
     onClose={() => setShowDocumentUploader(false)}
   />
+)}
+
+{showSupportingRecords && (
+  <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="supporting-records-title"
+      className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Private supporting evidence</p>
+          <h2 id="supporting-records-title" className="mt-1 text-2xl font-bold text-slate-900">
+            Supporting records for {getLearnerNames(selectedChildren)}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            These records can inform Learner Progress and planning, but they are not counted as parent-facing journal observations or in the red, yellow and green observation status.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowSupportingRecords(false)}
+          className="rounded-xl px-3 py-2 text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+          aria-label="Close supporting records"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {supportingRecords.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            No private supporting records are linked to this learner yet.
+          </p>
+        ) : supportingRecords.map((record) => (
+          <article key={record.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-bold text-slate-900">{record.sourceLabel}</h3>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 shadow-sm">
+                    {record.timestamp > 0 ? new Date(record.timestamp).toLocaleDateString() : "Date not recorded"}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[...record.areas].map((area) => (
+                    <span key={area} className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                      {area}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {record.sourceKind === "teacher_note" ? (
+                <button type="button" className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" onClick={() => {
+                  setShowSupportingRecords(false);
+                  setTeacherNoteFocusPrompt(null);
+                  setShowTeacherNote(true);
+                }}>
+                  Open notes
+                </button>
+              ) : record.sourceKind === "uploaded_document" ? (
+                <button type="button" className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" onClick={() => {
+                  setShowSupportingRecords(false);
+                  setShowDocumentUploader(true);
+                }}>
+                  Open documents
+                </button>
+              ) : record.sourceKind === "ptc" ? (
+                <button type="button" className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" onClick={() => {
+                  setShowSupportingRecords(false);
+                  setShowPTCNotes(true);
+                }}>
+                  Open PTC notes
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-6 flex justify-end border-t border-slate-200 pt-5">
+        <button type="button" onClick={() => setShowSupportingRecords(false)} className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-100">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
 )}
 
 {showReportFormats && (
@@ -13659,15 +13960,19 @@ onClick={() => {
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedChildren([
-                        item.learnerId,
-                      ]);
-                      setShowTodaysFocus(false);
-                      openObservationComposer();
+                      setFocusEvidenceChoice({
+                        learnerId: item.learnerId,
+                        learnerName: item.learnerName,
+                        area: item.area,
+                        frameworkStatementId: item.frameworkStatementId,
+                        frameworkStatement: item.frameworkStatement,
+                        developmentalLevel: item.developmentalLevel,
+                        lookFor: item.lookFor,
+                      });
                     }}
                     className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
                   >
-                    Add observation
+                    Record evidence
                   </button>
                 </div>
               </article>
@@ -13718,8 +14023,58 @@ onClick={() => {
   <TeacherNoteModal
     learners={pupils}
     selectedLearnerIds={selectedChildren}
-    onClose={() => setShowTeacherNote(false)}
+    focusPrompt={teacherNoteFocusPrompt}
+    onSaved={async () => {
+      setLearnerEvidenceRefreshKey((current) => current + 1);
+      await refreshClassTeacherEvidence();
+    }}
+    onClose={() => {
+      setShowTeacherNote(false);
+      setTeacherNoteFocusPrompt(null);
+    }}
   />
+)}
+
+{focusEvidenceChoice && (
+  <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+    <div role="dialog" aria-modal="true" aria-labelledby="focus-evidence-choice-title" className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">Today’s Focus · {focusEvidenceChoice.learnerName}</p>
+          <h2 id="focus-evidence-choice-title" className="mt-1 text-2xl font-bold text-slate-900">What would you like to record?</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{focusEvidenceChoice.frameworkStatement}</p>
+        </div>
+        <button type="button" onClick={() => setFocusEvidenceChoice(null)} className="rounded-xl px-3 py-2 text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-900" aria-label="Close evidence choice">✕</button>
+      </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <button type="button" onClick={() => {
+          setSelectedChildren([focusEvidenceChoice.learnerId]);
+          setFocusEvidenceChoice(null);
+          setShowTodaysFocus(false);
+          openObservationComposer();
+        }} className="rounded-2xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-400 hover:bg-cyan-50">
+          <span className="block font-bold text-slate-900">Journal observation</span>
+          <span className="mt-2 block text-xs leading-5 text-slate-600">Create the fuller observation that can be reviewed and shared through the learning journal.</span>
+        </button>
+        <button type="button" onClick={() => {
+          setSelectedChildren([focusEvidenceChoice.learnerId]);
+          setTeacherNoteFocusPrompt({
+            area: focusEvidenceChoice.area,
+            frameworkStatementId: focusEvidenceChoice.frameworkStatementId,
+            frameworkStatement: focusEvidenceChoice.frameworkStatement,
+            developmentalLevel: focusEvidenceChoice.developmentalLevel,
+            lookFor: focusEvidenceChoice.lookFor,
+          });
+          setFocusEvidenceChoice(null);
+          setShowTodaysFocus(false);
+          setShowTeacherNote(true);
+        }} className="rounded-2xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-400 hover:bg-cyan-50">
+          <span className="block font-bold text-slate-900">Quick teacher note</span>
+          <span className="mt-2 block text-xs leading-5 text-slate-600">Record what you already know or noticed. It stays private but can update progress and the next focus.</span>
+        </button>
+      </div>
+    </div>
+  </div>
 )}
 
 {showPTCNotes && ptcTemplate !== "asb_pre_k" && (

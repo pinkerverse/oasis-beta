@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normaliseTeacherNoteInput } from "./teacher-note.ts";
+import {
+  getTeacherNoteAssessmentLabel,
+  normaliseTeacherNoteInput,
+} from "./teacher-note.ts";
 
 test("teacher notes require structured calibration fields", () => {
   const result = normaliseTeacherNoteInput(
@@ -59,5 +62,42 @@ test("teacher notes reject future dates and unsupported options", () => {
 
   assert.match(future.error, /valid date/i);
   assert.match(invalidSupport.error, /level of support/i);
+});
+
+test("qualified teacher notes map conservatively to school assessment labels", () => {
+  const labels = ["Below", "Approaching", "Meeting", "Exceeding"];
+  assert.equal(
+    getTeacherNoteAssessmentLabel(
+      {
+        attainmentSignal: "demonstrated",
+        supportLevel: "independent",
+        pattern: "repeated",
+      },
+      labels
+    ),
+    "Meeting"
+  );
+  assert.equal(
+    getTeacherNoteAssessmentLabel(
+      {
+        attainmentSignal: "demonstrated",
+        supportLevel: "direct_help",
+        pattern: "consistent",
+      },
+      labels
+    ),
+    "Approaching"
+  );
+  assert.equal(
+    getTeacherNoteAssessmentLabel(
+      {
+        attainmentSignal: "not_yet",
+        supportLevel: "independent",
+        pattern: "single_moment",
+      },
+      labels
+    ),
+    "Below"
+  );
 });
 

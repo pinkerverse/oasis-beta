@@ -8,9 +8,29 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   next_step: "Future targets — not achieved skills", context: "Learning context",
 };
 export type DocumentItem = { kind: DocumentKind; text: string; quote: string };
+export type DocumentFrameworkStatementMatch = {
+  statementId: string;
+  statementText: string;
+  evidence: string;
+  developmentalLevel: number | null;
+};
+export type DocumentFrameworkMatch = {
+  strand: string;
+  source: "teacher";
+  objectives: string[];
+  statementMatches: DocumentFrameworkStatementMatch[];
+  assessmentStatus: string;
+  suggestedLevel: string;
+  confidence: null;
+};
+export type DocumentFrameworkReview = {
+  confirmed: boolean;
+  frameworkMatches: DocumentFrameworkMatch[];
+};
 export type DocumentSection = {
   sourceLabel: string; learnerId: string; documentDate: string;
   status: "final" | "draft" | "unknown"; items: DocumentItem[];
+  frameworkReview?: DocumentFrameworkReview;
 };
 export type ImportLearner = { id: string; label: string; className: string };
 export type DocumentImport = {

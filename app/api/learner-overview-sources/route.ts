@@ -4,6 +4,7 @@ import {
   isSchoolAdmin,
 } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
+import type { DocumentSection } from "@/lib/document-import";
 
 function cleanId(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 100) : "";
@@ -19,12 +20,115 @@ export async function GET(request: Request) {
       );
     }
 
-    const learnerId = cleanId(new URL(request.url).searchParams.get("learner"));
+    const searchParams = new URL(request.url).searchParams;
+    const learnerId = cleanId(searchParams.get("learner"));
+    const classScope = searchParams.get("scope") === "class";
+    const db = await createClient();
+
+    if (classScope) {
+      let classLearnerQuery = db
+        .from("learners")
+        .select("id")
+        .eq("school_id", context.schoolId)
+        .eq("active", true);
+      classLearnerQuery = isSchoolAdmin(context.role)
+        ? classLearnerQuery.or(
+            `workspace_id.eq.${context.workspaceId},workspace_id.is.null`
+          )
+        : classLearnerQuery.eq("workspace_id", context.workspaceId);
+      const learners = await classLearnerQuery;
+      if (learners.error) {
+        return Response.json(
+          { error: "The class could not be verified." },
+          { status: 500 }
+        );
+      }
+      const learnerIds = (learners.data ?? []).map((learner) => learner.id);
+      if (learnerIds.length === 0) {
+        return Response.json(
+          { focusEvidence: [] },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      const [notes, documents] = await Promise.all([
+        db
+          .from("learner_teacher_notes")
+          .select("id, learner_id, observed_on, created_at, framework_matches")
+          .eq("school_id", context.schoolId)
+          .eq("workspace_id", context.workspaceId)
+          .in("learner_id", learnerIds)
+          .order("observed_on", { ascending: false })
+          .limit(500),
+        db
+          .from("learner_document_imports")
+          .select("id, sections, reviewed_at")
+          .eq("school_id", context.schoolId)
+          .eq("workspace_id", context.workspaceId)
+          .eq("status", "imported")
+          .order("reviewed_at", { ascending: false })
+          .limit(100),
+      ]);
+      if (notes.error || documents.error) {
+        console.error(
+          "Class teacher evidence lookup failed:",
+          notes.error ?? documents.error
+        );
+        return Response.json(
+          { error: "Class teacher evidence could not be loaded." },
+          { status: 500 }
+        );
+      }
+      const learnerSet = new Set(learnerIds);
+      const noteEvidence = (notes.data ?? []).flatMap((note) =>
+        Array.isArray(note.framework_matches) && note.framework_matches.length > 0
+          ? [
+              {
+                id: `teacher-note:${note.id}`,
+                learner_ids: [note.learner_id],
+                observation_date: note.observed_on,
+                created_at: note.created_at,
+                framework_matches: note.framework_matches,
+                next_steps: [],
+                evidence_source: "teacher_note",
+              },
+            ]
+          : []
+      );
+      const walkthroughEvidence = (documents.data ?? []).flatMap((document) =>
+        (Array.isArray(document.sections)
+          ? (document.sections as DocumentSection[])
+          : []
+        ).flatMap((section, sectionIndex) =>
+          learnerSet.has(section.learnerId) &&
+          section.status === "final" &&
+          Boolean(section.documentDate) &&
+          section.frameworkReview?.confirmed &&
+          section.frameworkReview.frameworkMatches.length > 0
+            ? [
+                {
+                  id: `framework-review:${document.id}:${sectionIndex}`,
+                  learner_ids: [section.learnerId],
+                  observation_date: section.documentDate,
+                  created_at: document.reviewed_at,
+                  framework_matches: section.frameworkReview.frameworkMatches,
+                  next_steps: [],
+                  evidence_source: "framework_review",
+                },
+              ]
+            : []
+        )
+      );
+
+      return Response.json(
+        { focusEvidence: [...noteEvidence, ...walkthroughEvidence] },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
     if (!learnerId) {
       return Response.json({ error: "A learner is required." }, { status: 400 });
     }
 
-    const db = await createClient();
     let learnerQuery = db
       .from("learners")
       .select("id, first_name, last_name")

@@ -25,6 +25,16 @@ export async function loadImportedLearnerContext(context: CurrentWorkspaceContex
   return (data ?? []).flatMap((row) => (row.sections as DocumentSection[]).filter((section) => section.learnerId === learnerId).flatMap((section) => {
     const items = section.items.map((item) => ({ kind: item.kind, text: replaceLearnerNamesWithInitials(item.text, identities) }));
     if (reviewPrivacyText(items.map((item) => item.text).join("\n")).requiresReview) return [];
-    return [{ sourceId: row.id, documentType: row.document_type, sourceDate: section.documentDate || "unknown — do not infer recency from upload date", status: section.status, items }];
+    return [{
+      sourceId: row.id,
+      documentType: row.document_type,
+      sourceDate: section.documentDate || "unknown — do not infer recency from upload date",
+      status: section.status,
+      items,
+      frameworkMatches:
+        section.frameworkReview?.confirmed && section.status === "final" && section.documentDate
+          ? section.frameworkReview.frameworkMatches
+          : [],
+    }];
   }));
 }
