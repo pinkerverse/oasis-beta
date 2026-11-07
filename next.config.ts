@@ -25,7 +25,7 @@ const securityHeaders = [
   {
     key: "Permissions-Policy",
     value:
-      "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
+      "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), browsing-topics=()",
   },
   {
     key: "Cross-Origin-Opener-Policy",
