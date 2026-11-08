@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import AccountSecurity from "@/app/components/AccountSecurity";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type AccountModalProps = {
@@ -156,16 +157,14 @@ export default function AccountModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      className="oasis-modal-backdrop fixed inset-0 z-[100] flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-4"
+      onPointerDown={(event) => closeModalOnBackdropPress(event, onClose)}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="shared-account-title"
-        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+        className="oasis-modal-surface w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

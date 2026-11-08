@@ -9,6 +9,7 @@ import {
   type AsbPtcReport,
 } from "@/lib/asb-ptc";
 import { getLearnerInitials } from "@/lib/learner-privacy";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 
 type Learner = {
   id: string;
@@ -225,12 +226,12 @@ export default function AsbPtcNotesModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-6">
+    <div onPointerDown={(event) => closeModalOnBackdropPress(event, onClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="asb-ptc-title"
-        className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
+        className="oasis-modal-surface w-full max-w-6xl rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

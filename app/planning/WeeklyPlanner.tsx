@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import OasisHeader from "@/app/components/OasisHeader";
 import { mondayOf, upcomingMonday, planningHeatClasses, parsePlan, parseProvocation, parseProvocationImage, ACTIVITY_FIELDS, PROVOCATION_FIELDS, PLAN_DAYS, PLAN_FIELDS, type ActivityIdea, type PlanEntry, type PlanField, type PlanningContext, type WeeklyPlan } from "@/lib/planning";
+import { closeDialogOnBackdropPress } from "@/lib/modal-backdrop";
 
 const button = "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 const input = "w-full rounded-xl border border-slate-300 bg-white p-3 text-sm leading-relaxed text-slate-800 focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100";
@@ -16,7 +17,7 @@ function localWeek() {
 function Modal({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
-  return <dialog ref={ref} aria-label={title} onCancel={close} className="fixed inset-0 m-auto max-h-[90dvh] w-[min(1050px,95vw)] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl [overflow-wrap:anywhere] backdrop:bg-slate-950/40 sm:p-8">
+  return <dialog ref={ref} aria-label={title} onCancel={close} onPointerDown={(event) => closeDialogOnBackdropPress(event, close)} className="fixed inset-0 m-auto max-h-[90dvh] w-[min(1050px,95vw)] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl [overflow-wrap:anywhere] backdrop:bg-slate-950/40 sm:p-8">
     <div className="mb-5 flex items-start justify-between gap-4"><h2 className="min-w-0 text-xl font-bold">{title}</h2><button type="button" className={`${button} shrink-0`} onClick={close} aria-label={`Close ${title}`}>Close</button></div>
     {children}
   </dialog>;
@@ -172,9 +173,11 @@ export default function WeeklyPlanner() {
         <h1 className="mt-2 text-3xl font-bold">Plan your week</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Choose what matters for your class. Add objectives from your framework, explore practical ideas, and make the plan your own.</p>
         <div className="mt-5 flex flex-wrap items-end gap-3">
-          <button className={button} disabled={saving || loading} onClick={() => shiftWeek(-7)} aria-label="Previous week">←</button>
-          <label className="text-sm font-semibold">Week beginning<input aria-label="Week beginning" type="date" value={week} disabled={saving || loading} onChange={(event) => chooseWeek(event.target.value)} className={`${input} mt-1`} /></label>
-          <button className={button} disabled={saving || loading} onClick={() => shiftWeek(7)} aria-label="Next week">→</button>
+          <div className="grid w-full max-w-md grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2 sm:gap-3">
+            <button className={`${button} h-12 w-12 !px-0`} disabled={saving || loading} onClick={() => shiftWeek(-7)} aria-label="Previous week">←</button>
+            <label className="min-w-0 text-sm font-semibold">Week beginning<input aria-label="Week beginning" type="date" value={week} disabled={saving || loading} onChange={(event) => chooseWeek(event.target.value)} className={`${input} mt-1 min-w-0`} /></label>
+            <button className={`${button} h-12 w-12 !px-0`} disabled={saving || loading} onClick={() => shiftWeek(7)} aria-label="Next week">→</button>
+          </div>
           <button className={`${button} !bg-slate-900 !text-white`} disabled={loading || saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save week"}</button>
           <button className={button} disabled={loading || exporting} onClick={() => void download()}>{exporting ? "Preparing PDF…" : "Download PDF"}</button>
           <span role="status" className="py-2 text-sm text-slate-500">{loading ? "Loading your week…" : dirty ? "Unsaved changes" : notice || "A4 landscape · Monday to Friday"}</span>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 
 type AccountMode = "teacher" | "school_admin" | "both";
 type Tab = "requests" | "invitations" | "schools";
@@ -487,6 +488,7 @@ export default function BetaAccessDashboard() {
 
       {showInvite && (
         <div
+          onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowInvite(false))}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"

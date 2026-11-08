@@ -8,6 +8,7 @@ import {
   type SchoolReportKind,
   type SchoolReportTemplateSummary,
 } from "@/lib/school-report-template";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 
 type Props = { onClose: () => void };
 
@@ -109,8 +110,8 @@ export default function SchoolReportFormatsModal({ onClose }: Props) {
     }
   }
 
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-3 text-slate-900 backdrop-blur-sm sm:p-6">
-    <div role="dialog" aria-modal="true" aria-labelledby="school-report-formats-title" className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+  return <div onPointerDown={(event) => closeModalOnBackdropPress(event, onClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/30 p-3 text-slate-900 backdrop-blur-sm sm:p-6">
+    <div role="dialog" aria-modal="true" aria-labelledby="school-report-formats-title" className="oasis-modal-surface w-full max-w-6xl rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">School-specific reporting</p>

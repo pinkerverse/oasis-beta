@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { genericSchoolReportToPlainText, type GenericSchoolReport } from "@/lib/generic-school-report";
 import { getLearnerInitials } from "@/lib/learner-privacy";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import { SCHOOL_REPORT_KIND_LABELS, type SchoolReportKind } from "@/lib/school-report-template";
 
 type Learner = { id: string; firstName?: string | null; lastName?: string | null };
@@ -72,7 +73,7 @@ export default function GenericSchoolReportModal({ learners, initialLearnerIds, 
     catch { setNotice("The draft could not be copied automatically."); }
   }
 
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-6"><div role="dialog" aria-modal="true" aria-labelledby="generic-school-report-title" className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+  return <div onPointerDown={(event) => closeModalOnBackdropPress(event, onClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-6"><div role="dialog" aria-modal="true" aria-labelledby="generic-school-report-title" className="oasis-modal-surface w-full max-w-7xl rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
     <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">Your school&apos;s active format</p><h2 id="generic-school-report-title" className="mt-1 text-2xl font-bold sm:text-3xl">{SCHOOL_REPORT_KIND_LABELS[reportKind]}</h2><p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500">OASIS follows the format approved by your school, combines the learner&apos;s documented evidence, and saves every generated draft privately for continuity.</p></div><button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-xl text-slate-400 hover:bg-slate-100" aria-label="Close report generator">✕</button></div>
     <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">Choose learners</h3><p className="mt-1 text-xs text-slate-500">Generate one school-formatted draft per selected learner.</p></div><div className="flex gap-2"><button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold" onClick={() => replaceSelection(learners.map((learner) => learner.id))}>Select all</button><button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold" onClick={() => replaceSelection([])}>Clear</button></div></div>
       <div className="mt-4 flex flex-wrap gap-5">{learners.map((learner) => { const selected = selectedIds.includes(learner.id); const label = getLearnerInitials(learner); return <button key={learner.id} type="button" aria-pressed={selected} disabled={busy} onClick={() => toggle(learner.id)} className="flex w-16 flex-col items-center"><span className={`flex h-14 w-14 items-center justify-center rounded-full border-4 bg-slate-300 font-bold text-slate-600 ${selected ? "border-blue-500" : "border-slate-200"}`}>{label}</span><span className={`mt-1 text-xs ${selected ? "font-bold text-blue-700" : "text-slate-600"}`}>{label}</span></button>; })}</div>

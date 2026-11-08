@@ -23,6 +23,7 @@ import {
 } from "@/lib/teacher-note";
 import VoiceDictation from "@/app/components/VoiceDictation";
 import { appendDictationText } from "@/lib/dictation";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 
 type LearnerOption = {
   id: string;
@@ -274,12 +275,12 @@ export default function TeacherNoteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
+    <div onPointerDown={(event) => closeModalOnBackdropPress(event, onClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="teacher-note-title"
-        className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
+        className="oasis-modal-surface w-full max-w-4xl rounded-3xl bg-white shadow-2xl"
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
           <div>

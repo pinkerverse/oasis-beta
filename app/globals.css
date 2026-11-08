@@ -52,3 +52,38 @@ html[data-oasis-embedded-overlay="true"] body > main > :not(.fixed) {
 html[data-oasis-embedded-overlay="true"] body > main > .fixed {
   visibility: visible !important;
 }
+
+/*
+ * Mobile browsers are unreliable when a centred fixed backdrop contains its
+ * own nested scrolling panel. Let the backdrop own vertical scrolling on
+ * phones so the top and close control always remain reachable. Desktop keeps
+ * the contained, centred modal presentation.
+ */
+.oasis-modal-backdrop {
+  align-items: flex-start !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+.oasis-modal-surface {
+  max-height: none !important;
+  margin-block: auto;
+  overflow: visible !important;
+}
+
+@media (min-width: 640px) {
+  .oasis-modal-backdrop {
+    align-items: center !important;
+    overflow: hidden;
+  }
+
+  .oasis-modal-surface {
+    max-height: calc(100dvh - 3rem) !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}

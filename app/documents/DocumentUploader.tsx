@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import OasisHeader from "@/app/components/OasisHeader";
 import { canRecoverDocument, emptyDocumentSection, DOCUMENT_ACCEPT, DOCUMENT_KINDS, DOCUMENT_KIND_LABELS, validateDocumentFile, validateDocumentSections, type DocumentImport, type DocumentSection, type ImportLearner } from "@/lib/document-import";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 
 const button = "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-cyan-600 disabled:cursor-not-allowed disabled:opacity-50";
 const input = "w-full min-w-0 rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-800 focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100";
@@ -281,9 +282,9 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
     const learner = learners.find((item) => item.id === section.learnerId);
     return learner?.label || (section.sourceLabel === "Unidentified learner" ? "Learner not matched yet" : section.sourceLabel);
   }
-  return <div className={modal ? "fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-3 text-slate-900 backdrop-blur-sm sm:p-6" : "min-h-screen bg-slate-50 text-slate-900"}>
+  return <div onPointerDown={modal ? (event) => closeModalOnBackdropPress(event, () => onClose?.()) : undefined} className={modal ? "oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/30 p-3 text-slate-900 backdrop-blur-sm sm:p-6" : "min-h-screen bg-slate-50 text-slate-900"}>
     {!modal && <OasisHeader />}
-    <main role={modal ? "dialog" : undefined} aria-modal={modal ? "true" : undefined} aria-labelledby={modal ? "document-upload-title" : undefined} className={modal ? "max-h-[94vh] w-full max-w-6xl space-y-6 overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl [overflow-wrap:anywhere] sm:p-8" : "mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 [overflow-wrap:anywhere]"}>
+    <main role={modal ? "dialog" : undefined} aria-modal={modal ? "true" : undefined} aria-labelledby={modal ? "document-upload-title" : undefined} className={modal ? "oasis-modal-surface w-full max-w-6xl space-y-6 rounded-3xl bg-white p-5 shadow-2xl [overflow-wrap:anywhere] sm:p-8" : "mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 [overflow-wrap:anywhere]"}>
       {modal && <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">Private classroom context</p>

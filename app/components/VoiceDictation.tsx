@@ -59,6 +59,7 @@ export default function VoiceDictation({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelRecordingRef = useRef(false);
   const mountedRef = useRef(true);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const panelId = useId();
@@ -172,6 +173,7 @@ export default function VoiceDictation({
   async function startRecording() {
     setError("");
     setMessage("");
+    cancelRecordingRef.current = false;
 
     if (!privacyConfirmed) {
       setError("Confirm the privacy reminder before recording.");
@@ -189,6 +191,13 @@ export default function VoiceDictation({
     try {
       setStatus("requesting");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      if (cancelRecordingRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        if (mountedRef.current) setStatus("idle");
+        return;
+      }
+
       const mediaType = preferredMediaType();
       const recorder = mediaType
         ? new MediaRecorder(stream, { mimeType: mediaType })
@@ -208,6 +217,14 @@ export default function VoiceDictation({
           clearTimers();
           releaseMicrophone();
           recorderRef.current = null;
+
+          if (cancelRecordingRef.current) {
+            chunksRef.current = [];
+            cancelRecordingRef.current = false;
+            if (mountedRef.current) setStatus("idle");
+            return;
+          }
+
           const blob = new Blob(chunksRef.current, {
             type: recorder.mimeType || "audio/webm",
           });
@@ -241,6 +258,18 @@ export default function VoiceDictation({
   function stopRecording() {
     const recorder = recorderRef.current;
     if (recorder?.state === "recording") recorder.stop();
+  }
+
+  function closePanel() {
+    setExpanded(false);
+
+    if (status === "recording") {
+      cancelRecordingRef.current = true;
+      const recorder = recorderRef.current;
+      if (recorder?.state === "recording") recorder.stop();
+    } else if (status === "requesting") {
+      cancelRecordingRef.current = true;
+    }
   }
 
   const busy = status !== "idle";
@@ -292,10 +321,17 @@ export default function VoiceDictation({
       </button>
 
       {expanded && (
-        <div
-          id={panelId}
-          className="absolute right-0 top-12 w-80 max-w-[calc(100vw-3rem)] rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl sm:w-96"
-        >
+        <>
+          <button
+            type="button"
+            aria-label="Close voice dictation"
+            onClick={closePanel}
+            className="fixed inset-0 z-40 cursor-default bg-slate-950/20 sm:hidden"
+          />
+          <div
+            id={panelId}
+            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[calc(100dvh-1.5rem)] w-auto overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-2xl [-webkit-overflow-scrolling:touch] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:max-h-[min(80dvh,36rem)] sm:w-96 sm:shadow-xl"
+          >
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-bold text-slate-900">Voice dictation</p>
@@ -303,13 +339,12 @@ export default function VoiceDictation({
                 OASIS will turn your recording into an editable draft.
               </p>
             </div>
-            {!busy && (
-              <button
-                type="button"
-                onClick={() => setExpanded(false)}
-                aria-label="Close voice dictation"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-              >
+            <button
+              type="button"
+              onClick={closePanel}
+              aria-label={status === "recording" ? "Cancel voice recording" : "Close voice dictation"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            >
                 <svg
                   aria-hidden="true"
                   viewBox="0 0 20 20"
@@ -321,8 +356,7 @@ export default function VoiceDictation({
                 >
                   <path d="m5 5 10 10M15 5 5 15" />
                 </svg>
-              </button>
-            )}
+            </button>
           </div>
 
           <label className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
@@ -376,7 +410,8 @@ export default function VoiceDictation({
           {message && (
             <p className="mt-3 text-xs font-semibold text-emerald-700">{message}</p>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

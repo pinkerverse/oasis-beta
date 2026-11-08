@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { FrameworkDefinition } from "@/lib/framework";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import {
   uploadAndExtractFrameworkFile,
   type FrameworkExtractionMetadata,
@@ -1141,7 +1142,7 @@ export default function FrameworkStep({
       </div>
 
       {showRightsModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+        <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowRightsModal(false))} className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
           <div
             role="dialog"
             aria-modal="true"

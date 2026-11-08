@@ -10,6 +10,7 @@ import {
   type AsbMidYearReport,
 } from "@/lib/asb-midyear-report";
 import { getLearnerInitials } from "@/lib/learner-privacy";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import type {
   LearnerReportReadiness,
   ReportReadinessStatus,
@@ -305,12 +306,12 @@ export default function MidYearReportHelperModal({
     : 0;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-6">
+    <div onPointerDown={(event) => closeModalOnBackdropPress(event, onClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="midyear-report-title"
-        className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
+        className="oasis-modal-surface w-full max-w-7xl rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

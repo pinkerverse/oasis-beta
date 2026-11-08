@@ -22,6 +22,7 @@ import SchoolReportFormatsModal from "@/app/components/SchoolReportFormatsModal"
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import VoiceDictation from "@/app/components/VoiceDictation";
 import { appendDictationText } from "@/lib/dictation";
+import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import {
   createFallbackFocusGuidance,
   type FocusGuidanceRequest,
@@ -6998,14 +6999,14 @@ if (checkingOnboarding) {
 </div>
 
 {showObservationModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, closeObservationComposer)} className="oasis-modal-backdrop fixed inset-0 z-50 flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-4">
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-observation-title"
-      className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-slate-50 p-5 shadow-2xl sm:p-7"
+      className="oasis-modal-surface w-full max-w-5xl rounded-3xl bg-slate-50 p-5 shadow-2xl sm:p-7"
     >
-      <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="sticky top-0 z-40 -mx-5 -mt-5 mb-5 flex items-start justify-between gap-4 rounded-t-3xl border-b border-slate-200 bg-slate-50 px-5 py-5 sm:-mx-7 sm:-mt-7 sm:px-7">
         <div>
           <h2 id="add-observation-title" className="text-2xl font-bold text-slate-900">
             Add Observation
@@ -8591,7 +8592,7 @@ const hasOverride =
 </div>
 
 {frameworkConfirm && (
-  <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/40 p-4">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setFrameworkConfirm(null))} className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/40 p-4">
     <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
       <h2 className="text-xl font-bold text-slate-900">
         {frameworkConfirm.title}
@@ -8628,7 +8629,10 @@ const hasOverride =
 )}
 
 {showMissingDobModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => {
+    setShowMissingDobModal(false);
+    setMissingDobLearnerNames([]);
+  })} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
     <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">
         🎂
@@ -8711,7 +8715,7 @@ const hasOverride =
 )}
 
 {showDuplicateObservationModal && (
-  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, discardDuplicateEvidence)} className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
     <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">
         ⚠️
@@ -8752,7 +8756,10 @@ const hasOverride =
 )}
 
 {showAddLearningAreaModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => {
+    resetManualLearningAreaForm();
+    setShowAddLearningAreaModal(false);
+  })} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
     <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -8981,7 +8988,7 @@ const hasOverride =
 )}
 
 {showOverrideModal && (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowOverrideModal(false))} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
     <div className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
 
@@ -9084,7 +9091,10 @@ const hasOverride =
 
 {showArchiveModal && learnerToArchive && (
 
-  <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => {
+    setShowArchiveModal(false);
+    setLearnerToArchive(null);
+  })} className="fixed inset-0 z-100 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
     <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
 
@@ -9132,7 +9142,7 @@ const hasOverride =
 )}
 
 {showManageLearners && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowManageLearners(false))} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
     <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
 
@@ -9265,7 +9275,7 @@ const hasOverride =
 )}
 
 {showImportLearners && (
-  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, closeImportLearnersModal)} className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
     <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex items-start justify-between">
         <div>
@@ -9668,7 +9678,7 @@ Class and pupil ID are optional. Remove full names and full birth dates before u
 )}
 
 {showJournal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowJournal(false))} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
 
     <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-8 shadow-2xl">
 
@@ -10022,7 +10032,12 @@ match.statementMatches.length > 0 ? (
 )}
 
 {observationToDelete && (
-  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
+  <div onPointerDown={(event) => {
+    if (!deletingObservation) closeModalOnBackdropPress(event, () => {
+      setObservationToDelete(null);
+      setObservationDeleteError("");
+    });
+  }} className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
     <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
       <h2 className="text-xl font-bold text-slate-900">
         Delete observation?
@@ -10075,7 +10090,7 @@ match.statementMatches.length > 0 ? (
 )}
 
 {showAddLearnerModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowAddLearnerModal(false))} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
     <div className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
 
@@ -10279,7 +10294,7 @@ match.statementMatches.length > 0 ? (
 )}
       
       {showFrameworkModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, handleCloseFrameworkModal)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
 
     <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-8 shadow-2xl">
 
@@ -12268,7 +12283,7 @@ onClick={() => {
 
 )}
 {showFrameworkRightsModal && (
-  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowFrameworkRightsModal(false))} className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -12370,7 +12385,7 @@ onClick={() => {
 )}
 
 {showFrameworkReadHelpModal && (
-  <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowFrameworkReadHelpModal(false))} className="fixed inset-0 z-[65] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -12458,7 +12473,13 @@ onClick={() => {
 )}
 
 {showFrameworkSupportModal && (
-  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => {
+    setShowFrameworkSupportModal(false);
+    setFrameworkSupportMessage("");
+    setFrameworkSupportFile(null);
+    setFrameworkSupportError("");
+    setFrameworkSupportSuccess("");
+  })} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="w-full max-w-xl rounded-3xl bg-white p-8 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -12663,7 +12684,11 @@ onClick={() => {
 )}
 
 {showBaselineModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => {
+    setShowBaselineModal(false);
+    setBaselineImportError("");
+    setBaselineImportMessage("");
+  })} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-2xl">
       <div className="flex items-start justify-between">
         <div>
@@ -12800,7 +12825,7 @@ onClick={() => {
   </div>
 )}
 {selectedEvidence && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setSelectedEvidence(null))} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
     <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -12929,12 +12954,12 @@ onClick={() => {
 )}
 
 {showSupportingRecords && (
-  <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowSupportingRecords(false))} className="oasis-modal-backdrop fixed inset-0 z-[75] flex justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="supporting-records-title"
-      className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
+      className="oasis-modal-surface w-full max-w-3xl rounded-3xl bg-white p-5 shadow-2xl sm:p-8"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -13026,12 +13051,12 @@ onClick={() => {
 )}
 
 {showSettings && (
-  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowSettings(false))} className="oasis-modal-backdrop fixed inset-0 z-[60] flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-4">
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
-      className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+      className="oasis-modal-surface w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -13521,12 +13546,12 @@ onClick={() => {
 )}
 
 {showTodaysFocus && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, closeTodaysFocus)} className="oasis-modal-backdrop fixed inset-0 z-50 flex justify-center bg-black/30 p-3 backdrop-blur-sm sm:p-4">
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="todays-focus-title"
-      className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-7"
+      className="oasis-modal-surface w-full max-w-5xl rounded-3xl bg-white p-6 shadow-2xl sm:p-7"
     >
       <div className="flex items-start justify-between">
         <div>
@@ -14067,7 +14092,7 @@ onClick={() => {
 )}
 
 {focusEvidenceChoice && (
-  <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+  <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setFocusEvidenceChoice(null))} className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
     <div role="dialog" aria-modal="true" aria-labelledby="focus-evidence-choice-title" className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
