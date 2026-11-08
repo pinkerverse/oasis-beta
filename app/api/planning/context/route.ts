@@ -16,7 +16,7 @@ export async function GET() {
     const observations: Array<{ id: string; learner_ids: unknown; framework_matches: unknown }> = [];
     // Paginate so older evidence is not silently lost at the database row limit.
     for (let offset = 0; ; offset += 500) {
-      let query = db.from("observations").select("id, learner_ids, framework_matches").eq("school_id", context.schoolId);
+      let query = db.from("observations").select("id, learner_ids, framework_matches").eq("school_id", context.schoolId).eq("review_status", "confirmed");
       query = isSchoolAdmin(context.role) ? query.or(`workspace_id.eq.${context.workspaceId},workspace_id.is.null`) : query.eq("workspace_id", context.workspaceId);
       const page = await query.order("id").range(offset, offset + 499);
       if (page.error) throw new Error("Class coverage could not be loaded.");

@@ -96,6 +96,7 @@ export async function POST(request: Request) {
       .select(
         "id, learner_ids, observation, teacher_notes, observation_date, created_at, framework_matches"
       )
+      .eq("review_status", "confirmed")
       .eq("school_id", context.schoolId)
       .overlaps("learner_ids", requestedLearnerIds)
       .order("observation_date", { ascending: false })

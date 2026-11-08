@@ -242,6 +242,7 @@ export default function Home() {
   const [checkingOnboarding, setCheckingOnboarding] =
     useState(true);
   const [savedToJournal, setSavedToJournal] = useState(false);
+  const [savingQuickObservation, setSavingQuickObservation] = useState(false);
 
   const [
   showDuplicateObservationModal,
@@ -6259,6 +6260,127 @@ setSelectedAnalysisLearnerId(
   }
 }
 
+async function saveQuickObservationToInbox() {
+  const privacySafeObservation = replaceLearnerNamesWithInitials(
+    observation,
+    pupils
+  );
+  const privacyReview = reviewPrivacyText(privacySafeObservation);
+
+  if (privacyReview.requiresReview) {
+    setObservationPrivacyError(privacyReviewMessage(privacyReview));
+    return;
+  }
+  if (!privacySafeObservation.trim() || selectedChildren.length === 0) return;
+
+  const capturedLearners = selectedChildren.map((id) => {
+    const pupil = pupils.find((candidate) => candidate.id === id);
+    return {
+      id,
+      name: pupil ? getLearnerInitials(pupil) : id,
+      dateOfBirth: pupil?.dateOfBirth || null,
+    };
+  });
+
+  try {
+    setSavingQuickObservation(true);
+    setObservationPrivacyError("");
+    const response = await fetch("/api/observation-inbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        observation: privacySafeObservation,
+        observation_date: observationDate,
+        learner_ids: selectedChildren,
+        observation_category: "unclassified",
+        framework_key: activeFramework.key,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.error || "The observation could not be saved.");
+    }
+    const savedObservations = Array.isArray(result.observations)
+      ? result.observations
+      : [];
+
+    void (async () => {
+      try {
+        const analysisResponse = await fetch("/api/analyse-observation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            observation: privacySafeObservation,
+            observationDate,
+            frameworkKey: activeFramework.key,
+            learners: capturedLearners,
+          }),
+        });
+        const analysisResult = await analysisResponse.json().catch(() => ({}));
+        if (!analysisResponse.ok) throw new Error("Background analysis failed.");
+
+        await Promise.all(savedObservations.map((savedObservation: { id?: string; learner_ids?: string[] }) => {
+          const learnerId = savedObservation.learner_ids?.[0];
+          const learnerAnalysis = Array.isArray(analysisResult.learnerAnalyses)
+            ? analysisResult.learnerAnalyses.find(
+                (entry: { learnerId?: string }) => entry.learnerId === learnerId
+              )
+            : null;
+          if (!savedObservation.id || !learnerAnalysis) return Promise.resolve();
+          const matches = Array.isArray(learnerAnalysis.frameworkMatches)
+            ? learnerAnalysis.frameworkMatches
+            : [];
+          return fetch("/api/observation-inbox", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: savedObservation.id,
+              action: "analysis_complete",
+              framework_matches: matches,
+              next_steps: Array.isArray(learnerAnalysis.nextSteps)
+                ? learnerAnalysis.nextSteps
+                : [],
+              assessment_context: analysisResult.assessmentContext ?? null,
+              ai_level:
+                matches.length === 1
+                  ? matches[0]?.suggestedLevel || "Per-area judgements"
+                  : "Per-area judgements",
+            }),
+          });
+        }));
+      } catch {
+        await Promise.all(savedObservations.map((savedObservation: { id?: string }) =>
+          savedObservation.id
+            ? fetch("/api/observation-inbox", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: savedObservation.id,
+                  action: "processing_failed",
+                }),
+              })
+            : Promise.resolve()
+        ));
+      } finally {
+        window.dispatchEvent(new Event("oasis:observation-inbox-updated"));
+      }
+    })();
+
+    window.dispatchEvent(new Event("oasis:observation-inbox-updated"));
+    setObservation("");
+    setSelectedChildren([]);
+    closeObservationComposer();
+  } catch (saveError) {
+    setObservationPrivacyError(
+      saveError instanceof Error
+        ? saveError.message
+        : "The observation could not be saved."
+    );
+  } finally {
+    setSavingQuickObservation(false);
+  }
+}
+
 useEffect(() => {
   loadSavedFrameworks();
 }, []);
@@ -6595,9 +6717,9 @@ async function sendJournalRequest(
   });
 }
 
-let response = await sendJournalRequest(false);
+const response = await sendJournalRequest(false);
 
-let result = (await response
+const result = (await response
   .json()
   .catch(() => ({}))) as JournalSaveResponse;
 
@@ -6619,6 +6741,7 @@ if (!response.ok) {
 }
 
     setSavedToJournal(true);
+    window.dispatchEvent(new Event("oasis:observation-inbox-updated"));
     setEvidenceImage(null);
     setEvidencePrivacyConfirmed(false);
     setPhotoPrivacyError("");
@@ -6628,15 +6751,6 @@ if (!response.ok) {
     }
 
     await refreshClassObservations();
-
-const savedObservation = (result as any).observation;
-
-if (savedObservation && selectedChildren.length === 1) {
-  setLearnerObservations((current) => [
-    savedObservation,
-    ...current,
-  ]);
-}
 
   } catch (error) {
     if (uploadedEvidencePath) {
@@ -6702,6 +6816,7 @@ async function handleConfirmDuplicateSave() {
     setShowDuplicateObservationModal(false);
 setDuplicateSavePayload(null);
 setSavedToJournal(true);
+window.dispatchEvent(new Event("oasis:observation-inbox-updated"));
 setEvidenceImage(null);
 setEvidencePrivacyConfirmed(false);
 setPhotoPrivacyError("");
@@ -7012,7 +7127,7 @@ if (checkingOnboarding) {
             Add Observation
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Capture evidence, analyse it and save it to the journal.
+            Capture now, then review and confirm it from the Observation Inbox.
           </p>
         </div>
 
@@ -7175,114 +7290,6 @@ if (checkingOnboarding) {
           );
         })()}
 
-        <div className="mt-4">
-
-  <label className="cursor-pointer">
-
-    <div className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-
-      📷 Add Photo Evidence
-
-    </div>
-
-    <input
-  ref={fileInputRef}
-  type="file"
-  accept="image/*"
-  className="hidden"
-  onChange={(event) => {
-    const file = event.target.files?.[0] || null;
-    setEvidencePrivacyConfirmed(false);
-    setPhotoPrivacyError("");
-
-    if (file) {
-      const readableFileName = file.name
-        .replace(/\.[^.]+$/, "")
-        .replace(/[_-]+/g, " ");
-      const fileNameReview = reviewPrivacyText(readableFileName, {
-        context: "file_name",
-      });
-
-      if (fileNameReview.requiresReview) {
-        setEvidenceImage(null);
-        setPhotoPrivacyError(
-          `${privacyReviewMessage(fileNameReview)} Rename the file after removing those details, then choose it again.`
-        );
-        event.target.value = "";
-        return;
-      }
-    }
-
-    setEvidenceImage(file);
-  }}
-/>
-
-  </label>
-
-</div>
-
-{evidenceImage && (
-
-  <div className="mt-4">
-
-    <div className="relative inline-block">
-
-      <img
-        src={URL.createObjectURL(evidenceImage)}
-        alt="Evidence"
-        className="max-h-48 rounded-2xl border border-slate-200"
-      />
-
-      <button
-        onClick={() => {
-  setEvidenceImage(null);
-  setEvidencePrivacyConfirmed(false);
-  setPhotoPrivacyError("");
-
-  if (fileInputRef.current) {
-    fileInputRef.current.value = "";
-  }
-}}
-        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600"
-      >
-        X
-      </button>
-
-    </div>
-
-    <p className="mt-2 text-sm text-slate-500">
-      {evidenceImage.name}
-    </p>
-
-    <label className="mt-3 flex max-w-xl items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-      <input
-        type="checkbox"
-        checked={evidencePrivacyConfirmed}
-        onChange={(event) => {
-          setEvidencePrivacyConfirmed(event.target.checked);
-          setPhotoPrivacyError("");
-        }}
-        className="mt-0.5 h-4 w-4 rounded border-slate-300"
-      />
-      <span>
-        I checked this photo. It contains no visible full names, full birth
-        dates, contact details, medical records or safeguarding documents.
-      </span>
-    </label>
-
-  </div>
-
-)}
-
-{photoPrivacyError && (
-  <div
-    role="alert"
-    className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-  >
-    <p className="font-bold">Review the photo evidence</p>
-    <p className="mt-1">{photoPrivacyError}</p>
-  </div>
-)}
       </div>
 
       {selectedChildren.length === 0 && (
@@ -7293,17 +7300,35 @@ if (checkingOnboarding) {
         </div>
       )}
 
-      <button
-        onClick={handleAnalyse}
-        disabled={
-          loading ||
-          selectedChildren.length === 0 ||
-          reviewPrivacyText(observation).requiresReview
-        }
-        className="mt-6 rounded-xl bg-slate-900 px-6 py-3 font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
-      >
-        {loading ? "Analysing..." : "Analyse Observation"}
-      </button>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={() => void saveQuickObservationToInbox()}
+          disabled={
+            savingQuickObservation ||
+            loading ||
+            selectedChildren.length === 0 ||
+            !observation.trim() ||
+            reviewPrivacyText(observation).requiresReview
+          }
+          className="rounded-xl bg-slate-900 px-6 py-3 font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+        >
+          {savingQuickObservation ? "Saving…" : "Save to Inbox"}
+        </button>
+        <button
+          type="button"
+          onClick={handleAnalyse}
+          disabled={
+            loading ||
+            savingQuickObservation ||
+            selectedChildren.length === 0 ||
+            reviewPrivacyText(observation).requiresReview
+          }
+          className="rounded-xl border border-slate-300 bg-white px-6 py-3 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+        >
+          {loading ? "Analysing…" : "Analyse before saving"}
+        </button>
+      </div>
 
     </div>
   )}
@@ -7396,11 +7421,11 @@ if (checkingOnboarding) {
   }`}
 >
   {savedToJournal
-    ? "Saved!"
+    ? "Saved to Inbox"
     : analysis.learnerMismatch?.detected &&
       !learnerMismatchConfirmed
     ? "Confirm learner first"
-    : "Save to Journal"}
+    : "Save to Inbox"}
 </button>
 </div>
                               </div>

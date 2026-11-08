@@ -186,6 +186,7 @@ export async function POST(request: Request) {
       .select(
         "id, observation, observation_date, created_at, next_steps, teacher_notes, framework_matches"
       )
+      .eq("review_status", "confirmed")
       .eq("school_id", context.schoolId)
       .contains("learner_ids", [learnerId]);
 

@@ -50,6 +50,7 @@ export async function GET() {
         .from("observations")
         .select("id, workspace_id, learner_ids, observation_date, created_at")
         .eq("school_id", context.schoolId)
+        .eq("review_status", "confirmed")
         .gte("observation_date", startOfCurrentWeek().slice(0, 10)),
       supabaseAdmin
         .from("school_memberships")

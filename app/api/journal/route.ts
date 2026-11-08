@@ -416,6 +416,11 @@ const rowsToInsert =
   school_id: context.schoolId,
   workspace_id: context.workspaceId,
   created_by: context.userId,
+  original_observation: observationText,
+  review_status: "needs_review",
+  processing_status: "completed",
+  observation_category: "unclassified",
+  sharing_status: "not_ready",
 
   framework_version_id:
     frameworkVersionId,
@@ -475,8 +480,13 @@ const rowsToInsert =
       workspace_id: context.workspaceId,
       created_by: context.userId,
       observation: observationText,
+      original_observation: observationText,
       observation_date: observationDate,
       learner_ids: normalizedLearnerIds,
+      review_status: "needs_review",
+      processing_status: "completed",
+      observation_category: "unclassified",
+      sharing_status: "not_ready",
     },
   ];
 
@@ -547,7 +557,8 @@ export async function GET(request: Request) {
       let classQuery = authenticatedSupabase
           .from("observations")
           .select("*")
-          .eq("school_id", context.schoolId);
+          .eq("school_id", context.schoolId)
+          .eq("review_status", "confirmed");
 
       classQuery = isSchoolAdmin(context.role)
         ? classQuery.or(
@@ -588,6 +599,7 @@ export async function GET(request: Request) {
         .from("observations")
         .select("*")
         .eq("school_id", context.schoolId)
+        .eq("review_status", "confirmed")
         .contains("learner_ids", [learner]);
 
     learnerQuery = isSchoolAdmin(context.role)

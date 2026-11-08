@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import AccountModal from "@/app/components/AccountModal";
+import ObservationInboxModal from "@/app/components/ObservationInboxModal";
+import { inboxBadgeLabel } from "@/lib/observation-inbox";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type HeaderPage =
@@ -127,6 +129,8 @@ export default function OasisHeader({
   const [hasClass, setHasClass] = useState(false);
   const [schoolAdmin, setSchoolAdmin] = useState(false);
   const [platformOwner, setPlatformOwner] = useState(false);
+  const [showObservationInbox, setShowObservationInbox] = useState(false);
+  const [observationInboxCount, setObservationInboxCount] = useState(0);
   const hasLearnerSelection = selectedLearnerIds.length > 0;
   const accountName = suppliedAccountName || loadedAccountName;
   const accountEmail = suppliedAccountEmail || loadedAccountEmail;
@@ -177,6 +181,42 @@ export default function OasisHeader({
       cancelled = true;
     };
   }, [suppliedAccountEmail, suppliedAccountName]);
+
+  const refreshObservationInboxCount = useCallback(async () => {
+    if (!hasClass) return;
+    try {
+      const response = await fetch("/api/observation-inbox?count=1", {
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setObservationInboxCount(
+          typeof result.count === "number" ? result.count : 0
+        );
+      }
+    } catch {
+      // The header remains usable if the count cannot be refreshed.
+    }
+  }, [hasClass]);
+
+  useEffect(() => {
+    if (!hasClass) return;
+    const initialRefresh = window.setTimeout(
+      () => void refreshObservationInboxCount(),
+      0
+    );
+    const refresh = () => void refreshObservationInboxCount();
+    const refreshOnVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("oasis:observation-inbox-updated", refresh);
+    document.addEventListener("visibilitychange", refreshOnVisible);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.removeEventListener("oasis:observation-inbox-updated", refresh);
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
+  }, [hasClass, refreshObservationInboxCount]);
 
   useEffect(() => {
     if (!showToolsMenu && !showProfileMenu) return;
@@ -329,6 +369,25 @@ export default function OasisHeader({
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 10h18M7 14h3m4 0h3M7 17h3" /></svg>
                 <span className="hidden xl:inline">Planning</span>
               </Link>
+
+              <button
+                type="button"
+                onClick={() => setShowObservationInbox(true)}
+                aria-label={`Observation Inbox${observationInboxCount ? `, ${observationInboxCount} awaiting review` : ""}`}
+                title="Observation Inbox"
+                className={`${actionButtonClasses(showObservationInbox)} relative`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+                  <path d="M4 4h16l2 10v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-5L4 4Z" />
+                  <path d="M2 14h5l2 3h6l2-3h5" />
+                </svg>
+                <span className="hidden xl:inline">Inbox</span>
+                {observationInboxCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                    {inboxBadgeLabel(observationInboxCount)}
+                  </span>
+                )}
+              </button>
 
               <button
                 type="button"
@@ -516,6 +575,13 @@ export default function OasisHeader({
             setLoadedAccountName(name);
           }}
           schoolName={schoolName}
+        />
+      )}
+
+      {showObservationInbox && (
+        <ObservationInboxModal
+          onClose={() => setShowObservationInbox(false)}
+          onChanged={refreshObservationInboxCount}
         />
       )}
     </header>

@@ -93,6 +93,7 @@ export async function POST(request: Request) {
     let observationQuery = db.from("observations")
       .select("id, observation, observation_date, created_at, next_steps, teacher_notes, framework_matches")
       .eq("school_id", context.schoolId)
+      .eq("review_status", "confirmed")
       .contains("learner_ids", [learnerId]);
     observationQuery = isSchoolAdmin(context.role)
       ? observationQuery.or(`workspace_id.eq.${context.workspaceId},workspace_id.is.null`)
