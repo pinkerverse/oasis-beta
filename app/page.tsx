@@ -6319,34 +6319,51 @@ async function saveQuickObservationToInbox() {
         const analysisResult = await analysisResponse.json().catch(() => ({}));
         if (!analysisResponse.ok) throw new Error("Background analysis failed.");
 
-        await Promise.all(savedObservations.map((savedObservation: { id?: string; learner_ids?: string[] }) => {
+        await Promise.all(savedObservations.map(async (savedObservation: { id?: string; learner_ids?: string[] }) => {
+          if (!savedObservation.id) return;
           const learnerId = savedObservation.learner_ids?.[0];
           const learnerAnalysis = Array.isArray(analysisResult.learnerAnalyses)
             ? analysisResult.learnerAnalyses.find(
                 (entry: { learnerId?: string }) => entry.learnerId === learnerId
               )
             : null;
-          if (!savedObservation.id || !learnerAnalysis) return Promise.resolve();
-          const matches = Array.isArray(learnerAnalysis.frameworkMatches)
-            ? learnerAnalysis.frameworkMatches
-            : [];
-          return fetch("/api/observation-inbox", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              id: savedObservation.id,
-              action: "analysis_complete",
-              framework_matches: matches,
-              next_steps: Array.isArray(learnerAnalysis.nextSteps)
-                ? learnerAnalysis.nextSteps
-                : [],
-              assessment_context: analysisResult.assessmentContext ?? null,
-              ai_level:
-                matches.length === 1
-                  ? matches[0]?.suggestedLevel || "Per-area judgements"
-                  : "Per-area judgements",
-            }),
-          });
+          try {
+            if (!learnerAnalysis) {
+              throw new Error("Background analysis returned no learner result.");
+            }
+            const matches = Array.isArray(learnerAnalysis.frameworkMatches)
+              ? learnerAnalysis.frameworkMatches
+              : [];
+            const updateResponse = await fetch("/api/observation-inbox", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: savedObservation.id,
+                action: "analysis_complete",
+                framework_matches: matches,
+                next_steps: Array.isArray(learnerAnalysis.nextSteps)
+                  ? learnerAnalysis.nextSteps
+                  : [],
+                assessment_context: analysisResult.assessmentContext ?? null,
+                ai_level:
+                  matches.length === 1
+                    ? matches[0]?.suggestedLevel || "Per-area judgements"
+                    : "Per-area judgements",
+              }),
+            });
+            if (!updateResponse.ok) {
+              throw new Error("The completed analysis could not be saved.");
+            }
+          } catch {
+            await fetch("/api/observation-inbox", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: savedObservation.id,
+                action: "processing_failed",
+              }),
+            });
+          }
         }));
       } catch {
         await Promise.all(savedObservations.map((savedObservation: { id?: string }) =>

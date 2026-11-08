@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
-import { localDateKey } from "@/lib/observation-inbox";
+import {
+  localDateKey,
+  observationProcessingIsStale,
+} from "@/lib/observation-inbox";
 
 type Learner = {
   id: string;
@@ -92,9 +95,10 @@ function mondayKey(now: Date) {
   return localDateKey(start);
 }
 
-function statusLabel(observation: InboxObservation) {
-  if (observation.processing_status === "processing") return "Processing";
-  if (observation.processing_status === "failed") return "Processing failed";
+function statusLabel(observation: InboxObservation, processingIsStale: boolean) {
+  if (processingIsStale) return "Analysis interrupted";
+  if (observation.processing_status === "processing") return "Analyzing framework";
+  if (observation.processing_status === "failed") return "Analysis failed";
   if (observation.review_status === "confirmed") {
     if (observation.sharing_status === "shared") return "Shared";
     if (observation.sharing_status === "ready_to_share") return "Ready to share";
@@ -103,8 +107,8 @@ function statusLabel(observation: InboxObservation) {
   return "Needs review";
 }
 
-function statusClasses(observation: InboxObservation) {
-  if (observation.processing_status === "failed") return "border-red-200 bg-red-50 text-red-700";
+function statusClasses(observation: InboxObservation, processingIsStale: boolean) {
+  if (processingIsStale || observation.processing_status === "failed") return "border-red-200 bg-red-50 text-red-700";
   if (observation.sharing_status === "shared") return "border-cyan-200 bg-cyan-50 text-cyan-800";
   if (observation.sharing_status === "ready_to_share") return "border-indigo-200 bg-indigo-50 text-indigo-700";
   if (observation.review_status === "confirmed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -129,6 +133,7 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
   const [customInstruction, setCustomInstruction] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [copiedId, setCopiedId] = useState("");
+  const [processingClock, setProcessingClock] = useState(() => Date.now());
 
   const loadInbox = useCallback(async () => {
     try {
@@ -156,6 +161,18 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
       document.body.style.overflow = previousOverflow;
     };
   }, [loadInbox]);
+
+  useEffect(() => {
+    const refresh = () => void loadInbox();
+    window.addEventListener("oasis:observation-inbox-updated", refresh);
+    return () => window.removeEventListener("oasis:observation-inbox-updated", refresh);
+  }, [loadInbox]);
+
+  useEffect(() => {
+    if (!observations.some((item) => item.processing_status === "processing")) return;
+    const timer = window.setInterval(() => setProcessingClock(Date.now()), 10_000);
+    return () => window.clearInterval(timer);
+  }, [observations]);
 
   const requestClose = useCallback(() => {
     if (draft && !window.confirm("Discard your unsaved observation changes?")) return;
@@ -428,13 +445,17 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
               <div className="space-y-3">
                 {filtered.map((observation) => {
                   const isEditing = editingId === observation.id && draft;
+                  const processingIsStale = observationProcessingIsStale(
+                    observation,
+                    processingClock
+                  );
                   const names = (observation.learner_ids || []).map((id) => learnerMap.get(id)).filter((learner): learner is Learner => Boolean(learner)).map(learnerInitials);
                   const ageInDays = Math.max(0, Math.floor((new Date(`${today}T12:00:00`).getTime() - new Date(`${observation.observation_date}T12:00:00`).getTime()) / 86_400_000));
                   return (
                     <article key={observation.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div><p className="font-bold text-slate-900">{names.join(", ") || "Learner not assigned"}</p><p className="mt-1 text-xs text-slate-500">{displayDate(observation)}{ageInDays >= 3 && observation.review_status !== "confirmed" ? ` · ${ageInDays} days old` : ""}</p></div>
-                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClasses(observation)}`}>{statusLabel(observation)}</span>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClasses(observation, processingIsStale)}`}>{statusLabel(observation, processingIsStale)}</span>
                       </div>
 
                       {isEditing ? (
@@ -458,9 +479,9 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
                           <p className="mt-3 text-xs font-medium text-slate-500">{CATEGORY_LABELS[observation.observation_category || "unclassified"]}</p>
                           <div className="mt-4 flex flex-wrap gap-2">
                             <button type="button" onClick={() => beginEditing(observation)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Icon name="edit" className="h-4 w-4" />Edit & rephrase</button>
-                            {observation.processing_status === "failed" && <button type="button" onClick={() => void retryAnalysis(observation)} disabled={savingId === observation.id} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Icon name="wand" className="h-4 w-4" />Retry AI</button>}
+                            {(processingIsStale || observation.processing_status === "failed") && <button type="button" onClick={() => void retryAnalysis(observation)} disabled={savingId === observation.id} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Icon name="wand" className="h-4 w-4" />Retry framework analysis</button>}
                             {observation.review_status !== "confirmed" ? (
-                              <button type="button" onClick={() => void updateObservation(observation.id, { action: "confirm" })} disabled={savingId === observation.id || observation.processing_status === "processing"} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"><Icon name="check" className="h-4 w-4" />{observation.processing_status === "processing" ? "AI processing…" : observation.processing_status === "failed" ? "Confirm without AI mapping" : "Confirm & Add to Journal"}</button>
+                              <button type="button" onClick={() => void updateObservation(observation.id, { action: "confirm" })} disabled={savingId === observation.id || (observation.processing_status === "processing" && !processingIsStale)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"><Icon name="check" className="h-4 w-4" />{observation.processing_status === "processing" && !processingIsStale ? "Analyzing framework…" : processingIsStale || observation.processing_status === "failed" ? "Confirm without framework links" : "Confirm & Add to Journal"}</button>
                             ) : (
                               <>
                                 <button type="button" onClick={() => void copyObservation(observation)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Icon name="copy" className="h-4 w-4" />{copiedId === observation.id ? "Copied" : "Copy"}</button>

@@ -6,6 +6,7 @@ import {
   isObservationCategory,
   localDateKey,
   observationNeedsAttention,
+  observationProcessingIsStale,
 } from "./observation-inbox.ts";
 
 test("badge labels hide zero and cap large counts", () => {
@@ -27,4 +28,25 @@ test("observation categories reject unknown values", () => {
 
 test("local date keys use the browser timezone", () => {
   assert.match(localDateKey(new Date("2026-11-08T10:00:00Z")), /^2026-11-0[78]$/);
+});
+
+test("processing observations become recoverable after the analysis timeout", () => {
+  const now = Date.parse("2026-11-08T12:02:00Z");
+
+  assert.equal(observationProcessingIsStale({
+    processing_status: "processing",
+    updated_at: "2026-11-08T12:01:00Z",
+  }, now), false);
+  assert.equal(observationProcessingIsStale({
+    processing_status: "processing",
+    updated_at: "2026-11-08T12:00:00Z",
+  }, now), true);
+  assert.equal(observationProcessingIsStale({
+    processing_status: "completed",
+    updated_at: "2026-11-08T11:00:00Z",
+  }, now), false);
+  assert.equal(observationProcessingIsStale({
+    processing_status: "processing",
+    updated_at: "not-a-date",
+  }, now), false);
 });

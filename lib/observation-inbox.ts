@@ -31,6 +31,8 @@ export type ObservationCategory =
 export type ObservationSharingStatus =
   (typeof OBSERVATION_SHARING_STATUSES)[number];
 
+export const OBSERVATION_PROCESSING_TIMEOUT_MS = 90_000;
+
 export function isObservationCategory(
   value: unknown
 ): value is ObservationCategory {
@@ -57,6 +59,28 @@ export function observationNeedsAttention(observation: {
 }) {
   return observation.review_status !== "confirmed" &&
     observation.review_status !== "dismissed";
+}
+
+export function observationProcessingIsStale(
+  observation: {
+    processing_status?: unknown;
+    updated_at?: unknown;
+    created_at?: unknown;
+  },
+  now = Date.now()
+) {
+  if (observation.processing_status !== "processing") return false;
+
+  const source =
+    typeof observation.updated_at === "string"
+      ? observation.updated_at
+      : typeof observation.created_at === "string"
+        ? observation.created_at
+        : "";
+  const startedAt = Date.parse(source);
+
+  return Number.isFinite(startedAt) &&
+    now - startedAt >= OBSERVATION_PROCESSING_TIMEOUT_MS;
 }
 
 export function inboxBadgeLabel(count: number) {
