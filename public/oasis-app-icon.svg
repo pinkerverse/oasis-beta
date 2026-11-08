@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OASIS app icon">
+  <defs>
+    <linearGradient id="oasis-gradient" x1="72" y1="440" x2="440" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#06296f"/>
+      <stop offset="0.48" stop-color="#087db5"/>
+      <stop offset="1" stop-color="#08c9ad"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="116" fill="url(#oasis-gradient)"/>
+  <circle cx="256" cy="256" r="124" fill="none" stroke="#ffffff" stroke-width="38"/>
+</svg>
