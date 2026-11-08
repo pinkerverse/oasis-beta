@@ -5,6 +5,11 @@ import {
   isObservationSharingStatus,
 } from "@/lib/observation-inbox";
 import {
+  frameworks,
+  type FrameworkDefinition,
+} from "@/lib/framework";
+import { normaliseReviewedFrameworkMatches } from "@/lib/observation-learning-review";
+import {
   privacyReviewResponse,
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
@@ -81,6 +86,69 @@ async function findObservation(
   return { data, error };
 }
 
+async function loadLearningReviewCatalog(
+  context: { schoolId: string },
+  frameworkKey = "eyfs"
+) {
+  const db = await createServerSupabaseClient();
+  const { data: assignment, error: assignmentError } = await db
+    .from("school_framework_assignments")
+    .select("framework_version_id")
+    .eq("school_id", context.schoolId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (assignmentError) {
+    console.error("Observation Inbox framework assignment lookup failed:", assignmentError);
+  }
+
+  const { data: frameworkRecord, error: frameworkError } = assignment
+    ? await db
+        .from("framework_versions")
+        .select("definition")
+        .eq("id", assignment.framework_version_id)
+        .eq("school_id", context.schoolId)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  if (frameworkError) {
+    console.error("Observation Inbox active framework lookup failed:", frameworkError);
+  }
+
+  const fallback =
+    frameworks[frameworkKey as keyof typeof frameworks] ?? frameworks.eyfs;
+  const definition =
+    frameworkRecord?.definition &&
+    typeof frameworkRecord.definition === "object" &&
+    Array.isArray((frameworkRecord.definition as FrameworkDefinition).areaDefinitions)
+      ? frameworkRecord.definition as FrameworkDefinition
+      : fallback;
+
+  const { data: settings, error: settingsError } = await db
+    .from("school_assessment_settings")
+    .select("status_labels")
+    .eq("school_id", context.schoolId)
+    .maybeSingle();
+
+  if (settingsError) {
+    console.error("Observation Inbox assessment settings lookup failed:", settingsError);
+  }
+
+  const configuredLabels = Array.isArray(settings?.status_labels)
+    ? settings.status_labels
+        .filter((label): label is string => typeof label === "string")
+        .map((label) => label.trim())
+        .filter(Boolean)
+    : [];
+  const assessmentLabels = configuredLabels.length >= 2
+    ? configuredLabels
+    : [...definition.assessmentLevels]
+        .sort((first, second) => first.order - second.order)
+        .map((level) => level.label);
+
+  return { definition, assessmentLabels };
+}
+
 export async function GET(request: Request) {
   const context = await getCurrentWorkspaceContext();
   if (!context) {
@@ -89,6 +157,15 @@ export async function GET(request: Request) {
 
   const db = await createServerSupabaseClient();
   const { searchParams } = new URL(request.url);
+
+  if (searchParams.get("learning_catalog") === "1") {
+    const frameworkKey = text(searchParams.get("framework_key"), 120) || "eyfs";
+    const catalog = await loadLearningReviewCatalog(context, frameworkKey);
+    return NextResponse.json({
+      framework: catalog.definition,
+      assessmentLabels: catalog.assessmentLabels,
+    });
+  }
 
   if (searchParams.get("count") === "1") {
     let countQuery = db
@@ -106,7 +183,7 @@ export async function GET(request: Request) {
 
   let observationQuery = db
     .from("observations")
-    .select("id, learner_ids, observation, original_observation, observation_date, created_at, updated_at, review_status, processing_status, observation_category, sharing_status, parent_friendly_text, confirmed_at, shared_at, framework_key, framework_matches")
+    .select("id, learner_ids, observation, original_observation, observation_date, created_at, updated_at, review_status, processing_status, observation_category, sharing_status, parent_friendly_text, confirmed_at, shared_at, framework_key, framework_matches, next_steps, teacher_level, ai_level")
     .eq("school_id", context.schoolId);
   observationQuery = workspaceScope(observationQuery, context);
 
@@ -255,6 +332,38 @@ export async function PATCH(request: Request) {
     update.review_status = "confirmed";
     update.processing_status = "completed";
     update.confirmed_at = new Date().toISOString();
+  } else if (action === "confirm_learning_review") {
+    const catalog = await loadLearningReviewCatalog(
+      context,
+      text(existing.framework_key, 120) || "eyfs"
+    );
+    const reviewedMatches = normaliseReviewedFrameworkMatches(
+      body.framework_matches,
+      catalog.definition,
+      catalog.assessmentLabels,
+      text(existing.observation)
+    );
+
+    if (
+      Array.isArray(body.framework_matches) &&
+      body.framework_matches.length > 0 &&
+      reviewedMatches.length === 0
+    ) {
+      return NextResponse.json(
+        { error: "None of the reviewed learning matches belong to the active framework." },
+        { status: 400 }
+      );
+    }
+
+    update.framework_matches = reviewedMatches;
+    update.teacher_level = reviewedMatches.length === 1
+      ? reviewedMatches[0].finalLevel
+      : reviewedMatches.length > 1
+        ? "Per-area judgements"
+        : "No framework judgement";
+    update.review_status = "confirmed";
+    update.processing_status = "completed";
+    update.confirmed_at = existing.confirmed_at || new Date().toISOString();
   } else if (action === "ready_to_share") {
     update.observation_category = "share_later";
     update.sharing_status = "ready_to_share";
