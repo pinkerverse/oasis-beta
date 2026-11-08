@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import { localDateKey } from "@/lib/observation-inbox";
@@ -363,7 +364,7 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
     }
   }
 
-  return (
+  return createPortal(
     <div onPointerDown={(event) => closeModalOnBackdropPress(event, requestClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/35 p-2 backdrop-blur-sm sm:p-5">
       <section role="dialog" aria-modal="true" aria-labelledby="observation-inbox-title" className="oasis-modal-surface flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl sm:h-[min(900px,calc(100dvh-2.5rem))]">
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
@@ -479,6 +480,7 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
           </div>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
