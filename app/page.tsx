@@ -7290,6 +7290,42 @@ if (checkingOnboarding) {
           );
         })()}
 
+        <div className="mt-4">
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title="Photo evidence will be available after the OASIS beta"
+            className="inline-flex cursor-not-allowed items-center gap-3 rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-left text-slate-400"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-5 w-5 shrink-0"
+              aria-hidden="true"
+            >
+              <path d="M5 7h3l1.3-2h5.4L16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+              <circle cx="12" cy="13" r="3.2" />
+            </svg>
+            <span>
+              <span className="block text-sm font-semibold text-slate-500">
+                Add photo evidence
+              </span>
+              <span className="block text-xs text-slate-400">
+                Available after beta
+              </span>
+            </span>
+          </button>
+          <p className="mt-2 max-w-xl text-xs leading-5 text-slate-400">
+            Photos remain on your device during beta while OASIS completes its
+            privacy and safeguarding controls.
+          </p>
+        </div>
+
       </div>
 
       {selectedChildren.length === 0 && (
