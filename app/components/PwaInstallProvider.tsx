@@ -14,7 +14,7 @@ import {
 
 import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 
-const INSTALL_URL = "https://useoasis.app";
+const INSTALL_URL = "https://useoasis.app/?install=1";
 const DISMISS_KEY = "oasis-install-shortcut-dismissed-v1";
 
 type BeforeInstallPromptEvent = Event & {
@@ -177,7 +177,7 @@ function InstallGuide({
             )}
           </div>
 
-          <aside className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 p-5 text-center">
+          <aside className="hidden flex-col items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 p-5 text-center lg:flex">
             <p className="text-sm font-semibold text-slate-900">Open OASIS on your phone</p>
             <p className="mt-1 text-xs leading-5 text-slate-500">Scan with your phone camera, then follow the steps for your device.</p>
             <div className="mt-4 flex h-[216px] w-[216px] items-center justify-center rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
@@ -210,11 +210,16 @@ export default function PwaInstallProvider({ children }: { children: ReactNode }
     syncStandalone();
     syncOnline();
 
+    const shouldOpenInstallGuide =
+      new URLSearchParams(window.location.search).get("install") === "1";
     const shortcutTimer = window.setTimeout(() => {
       try {
         setShowShortcut(localStorage.getItem(DISMISS_KEY) !== "1");
       } catch {
         setShowShortcut(true);
+      }
+      if (shouldOpenInstallGuide && !displayMode.matches && !safariStandalone) {
+        setShowGuide(true);
       }
     }, 0);
 
@@ -254,7 +259,14 @@ export default function PwaInstallProvider({ children }: { children: ReactNode }
   }, []);
 
   const openInstallGuide = useCallback(() => setShowGuide(true), []);
-  const closeInstallGuide = useCallback(() => setShowGuide(false), []);
+  const closeInstallGuide = useCallback(() => {
+    setShowGuide(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("install")) {
+      url.searchParams.delete("install");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
   const promptNativeInstall = useCallback(async () => {
     if (!installEvent) return;
     await installEvent.prompt();
