@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import LegalFooter from "@/app/components/LegalFooter";
+import PwaInstallProvider from "@/app/components/PwaInstallProvider";
 import SessionTimeoutGuard from "@/app/components/SessionTimeoutGuard";
 
 import "./globals.css";
@@ -18,8 +19,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "OASIS",
-  description:
-    "Evidence-led observation and assessment for early years educators.",
+  applicationName: "OASIS",
+  description: "Observe. Understand. Support.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "OASIS",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#093076",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -33,9 +47,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <SessionTimeoutGuard />
-        <div className="flex-1">{children}</div>
-        <LegalFooter />
+        <PwaInstallProvider>
+          <SessionTimeoutGuard />
+          <div className="flex-1">{children}</div>
+          <LegalFooter />
+        </PwaInstallProvider>
       </body>
     </html>
   );

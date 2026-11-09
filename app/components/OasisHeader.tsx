@@ -6,6 +6,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import AccountModal from "@/app/components/AccountModal";
 import ObservationInboxModal from "@/app/components/ObservationInboxModal";
+import { usePwaInstall } from "@/app/components/PwaInstallProvider";
 import { inboxBadgeLabel } from "@/lib/observation-inbox";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
@@ -68,7 +69,7 @@ function actionButtonClasses(active: boolean) {
 
 const menuItemClasses = "block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-600 disabled:cursor-not-allowed disabled:text-slate-400";
 
-type ToolIcon = "upload" | "report" | "note" | "insight" | "settings";
+type ToolIcon = "upload" | "report" | "note" | "insight" | "settings" | "install";
 const toolItemClasses = "group/tool flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-cyan-50/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
 
 function ToolMenuContent({ icon, label, description }: { icon: ToolIcon; label: string; description?: string }) {
@@ -78,6 +79,7 @@ function ToolMenuContent({ icon, label, description }: { icon: ToolIcon; label: 
     note: "M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6M15 4l5 5M10 14l1-5 7-7 5 5-7 7-6 1Z",
     insight: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Zm13 0a3 3 0 1 0-6 0 3 3 0 0 0 6 0",
     settings: "M4 7h16M4 17h16M8 4v6M16 14v6",
+    install: "M12 3v12m0 0 5-5m-5 5-5-5M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2",
   };
   return <>
     <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50 text-slate-500 transition group-hover/tool:border-cyan-200 group-hover/tool:bg-white group-hover/tool:text-cyan-700">
@@ -112,6 +114,7 @@ export default function OasisHeader({
   todaysFocusActive = false,
   settingsActive = false,
 }: OasisHeaderProps) {
+  const { isStandalone, openInstallGuide } = usePwaInstall();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const toolsMenuId = useId();
@@ -274,6 +277,12 @@ export default function OasisHeader({
     setShowAccountModal(true);
   }
 
+  function openInstall() {
+    setShowToolsMenu(false);
+    setShowProfileMenu(false);
+    openInstallGuide();
+  }
+
   const closeAccountModal = useCallback(() => {
     setShowAccountModal(false);
   }, []);
@@ -285,7 +294,7 @@ export default function OasisHeader({
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-2 shadow-sm backdrop-blur sm:px-4 ${className}`}
+      className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-2 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur sm:px-4 ${className}`}
     >
       <div className="mx-auto flex min-h-20 max-w-[1600px] items-center gap-1 sm:min-h-24 sm:gap-4">
         <Link
@@ -471,6 +480,7 @@ export default function OasisHeader({
                   <Link href="/class-attainment" aria-current={classAttainmentActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="report" label="Class Attainment" /></Link>
                 </div>
                 <div className="mt-2 border-t border-slate-100 pt-2"><button type="button" aria-label="Settings" onClick={openSettings} className={toolItemClasses}><ToolMenuContent icon="settings" label="Settings" /></button></div>
+                {!isStandalone && <div className="mt-2 border-t border-slate-100 pt-2"><button type="button" aria-label="Install OASIS" onClick={openInstall} className={toolItemClasses}><ToolMenuContent icon="install" label="Install OASIS" description="Add OASIS to this device" /></button></div>}
               </nav>}
             </div>
           )}
@@ -539,6 +549,12 @@ export default function OasisHeader({
                     className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
                     My account
+                  </button>
+                )}
+
+                {!isStandalone && (
+                  <button type="button" role="menuitem" onClick={openInstall} className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    Install OASIS
                   </button>
                 )}
 
