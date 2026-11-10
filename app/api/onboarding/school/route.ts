@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { canStartSchoolOnboarding } from "@/lib/beta-onboarding-access";
 import { getPendingPlatformInvitation } from "@/lib/platform-access";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -108,6 +109,23 @@ export async function POST(request: Request) {
   const platformInvitation = user?.email
     ? await getPendingPlatformInvitation(userId, user.email)
     : null;
+
+  if (
+    !canStartSchoolOnboarding({
+      hasExistingAccountContext: Boolean(existingContext),
+      hasPendingPlatformInvitation: Boolean(platformInvitation),
+    })
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "An active OASIS beta invitation is required before you can set up a school.",
+        code: "BETA_APPROVAL_REQUIRED",
+      },
+      { status: 403 }
+    );
+  }
+
   const invitedAccountMode = platformInvitation?.account_mode;
   const accountMode: AccountMode | null =
     invitedAccountMode === "teacher" ||
