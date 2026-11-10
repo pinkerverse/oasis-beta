@@ -252,6 +252,9 @@ PRIVATE NOTE
 ${privacySafeNote}
 
 ACTIVE FRAMEWORK
+Pathway: ${activeFramework.progressionModel || "school-defined"}
+${(activeFramework.implementationNotes ?? []).map((note) => `- ${note}`).join("\n")}
+
 ${frameworkText}
       `,
       text: {

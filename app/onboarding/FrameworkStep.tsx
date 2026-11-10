@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { FrameworkDefinition } from "@/lib/framework";
+import {
+  frameworkPresetCatalog,
+  frameworks,
+  type FrameworkDefinition,
+} from "@/lib/framework";
 import { closeModalOnBackdropPress } from "@/lib/modal-backdrop";
 import {
   uploadAndExtractFrameworkFile,
@@ -82,6 +86,8 @@ export default function FrameworkStep({
 
   const [rightsConfirmed, setRightsConfirmed] =
     useState(false);
+  const [selectedPresetKey, setSelectedPresetKey] =
+    useState<string | null>(null);
   const [showRightsModal, setShowRightsModal] =
     useState(false);
   const [pendingRightsAction, setPendingRightsAction] =
@@ -139,6 +145,34 @@ export default function FrameworkStep({
       (framework) =>
         framework.status === "active"
     ) ?? null;
+
+  function choosePreset(key: string) {
+    const preset = frameworks[key];
+    const catalogEntry = frameworkPresetCatalog.find(
+      (entry) => entry.key === key
+    );
+
+    if (!preset || !catalogEntry) {
+      setError("That framework preset is not available.");
+      return;
+    }
+
+    setMappedFramework(
+      JSON.parse(JSON.stringify(preset)) as FrameworkDefinition
+    );
+    setFrameworkText(
+      `${catalogEntry.sourceNote}\nOfficial source: ${catalogEntry.sourceUrl}`
+    );
+    setFrameworkExtraction(null);
+    setFrameworkFile(null);
+    setRightsConfirmed(true);
+    setSelectedPresetKey(key);
+    setProcessingStage(null);
+    setError("");
+    setMessage(
+      `${catalogEntry.shortName} is ready to review. You can adjust it before saving and activating it.`
+    );
+  }
 
   function requestRightsConfirmation(
     action: "extract" | "map" | "save"
@@ -422,6 +456,7 @@ export default function FrameworkStep({
       setFrameworkExtraction(null);
       setFrameworkFile(null);
       setRightsConfirmed(false);
+      setSelectedPresetKey(null);
 
       setMessage(
         "Framework saved and activated. You can amend it or add another framework later in Settings."
@@ -575,13 +610,113 @@ export default function FrameworkStep({
 
           <div className="mt-8 border-t border-slate-200 pt-8">
             <h3 className="font-semibold text-slate-900">
-              Add framework
+              Choose a ready-made framework
+            </h3>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Start with an OASIS preset, then review and adjust it for your
+              school before activation.
+            </p>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
+              {frameworkPresetCatalog.map((preset) => {
+                const definition = frameworks[preset.key];
+                const isSelected = selectedPresetKey === preset.key;
+
+                return (
+                  <article
+                    key={preset.key}
+                    className={`flex h-full flex-col rounded-2xl border p-5 transition ${
+                      isSelected
+                        ? "border-cyan-500 bg-cyan-50 ring-2 ring-cyan-100"
+                        : "border-slate-200 bg-white hover:border-cyan-300"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700">
+                          {preset.region}
+                        </p>
+                        <h4 className="mt-2 text-lg font-semibold text-slate-900">
+                          {preset.shortName}
+                        </h4>
+                      </div>
+
+                      {isSelected && (
+                        <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-800">
+                          Selected
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-3 flex-1 text-sm leading-6 text-slate-600">
+                      {preset.description}
+                    </p>
+
+                    <p className="mt-4 text-xs leading-5 text-slate-500">
+                      {definition.version}
+                    </p>
+
+                    <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                        {preset.pathwayLabel}
+                      </summary>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        {preset.pathwayDescription}
+                      </p>
+                    </details>
+
+                    <div className="mt-5 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => choosePreset(preset.key)}
+                        className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                          isSelected
+                            ? "bg-cyan-700 text-white"
+                            : "bg-slate-900 text-white hover:bg-slate-700"
+                        }`}
+                      >
+                        {isSelected ? "Selected" : "Choose & review"}
+                      </button>
+
+                      <a
+                        href={preset.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-semibold text-cyan-700 underline-offset-4 hover:underline"
+                      >
+                        Official source
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-slate-200 pt-8">
+            <h3 className="font-semibold text-slate-900">
+              Upload your own framework
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
               Upload PDF, Word, text or a photographed page, or paste
-              framework content below.
+              framework content below. OASIS will map it into the same review
+              process.
             </p>
+
+            <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm leading-6 text-slate-700">
+              <p className="font-semibold text-slate-900">
+                Using an adapted or school-specific framework?
+              </p>
+              <p className="mt-1">
+                Upload it here instead of choosing the closest preset. This
+                includes EYFS-inspired curricula, local continuums, state or
+                national standards, licensed frameworks and a school&apos;s own
+                progression language. OASIS will preserve that framework as
+                your school&apos;s active overlay.
+              </p>
+            </div>
 
             <input
               ref={fileInputRef}
@@ -594,6 +729,8 @@ export default function FrameworkStep({
                     null
                 );
 
+                setMappedFramework(null);
+                setSelectedPresetKey(null);
                 setRightsConfirmed(false);
                 setProcessingStage(null);
                 setError("");
@@ -614,6 +751,8 @@ export default function FrameworkStep({
                   null;
 
                 setFrameworkFile(file);
+                setMappedFramework(null);
+                setSelectedPresetKey(null);
                 setRightsConfirmed(false);
                 setProcessingStage(null);
                 setError("");
@@ -705,6 +844,7 @@ export default function FrameworkStep({
                 );
 
                 setMappedFramework(null);
+                setSelectedPresetKey(null);
                 setRightsConfirmed(false);
                 setMessage("");
               }}
@@ -748,6 +888,27 @@ export default function FrameworkStep({
                     )}{" "}
                     statements. Review them before saving and activating.
                   </p>
+
+                  {selectedPresetKey && (
+                    <>
+                      <p className="mt-3 inline-flex rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800">
+                        OASIS preset · official source linked · editable for
+                        your school
+                      </p>
+                      {mappedFramework.implementationNotes?.length ? (
+                        <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+                          <p className="text-sm font-semibold text-slate-900">
+                            How OASIS will use this framework
+                          </p>
+                          <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                            {mappedFramework.implementationNotes.map((note) => (
+                              <li key={note}>• {note}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
 
                 <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">

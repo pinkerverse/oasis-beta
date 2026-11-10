@@ -420,6 +420,14 @@ const assessmentLevelsText =
     )
     .join("\n");
 
+const frameworkImplementationText =
+  Array.isArray(framework.implementationNotes) &&
+  framework.implementationNotes.length > 0
+    ? framework.implementationNotes
+        .map((note) => `- ${note}`)
+        .join("\n")
+    : "- Use the supplied statements and progressions as professional guidance.";
+
 const frameworkStatementsText =
   framework.areaDefinitions
     .map((area) => {
@@ -568,6 +576,12 @@ ${framework.name}
 
 Framework version:
 ${framework.version || "Not specified"}
+
+Framework pathway:
+${framework.progressionModel || "school-defined"}
+
+Framework implementation guidance:
+${frameworkImplementationText}
 
 Allowed assessment levels and their meanings:
 ${assessmentLevelsText}

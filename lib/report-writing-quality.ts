@@ -69,9 +69,11 @@ function isFrameworkDefinition(value: unknown): value is FrameworkDefinition {
 }
 
 export function reportFrameworkBridgePrompt(value: unknown) {
-  const activeAreas = isFrameworkDefinition(value)
-    ? value.areaDefinitions.map((area) => area.name).filter(Boolean).slice(0, 20)
+  const framework = isFrameworkDefinition(value) ? value : null;
+  const activeAreas = framework
+    ? framework.areaDefinitions.map((area) => area.name).filter(Boolean).slice(0, 20)
     : [];
+  const implementationNotes = framework?.implementationNotes ?? [];
 
   return `
 FRAMEWORK, ATL AND AREAS-OF-LEARNING BRIDGE
@@ -83,6 +85,10 @@ FRAMEWORK, ATL AND AREAS-OF-LEARNING BRIDGE
 
 ACTIVE FRAMEWORK AREAS
 ${JSON.stringify(activeAreas.length ? activeAreas : "Use the matched areas supplied with learner evidence")}
+
+ACTIVE FRAMEWORK PATHWAY
+${framework?.progressionModel || "school-defined"}
+${implementationNotes.map((note) => `- ${note}`).join("\n") || "- Follow the framework matches and school professional judgement."}
 
 EARLY-YEARS DOMAIN LENSES
 ${JSON.stringify(EARLY_YEARS_REPORT_DOMAIN_LENSES, null, 2)}
