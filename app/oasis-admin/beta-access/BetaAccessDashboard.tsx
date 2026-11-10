@@ -489,12 +489,12 @@ export default function BetaAccessDashboard() {
       {showInvite && (
         <div
           onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowInvite(false))}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          className="oasis-modal-backdrop fixed inset-0 z-50 flex justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="beta-invite-title"
         >
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+          <div className="oasis-modal-surface w-full max-w-xl rounded-3xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
               <div>
                 <p className="text-sm font-semibold text-cyan-800">

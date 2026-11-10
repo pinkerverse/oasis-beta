@@ -50,6 +50,28 @@ textarea::placeholder {
   color: #94a3b8;
 }
 
+/*
+ * iPadOS Safari can zoom the whole workspace when a compact form control is
+ * focused. Keep editable controls at the platform-safe size on touch devices
+ * and remove the delayed double-tap gesture from deliberate controls.
+ */
+@media (pointer: coarse) {
+  button,
+  a,
+  select,
+  summary,
+  input,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 html[data-oasis-embedded-overlay="true"],
 html[data-oasis-embedded-overlay="true"] body,
 html[data-oasis-embedded-overlay="true"] body > main {

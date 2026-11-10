@@ -1142,12 +1142,12 @@ export default function FrameworkStep({
       </div>
 
       {showRightsModal && (
-        <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowRightsModal(false))} className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+        <div onPointerDown={(event) => closeModalOnBackdropPress(event, () => setShowRightsModal(false))} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/30 p-4 backdrop-blur-sm">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="onboarding-framework-rights-title"
-            className="w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl"
+            className="oasis-modal-surface w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
