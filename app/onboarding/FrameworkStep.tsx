@@ -88,6 +88,8 @@ export default function FrameworkStep({
     useState(false);
   const [selectedPresetKey, setSelectedPresetKey] =
     useState<string | null>(null);
+  const [activatingPresetKey, setActivatingPresetKey] =
+    useState<string | null>(null);
   const [showRightsModal, setShowRightsModal] =
     useState(false);
   const [pendingRightsAction, setPendingRightsAction] =
@@ -330,25 +332,27 @@ export default function FrameworkStep({
     setMessage("");
   }
 
-  function frameworkIsValid() {
-    if (!mappedFramework) return false;
+  function frameworkIsValid(
+    framework: FrameworkDefinition | null = mappedFramework
+  ) {
+    if (!framework) return false;
 
-    if (!mappedFramework.name.trim()) {
+    if (!framework.name.trim()) {
       return false;
     }
 
     if (
       !Array.isArray(
-        mappedFramework.areaDefinitions
+        framework.areaDefinitions
       ) ||
-      mappedFramework.areaDefinitions
+      framework.areaDefinitions
         .length === 0
     ) {
       return false;
     }
 
     for (const area of
-      mappedFramework.areaDefinitions) {
+      framework.areaDefinitions) {
       if (!area.name.trim()) {
         return false;
       }
@@ -371,10 +375,19 @@ export default function FrameworkStep({
     return true;
   }
 
-  async function saveAndActivate() {
+  async function saveAndActivate(options?: {
+    definition: FrameworkDefinition;
+    sourceText: string;
+    rightsConfirmed: boolean;
+  }) {
+    const definition = options?.definition ?? mappedFramework;
+    const sourceText = options?.sourceText ?? frameworkText;
+    const hasConfirmedRights =
+      options?.rightsConfirmed ?? rightsConfirmed;
+
     if (
-      !mappedFramework ||
-      !frameworkIsValid()
+      !definition ||
+      !frameworkIsValid(definition)
     ) {
       setError(
         "Complete the framework review before saving."
@@ -396,9 +409,9 @@ export default function FrameworkStep({
               "application/json",
           },
           body: JSON.stringify({
-            definition: mappedFramework,
-            sourceText: frameworkText,
-            rightsConfirmed,
+            definition,
+            sourceText,
+            rightsConfirmed: hasConfirmedRights,
           }),
         }
       );
@@ -471,6 +484,33 @@ export default function FrameworkStep({
       );
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function activateRecommendedPreset(key: string) {
+    const preset = frameworks[key];
+    const catalogEntry = frameworkPresetCatalog.find(
+      (entry) => entry.key === key
+    );
+
+    if (!preset || !catalogEntry) {
+      setError("That framework preset is not available.");
+      return;
+    }
+
+    const definition = JSON.parse(
+      JSON.stringify(preset)
+    ) as FrameworkDefinition;
+
+    try {
+      setActivatingPresetKey(key);
+      await saveAndActivate({
+        definition,
+        sourceText: `${catalogEntry.sourceNote}\nOfficial source: ${catalogEntry.sourceUrl}`,
+        rightsConfirmed: true,
+      });
+    } finally {
+      setActivatingPresetKey(null);
     }
   }
 
@@ -669,14 +709,22 @@ export default function FrameworkStep({
                     <div className="mt-5 flex flex-wrap items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => choosePreset(preset.key)}
-                        className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                          isSelected
-                            ? "bg-cyan-700 text-white"
-                            : "bg-slate-900 text-white hover:bg-slate-700"
-                        }`}
+                        onClick={() => void activateRecommendedPreset(preset.key)}
+                        disabled={isSaving}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-40"
                       >
-                        {isSelected ? "Selected" : "Choose & review"}
+                        {activatingPresetKey === preset.key
+                          ? "Activating…"
+                          : "Use recommended"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => choosePreset(preset.key)}
+                        disabled={isSaving}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        Review & customize
                       </button>
 
                       <a

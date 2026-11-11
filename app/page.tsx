@@ -282,6 +282,14 @@ const [learnerOverviewSources, setLearnerOverviewSources] =
     importedDocuments: [],
   });
 const [classObservations, setClassObservations] = useState<any[]>([]);
+const [classObservationsLoaded, setClassObservationsLoaded] =
+  useState(false);
+const [firstRunFocusVisited, setFirstRunFocusVisited] =
+  useState(false);
+const [firstRunWelcomeDismissed, setFirstRunWelcomeDismissed] =
+  useState(false);
+const [firstRunPreferenceLoaded, setFirstRunPreferenceLoaded] =
+  useState(false);
 const [classTeacherEvidence, setClassTeacherEvidence] = useState<ClassTeacherEvidence[]>([]);
 const [learnerEvidenceRefreshKey, setLearnerEvidenceRefreshKey] = useState(0);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
@@ -2210,10 +2218,29 @@ function closeTodaysFocus() {
 }
 
 function openTodaysFocus() {
+  setFirstRunFocusVisited(true);
+  window.localStorage.setItem(
+    "oasis:first-run-focus-visited:v1",
+    "true"
+  );
   setFocusScheduleNow(new Date());
   setFocusDay("today");
   setShowTodaysFocus(true);
 }
+
+useEffect(() => {
+  setFirstRunFocusVisited(
+    window.localStorage.getItem(
+      "oasis:first-run-focus-visited:v1"
+    ) === "true"
+  );
+  setFirstRunWelcomeDismissed(
+    window.localStorage.getItem(
+      "oasis:first-run-welcome-dismissed:v1"
+    ) === "true"
+  );
+  setFirstRunPreferenceLoaded(true);
+}, []);
 
 useEffect(() => {
   if (!showTodaysFocus) return;
@@ -2552,6 +2579,31 @@ const [selectedAreas, setSelectedAreas] =
 const [pupils, setPupils] = useState<any[]>([]);
 const [learnersLoading, setLearnersLoading] = useState(true);
 const [learnersError, setLearnersError] = useState("");
+
+useEffect(() => {
+  if (
+    !firstRunPreferenceLoaded ||
+    pupils.length === 0 ||
+    !classObservationsLoaded ||
+    classObservations.length === 0 ||
+    !firstRunFocusVisited
+  ) {
+    return;
+  }
+
+  setFirstRunWelcomeDismissed(true);
+  window.localStorage.setItem(
+    "oasis:first-run-welcome-dismissed:v1",
+    "true"
+  );
+}, [
+  classObservations.length,
+  classObservationsLoaded,
+  firstRunFocusVisited,
+  firstRunPreferenceLoaded,
+  pupils.length,
+]);
+
 const learnersMissingDateOfBirth = pupils.filter(
   (learner) => !learner.dateOfBirth
 );
@@ -6540,6 +6592,8 @@ async function refreshClassObservations() {
       "Failed to load class observations:",
       error
     );
+  } finally {
+    setClassObservationsLoaded(true);
   }
 }
 
@@ -6955,6 +7009,109 @@ if (checkingOnboarding) {
   todaysFocusActive={showTodaysFocus}
   settingsActive={showSettings}
 />
+
+{firstRunPreferenceLoaded &&
+  classObservationsLoaded &&
+  !firstRunWelcomeDismissed && (
+    <section className="mb-8 rounded-3xl border border-cyan-200 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 p-6 shadow-sm sm:p-8">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-700">
+            Welcome to OASIS
+          </p>
+          <h1 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+            Your class is ready
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Start with one authentic learning moment. OASIS will connect it to
+            your framework and begin building the class picture with you.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setFirstRunWelcomeDismissed(true);
+            window.localStorage.setItem(
+              "oasis:first-run-welcome-dismissed:v1",
+              "true"
+            );
+          }}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-900"
+          aria-label="Dismiss welcome checklist"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="mt-6 grid gap-3 lg:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">
+            <span className="mr-2 text-emerald-600">✓</span>
+            Add your learners
+          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            {pupils.length} {pupils.length === 1 ? "learner is" : "learners are"}{" "}
+            ready in this class.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">
+            <span
+              className={`mr-2 ${
+                classObservations.length > 0
+                  ? "text-emerald-600"
+                  : "text-slate-300"
+              }`}
+            >
+              {classObservations.length > 0 ? "✓" : "○"}
+            </span>
+            Record your first observation
+          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Capture a short moment using initials only; you can type or dictate.
+          </p>
+          {classObservations.length === 0 && (
+            <button
+              type="button"
+              onClick={openObservationComposer}
+              className="mt-3 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
+            >
+              Add first observation
+            </button>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">
+            <span
+              className={`mr-2 ${
+                firstRunFocusVisited
+                  ? "text-emerald-600"
+                  : "text-slate-300"
+              }`}
+            >
+              {firstRunFocusVisited ? "✓" : "○"}
+            </span>
+            Explore Today&apos;s Focus
+          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            See the next useful opportunities suggested from your class evidence.
+          </p>
+          {!firstRunFocusVisited && (
+            <button
+              type="button"
+              onClick={openTodaysFocus}
+              className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700"
+            >
+              Open Today&apos;s Focus
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  )}
 
 <div id="learners" className="mb-8 scroll-mt-28 rounded-3xl border border-slate-200 bg-white shadow-lg">
 

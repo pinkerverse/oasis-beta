@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 
+import {
+  EVIDENCE_STRENGTH_STATUS_LABELS,
+  frameworkAssessmentExplanation,
+  type OnboardingFrameworkSummary,
+} from "@/lib/onboarding-assessment";
+
 type ExpectationMode =
   | "developmental_trajectory"
   | "end_of_year_threshold";
@@ -11,19 +17,15 @@ type Props = {
   onComplete: () => void;
 };
 
-const DEFAULT_LABELS = [
-  "Below",
-  "Approaching",
-  "Meeting",
-  "Exceeding",
-];
-
 export default function AssessmentSetupStep({
   onBack,
   onComplete,
 }: Props) {
   const [statusLabels, setStatusLabels] =
-    useState<string[]>(DEFAULT_LABELS);
+    useState<string[]>(EVIDENCE_STRENGTH_STATUS_LABELS);
+
+  const [framework, setFramework] =
+    useState<OnboardingFrameworkSummary | null>(null);
 
   const [expectationMode, setExpectationMode] =
     useState<ExpectationMode>(
@@ -103,6 +105,32 @@ export default function AssessmentSetupStep({
           result.settings
             .expected_observations_per_learner_per_week
         );
+      }
+
+      if (
+        result.framework &&
+        typeof result.framework.name === "string"
+      ) {
+        if (
+          result.framework.progressionModel ===
+          "non-linear-outcomes"
+        ) {
+          setExpectationMode("developmental_trajectory");
+        }
+
+        setFramework({
+          name: result.framework.name,
+          progressionModel:
+            result.framework.progressionModel ?? null,
+          implementationNotes: Array.isArray(
+            result.framework.implementationNotes
+          )
+            ? result.framework.implementationNotes.filter(
+                (note: unknown): note is string =>
+                  typeof note === "string"
+              )
+            : [],
+        });
       }
     } catch (error) {
       setError(
@@ -254,15 +282,25 @@ export default function AssessmentSetupStep({
         </p>
       ) : (
         <>
+          <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
+            <p className="text-sm font-semibold text-slate-900">
+              {framework
+                ? `Aligned with ${framework.name}`
+                : "Evidence-led assessment"}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {frameworkAssessmentExplanation(framework)}
+            </p>
+          </div>
+
           <div className="mt-8">
             <h3 className="font-semibold text-slate-900">
               Assessment status
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              These describe how a learner&apos;s
-              developmental level compares with
-              expectations.
+              These describe the strength and independence of the evidence
+              OASIS has—not a fixed label for the child.
             </p>
 
             <div className="mt-4 space-y-3">
@@ -359,44 +397,45 @@ export default function AssessmentSetupStep({
                 </div>
               </button>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setExpectationMode(
-                    "end_of_year_threshold"
-                  )
-                }
-                className={`w-full rounded-2xl border p-5 text-left ${
-                  expectationMode ===
-                  "end_of_year_threshold"
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <input
-                    type="radio"
-                    checked={
-                      expectationMode ===
+              {framework?.progressionModel !== "non-linear-outcomes" && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpectationMode(
                       "end_of_year_threshold"
-                    }
-                    readOnly
-                    className="mt-1"
-                  />
+                    )
+                  }
+                  className={`w-full rounded-2xl border p-5 text-left ${
+                    expectationMode ===
+                    "end_of_year_threshold"
+                      ? "border-slate-900 bg-slate-50"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      checked={
+                        expectationMode ===
+                        "end_of_year_threshold"
+                      }
+                      readOnly
+                      className="mt-1"
+                    />
 
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      End-of-year threshold
-                    </p>
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        End-of-year threshold
+                      </p>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      Compare attainment directly
-                      with the end-of-year expected
-                      level.
-                    </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Use only when your school&apos;s reporting policy requires
+                        direct comparison with a defined end-of-year point.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              )}
             </div>
           </div>
 

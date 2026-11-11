@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
 
+import type { FrameworkDefinition } from "@/lib/framework";
+import { getFrameworkAssessmentSetup } from "@/lib/onboarding-assessment";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentSchoolId } from "@/lib/supabase/current-school";
 import { getSchoolAdminContext } from "@/lib/supabase/current-workspace";
-
-const DEFAULT_STATUS_LABELS = [
-  "Below",
-  "Approaching",
-  "Meeting",
-  "Exceeding",
-];
 
 const DEFAULT_WEEKLY_OBSERVATION_TARGET = 2;
 const MIN_WEEKLY_OBSERVATION_TARGET = 1;
@@ -35,31 +30,56 @@ export async function GET() {
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("school_assessment_settings")
-    .select(
-      "school_id, status_labels, expectation_mode, expected_observations_per_learner_per_week, onboarding_completed_at"
-    )
-    .eq("school_id", schoolId)
-    .maybeSingle();
+  const [settingsResult, frameworkResult] = await Promise.all([
+    supabase
+      .from("school_assessment_settings")
+      .select(
+        "school_id, status_labels, expectation_mode, expected_observations_per_learner_per_week, onboarding_completed_at"
+      )
+      .eq("school_id", schoolId)
+      .maybeSingle(),
+    supabase
+      .from("framework_versions")
+      .select("definition")
+      .eq("school_id", schoolId)
+      .eq("status", "active")
+      .maybeSingle(),
+  ]);
 
-  if (error) {
+  if (settingsResult.error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: settingsResult.error.message },
       { status: 500 }
     );
   }
 
+  if (frameworkResult.error) {
+    return NextResponse.json(
+      { error: frameworkResult.error.message },
+      { status: 500 }
+    );
+  }
+
+  const definition =
+    frameworkResult.data?.definition &&
+    typeof frameworkResult.data.definition === "object"
+      ? (frameworkResult.data.definition as FrameworkDefinition)
+      : null;
+  const frameworkSetup = getFrameworkAssessmentSetup(definition);
+  const data = settingsResult.data;
+
   return NextResponse.json({
     settings: data ?? {
       school_id: schoolId,
-      status_labels: DEFAULT_STATUS_LABELS,
+      status_labels: frameworkSetup.statusLabels,
       expectation_mode:
-        "developmental_trajectory",
+        frameworkSetup.expectationMode,
       expected_observations_per_learner_per_week:
         DEFAULT_WEEKLY_OBSERVATION_TARGET,
       onboarding_completed_at: null,
     },
+    configured: Boolean(data),
+    framework: frameworkSetup.framework,
   });
 }
 

@@ -70,19 +70,21 @@ export default function OnboardingPage() {
   const [savedMessage, setSavedMessage] =
     useState("");
 
-  const loadSchool = useCallback(async () => {
+  const loadSchool = useCallback(async (resumeStep?: number | null) => {
     try {
       setIsLoading(true);
       setError("");
 
-      const [response, invitationResponse] = await Promise.all([
+      const [response, invitationResponse, academicYearResponse] = await Promise.all([
         fetch("/api/onboarding/school", { cache: "no-store" }),
         fetch("/api/platform/invitations/current", { cache: "no-store" }),
+        fetch("/api/onboarding/academic-year", { cache: "no-store" }),
       ]);
 
-      const [result, invitationResult] = await Promise.all([
+      const [result, invitationResult, academicYearResult] = await Promise.all([
         response.json(),
         invitationResponse.json().catch(() => ({})),
+        academicYearResponse.json().catch(() => ({})),
       ]);
 
       if (!response.ok) {
@@ -107,7 +109,43 @@ export default function OnboardingPage() {
           result.accountMode === "both"
         ) {
           setAccountMode(result.accountMode);
-          setCurrentStep(0);
+          setCurrentStep(
+            typeof resumeStep === "number"
+              ? Math.max(0, resumeStep)
+              : 0
+          );
+
+          if (
+            academicYearResponse.ok &&
+            academicYearResult.academicYear
+          ) {
+            setYearName(academicYearResult.academicYear.name ?? "");
+            setYearStart(academicYearResult.academicYear.start_date ?? "");
+            setYearEnd(academicYearResult.academicYear.end_date ?? "");
+            setTerms(
+              (academicYearResult.terms ?? []).map(
+                (term: {
+                  id: string;
+                  name: string;
+                  start_date: string;
+                  end_date: string;
+                }) => ({
+                  id: term.id,
+                  name: term.name,
+                  startDate: term.start_date,
+                  endDate: term.end_date,
+                })
+              )
+            );
+          } else {
+            setTerms([
+              {
+                name: "Term 1",
+                startDate: "",
+                endDate: "",
+              },
+            ]);
+          }
         }
       } else if (
         invitationResponse.ok &&
@@ -155,7 +193,11 @@ export default function OnboardingPage() {
           return;
         }
 
-        await loadSchool();
+        await loadSchool(
+          typeof result.nextStep === "number"
+            ? result.nextStep
+            : undefined
+        );
       } catch (initialisationError) {
         console.error(
           "Onboarding completion check failed:",
