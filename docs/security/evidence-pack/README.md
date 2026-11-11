@@ -1,8 +1,8 @@
 # OASIS school security and privacy evidence pack
 
 Document owner: OASIS service owner  
-Version: working draft 0.1  
-Prepared: 10 September 2026  
+Version: working draft 0.2
+Prepared: 10 September 2026; product-flow review updated 11 November 2026
 Review: before each school rollout, quarterly, and after material change
 
 This pack gives a school enough structured information to begin its supplier,
@@ -33,13 +33,18 @@ school's privacy lead before signature or approval.
 | Tenant isolation | School/class access enforced in application and database policies; automated cross-tenant tests exist | Built and production migration verified; independent testing remains |
 | Account security | Individual accounts, role separation, privileged MFA, session controls and ownership safeguards | Built and deployed; independent testing remains |
 | Data minimisation | Learner initials/IDs, birth month and year, name replacement before AI processing | Built |
-| AI safeguards | Educator review required; no solely automated decisions; Responses API calls use `store: false` | Built; provider zero-retention approval is not in place |
+| AI safeguards | Educator review required; no solely automated decisions; Responses API calls use `store: false`; dictation audio is transient in OASIS | Built; provider zero-retention approval is not in place |
 | Audit trail | Sensitive administrative actions recorded without learner narrative content; 365-day purge function | Built and production migration verified |
-| Backups | Supabase production dashboard reports no managed backups on the current Free plan | **Blocking for wider rollout** |
+| Backups | Last recorded production check (10 September 2026) showed no managed backups; current plan and backup status must be re-evidenced | **Blocking for wider rollout until verified** |
 | Monitoring | In-product security review exists; production alert delivery is not yet configured | **Open** |
 | Deletion/export | Observation deletion and access removal exist; complete school export and verified hard deletion do not | **Open** |
 | Contracts | Draft DPA and subprocessor list prepared | Legal entity details, provider DPAs and counsel review required |
 | Independent assurance | Internal baseline complete; external test scope drafted | Step 7 in progress |
+
+The November 2026 review added the current voice-dictation, private teacher-note,
+document-import, observation-inbox, planning, reporting, PWA and framework-preset
+flows. New photo upload remains disabled during beta; historical evidence objects
+remain in scope until deleted under an approved retention process.
 
 ## Decisions and evidence still required
 

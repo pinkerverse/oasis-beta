@@ -73,7 +73,14 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Uploaded and generated content:</strong> framework documents,
+            extracted text from learner or report-format documents, weekly plans,
             notes, reports and AI-supported analysis created at a user&apos;s request.
+          </li>
+          <li>
+            <strong>Voice dictation:</strong> temporary audio supplied to create an
+            editable observation or teacher-note transcript. OASIS does not save the
+            audio recording; the reviewed text follows the retention of the record
+            in which it is saved.
           </li>
           <li>
             <strong>Technical information:</strong> authentication session data,
@@ -149,10 +156,13 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. AI-supported features">
         <p>
           OASIS may send the minimum relevant observation text, learner initials,
-          age context and framework material to an AI service to create a draft
-          analysis. It does not send a learner&apos;s full birth date in the analysis
-          request. OASIS configures supported requests not to create application
-          response history and does not opt in to model training with school data.
+          age context, framework material, reviewed document text or temporary
+          dictated audio to an AI service to create a transcript, extraction or
+          draft analysis. It does not send a learner&apos;s full birth date in the
+          analysis request. OASIS configures supported text-generation requests not
+          to create application response history and does not opt in to model
+          training with school data. Audio is not stored by OASIS, although the AI
+          provider&apos;s contracted endpoint and abuse-monitoring terms still apply.
           The AI provider may retain limited abuse-monitoring logs under its service
           terms unless a separately approved zero-retention arrangement applies.
         </p>
@@ -164,9 +174,11 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           Private teacher notes are stored separately from family-facing
-          observations. They may calibrate an educator-requested insight or draft,
-          but are not counted as observations and are not displayed in learner
-          progress, evidence coverage, journals or family exports.
+          observations. Structured, teacher-confirmed notes may calibrate an
+          educator-requested insight or draft and may support learner-progress or
+          evidence-coverage views. They remain identified as supporting records,
+          are not counted as parent-facing journal observations, and are not shown
+          verbatim in family-facing output.
         </p>
       </LegalSection>
 

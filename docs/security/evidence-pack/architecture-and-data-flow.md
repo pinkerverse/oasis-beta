@@ -1,13 +1,16 @@
 # Architecture and data flow
 
-Last verified against the repository: 10 September 2026
+Last verified against the repository: 11 November 2026
 
 ## Purpose and boundaries
 
-OASIS is a web application for authorised educators and school leaders. Children
-do not sign in. Educators record observations, attach optional photographic
-evidence, review AI-supported drafts, configure school frameworks and invite
-colleagues. The school remains responsible for educational decisions.
+OASIS is a web and installable progressive web application for authorised educators
+and school leaders. Children do not sign in. Educators record or dictate
+observations, keep private teacher notes, review AI-supported drafts, import
+teacher-reviewed learner documents, plan, prepare reports, configure school
+frameworks and invite colleagues. The school remains responsible for educational
+decisions. Installing the PWA does not bypass authentication, approval or tenant
+authorisation, and the service worker does not cache protected pages, APIs or data.
 
 The service boundary includes the OASIS Next.js application, its server routes,
 Supabase project, OpenAI API calls and transactional/support email. A user's
@@ -77,6 +80,10 @@ up to 30 days by default unless approved data controls apply.
 
 ### 3. Evidence photographs
 
+New photo upload is disabled during the current beta. Historical evidence objects
+and the authenticated server routes remain in the system, so the following storage,
+access, backup and deletion obligations still apply.
+
 1. The browser sends an allowed image type, up to 8 MB, to an authenticated server
    route.
 2. The server stores it in the private `observation-evidence` bucket under the
@@ -111,6 +118,37 @@ or backed by provider-side lifecycle automation before scale.
 - Invitation and security actions record identifiers and outcomes in the OASIS
   audit table without observation text or learner names.
 
+### 6. Voice dictation
+
+1. An educator records up to the client-enforced limit after confirming the
+   privacy warning and using learner initials only.
+2. The browser sends the audio to an authenticated OASIS server route, which sends
+   it to OpenAI's audio-transcription endpoint.
+3. OASIS does not save the audio recording. It returns an editable transcript and
+   may request a `store: false` rewrite appropriate to an observation or private
+   teacher note.
+4. The educator reviews and edits the text before saving. The saved text then
+   follows the normal observation or teacher-note lifecycle.
+
+### 7. Learner documents and school report formats
+
+1. Supported documents are parsed in memory; original learner-report files are not
+   uploaded to persistent OASIS file storage.
+2. Extracted source text, filename, document type, review sections and learner IDs
+   are stored in the authorised class workspace so the educator can review,
+   correct and confirm ownership before use.
+3. Relevant text is sent to OpenAI with `store: false` for extraction or framework
+   review. Imported context cannot silently establish attainment.
+4. School report-format documents are converted into a school-scoped structured
+   template. Generated report and PTC drafts remain teacher-review material.
+
+### 8. Planning and generated setup images
+
+Weekly plans are stored per school and class workspace. Planning ideas and optional
+room-provocation images are generated only from the selected curriculum objective
+and teacher-entered setup fields, without learner records. Saved images form part
+of the plan and must follow the school's plan retention and export rules.
+
 ## Trust boundaries and controls
 
 | Boundary | Main risk | Current controls | Remaining evidence/action |
@@ -124,8 +162,10 @@ or backed by provider-side lifecycle automation before scale.
 ## System data stores
 
 - Supabase Auth: user identity, credentials/session and authentication audit data.
-- Supabase PostgreSQL: school, membership, class, learner, observation, framework,
-  baseline, invitation, beta-access and security-event records.
+- Supabase PostgreSQL: school, membership, class, learner, observation, observation
+  inbox, private teacher note, reviewed document context, planning, report template,
+  report history, framework, baseline, invitation, beta-access and security-event
+  records.
 - Supabase Storage: persistent observation photographs and temporary framework
   uploads.
 - Provider operational logs: request, delivery, authentication and security

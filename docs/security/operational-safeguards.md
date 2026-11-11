@@ -2,7 +2,7 @@
 
 Owner: OASIS service owner  
 Review frequency: quarterly and after every material incident  
-Last reviewed: 10 September 2026
+Last reviewed: 11 November 2026
 
 This runbook covers the controls needed to keep OASIS available, detect misuse,
 recover safely and remove access quickly. It must be reviewed alongside the
@@ -10,10 +10,11 @@ incident-response plan and data-retention schedule in the school evidence pack.
 
 ## 1. Backup and recovery
 
-Current production status on 10 September 2026:
+Last evidenced production status on 10 September 2026:
 
 - The Supabase project is on the Free plan.
-- The project dashboard reports **No backups**.
+- The project dashboard reported **No backups**. Recheck and record the current
+  plan and backup state before inviting users to enter production learner data.
 - This is not an acceptable state for a wider school rollout.
 
 Required production control:

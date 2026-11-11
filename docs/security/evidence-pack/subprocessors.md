@@ -1,7 +1,7 @@
 # OASIS subprocessor register
 
 Status: draft; verify against production accounts and executed agreements  
-Last checked: 10 September 2026  
+Last checked against current product routes: 11 November 2026
 Change contact: `privacy@useoasis.app`
 
 The table lists direct providers visible in the current OASIS code and operations.
@@ -13,7 +13,7 @@ covered. The evidence register must hold acceptance/plan/transfer proof.
 | --- | --- | --- | --- | --- |
 | Supabase, Inc. | authentication, PostgreSQL database, private file storage | adult identity/auth data; school, class, learner, observation, evidence, framework and audit data | OASIS project shown as AWS `eu-west-1` Ireland; support/auth subprocessors may operate elsewhere | DPA acceptance and current subprocessor list to evidence; project currently Free/no managed backup |
 | Vercel Inc. | Next.js hosting, server execution, delivery and operational logs | requests, session-related metadata, transient request content processed by server routes | Vercel states primary processing facilities are in the US and provides SCC mechanisms in its DPA | confirm OASIS plan is covered by current DPA and record acceptance |
-| OpenAI, L.L.C./applicable contracting entity | requested AI observation/insight and framework extraction/mapping | minimised pseudonymous observation/framework context and generated draft | may involve US/other listed locations; use applicable DPA and transfer mechanism | API requests set `store: false`; default abuse-log retention may be up to 30 days; DPA and ZDR/MAM status to evidence |
+| OpenAI, L.L.C./applicable contracting entity | requested observation/teacher-note analysis, voice transcription and rewrite, document/report extraction, planning, insight and framework mapping | transient dictated audio; minimised pseudonymous observation/document/framework context; curriculum setup text; generated drafts/images | may involve US/other listed locations; use applicable DPA and transfer mechanism | Responses requests set `store: false`; audio/image endpoint behavior and abuse-log retention must be recorded; DPA and ZDR/MAM status to evidence |
 | Plus Five Five, Inc. (Resend) | branded transactional/invitation email | adult recipient name/email, school/role, invitation link and delivery metadata | Resend says primary processing is in the US and incorporates SCCs in its DPA | verified domain configured; DPA acceptance, account MFA and delivery retention to evidence |
 | Google LLC / connected Gmail or Google Workspace account | receives beta/support mail and sends support notifications where configured | adult contact details, school, support text and optional attachments; may incidentally contain school data | location and transfer terms depend on the exact Workspace/consumer account | confirm this is managed Google Workspace, accept CDPA, enforce MFA/retention; replace consumer Gmail if used |
 
@@ -25,7 +25,7 @@ covered. The evidence register must hold acceptance/plan/transfer proof.
   subprocessor/security register referenced at `security.vercel.com`
 - [OpenAI Data Processing Addendum](https://openai.com/policies/data-processing-addendum/),
   [OpenAI subprocessors](https://openai.com/policies/sub-processor-list/) and
-  [API data controls](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+  [API data controls](https://developers.openai.com/api/docs/guides/your-data)
 - [Resend Data Processing Addendum](https://resend.com/legal/dpa) and
   [Resend subprocessors](https://resend.com/legal/subprocessors)
 - [Google Workspace data-processing terms guidance](https://knowledge.workspace.google.com/admin/compliance/privacy-compliance-and-records-for-google-workspace-and-cloud-identity)

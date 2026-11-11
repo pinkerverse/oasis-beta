@@ -1,7 +1,7 @@
 # Data protection impact assessment: learner observation and AI support
 
 Status: draft—requires controller, privacy lead and legal approval  
-Assessment date: 10 September 2026  
+Assessment date: 10 September 2026; material-change review 11 November 2026
 Review trigger: annually or before a material change to data, AI model, purpose,
 provider, country, automated decision-making or user population
 
@@ -20,9 +20,11 @@ evaluation/scoring and innovative technology among recognised risk criteria.
 ## 2. Processing assessed
 
 Authorised adults create learner profiles using initials/IDs and birth month/year,
-record observations, optionally add images, make judgements and request AI-supported
-analysis. OASIS combines records into learner/class views, planning prompts and
-reports. School leaders manage staff and may view authorised school information.
+record or dictate observations, add private professional notes, review imported
+learner documents, make judgements and request AI-supported analysis. OASIS combines
+reviewed records into learner/class views, planning prompts and reports. New photo
+upload is disabled during beta, while historical objects remain in scope. School
+leaders manage staff and may view authorised school information.
 
 For requested AI functions, the minimum relevant observation/framework context is
 sent to OpenAI. Known learner names are replaced with initials and Responses calls
@@ -69,8 +71,11 @@ existing controls work; proposed controls do not lower residual risk until evide
 | Wrong school/class sees a learner record | High/High | server membership checks, RLS, school/workspace paths, automated tenant tests | Low/High | apply migrations in production; retain automated tests; commission penetration test |
 | Account takeover exposes school data | Medium/High | individual accounts, privileged MFA, session timeout/device sign-out, owner-only role changes | Medium/High | enforce/verify production MFA; monitor anomalous auth; school device policy |
 | AI output inaccurately labels or disadvantages a child | Medium/High | draft language, source-linked evidence, teacher review/edit/reject, no solely automated decision | Medium/Medium | beta quality review; bias/error reporting; prohibit diagnostic/high-impact uses; sample audits |
+| Dictated audio or transcript contains unnecessary identifying/sensitive detail | Medium/High | initials-only warning, authenticated short recording, OASIS does not save audio, editable transcript | Medium/High | staff training; verify provider audio retention/data controls; prohibit medical/safeguarding dictation |
+| Imported report text is assigned to the wrong learner or treated as new attainment evidence | High/High | exact learner matching, explicit review, source excerpts, class scope, target/current-skill separation | Medium/High | sample import audits; retention/deletion coverage; require teacher confirmation before use |
+| Private teacher notes leak into family-facing output | High/Medium | separate storage and UI, prompts prohibit quotation/disclosure, teacher review | Medium/High | regression tests and sample report audits; include in incident/export procedures |
 | Too much identifying or sensitive detail reaches AI | Medium/High | initials, month/year, known-name replacement, scoped prompts, `store: false` | Medium/High | execute DPA; seek ZDR/Modified Abuse Monitoring; redact free text; staff training |
-| Optional photograph captures unnecessary people/context | Medium/High | private bucket, file/type limits, authorised retrieval and deletion with observation | Medium/Medium | school photo protocol/consent; shorter image retention; orphan reconciliation |
+| Historical photograph captures unnecessary people/context | Medium/High | new upload disabled; private bucket, authorised retrieval and deletion with observation | Medium/Medium | delete unneeded historical objects; orphan reconciliation before re-enabling uploads |
 | Historic data cannot be erased or exported reliably | High/Medium | manual procedure; individual observation deletion | High/Medium | build verified export, hard deletion and scheduled retention before general availability |
 | Service/data loss harms continuity of education records | Medium/High | provider resilience; restore procedure written | High/High | enable automated backups including Storage strategy; complete isolated restore test |
 | Security incident is not detected quickly | Medium/High | security event records and owner review screen | Medium/High | production alerting, auth anomaly review and monitored incident mailbox |

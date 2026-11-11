@@ -2,7 +2,7 @@
 
 Status: interim manual procedure and implementation specification  
 Owner: OASIS privacy lead (name to be assigned)  
-Last reviewed: 10 September 2026
+Last reviewed: 11 November 2026
 
 ## Current product capability
 
@@ -12,6 +12,10 @@ Last reviewed: 10 September 2026
   is denied by server checks and database policies.
 - A learner can be archived. **Archive is not deletion.**
 - A draft framework can be deleted; replaced framework versions are archived.
+- Reviewed document imports can be marked removed, but removal is not yet evidenced
+  as verified hard deletion of every stored source field.
+- New photo upload is disabled during beta; historical evidence objects remain in
+  deletion and reconciliation scope.
 - A complete school-level export and hard deletion are not yet available in the UI.
 
 Until those final capabilities exist, do not promise immediate self-service export
@@ -40,7 +44,9 @@ Until automated export exists:
 1. Use a dedicated, access-restricted administrative environment.
 2. Query only the verified school ID and, where scoped, the verified class/learner.
 3. Include account/membership, school/class configuration, learner identifiers,
-   observations, baselines, framework assignments and authorised evidence files.
+   observations, observation-inbox records, private teacher notes, baselines,
+   reviewed document context, weekly plans, report templates/history, framework
+   assignments and authorised historical evidence files.
 4. Exclude secrets, credentials, internal security logic, other schools' data and
    provider logs not controlled by OASIS.
 5. Have a second authorised person verify scope and tenant counts.
@@ -54,8 +60,10 @@ Until automated export exists:
 1. Suspend affected access if closure or risk requires it.
 2. Produce an export first only if requested and legally permitted.
 3. Delete or anonymise, in dependency order, persistent evidence objects,
-   observations, baselines, learner records, invitations, class memberships,
-   school memberships, workspaces, framework assignments/versions and school data.
+   historical evidence objects, observations, observation-inbox records, teacher
+   notes, document imports, report drafts/history/templates, weekly plans, baselines,
+   learner records, invitations, class memberships, school memberships, workspaces,
+   framework assignments/versions and school data.
 4. Delete associated Supabase Auth users only when they have no remaining legitimate
    OASIS relationship. Otherwise remove the school link without deleting the user.
 5. Delete related support attachments/messages under mailbox controls.

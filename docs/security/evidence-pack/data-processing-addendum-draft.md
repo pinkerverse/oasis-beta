@@ -61,10 +61,10 @@ children/guardian requirements, user authorisation and the accuracy of its data.
 | --- | --- |
 | Subject matter | Secure provision of an educator observation, assessment, planning and reporting service with optional AI-supported drafts |
 | Duration | Agreement term plus the agreed export/deletion period and limited lawful retention |
-| Nature | Collection, organisation, storage, retrieval, comparison, analysis at user request, transmission to authorised subprocessors, export and deletion |
+| Nature | Collection, organisation, storage, retrieval, comparison, user-requested transcription and analysis, transmission to authorised subprocessors, export and deletion |
 | Purpose | Provide and secure OASIS under the Controller's configuration and authorised user actions |
 | Data subjects | learners/children; educators; school leaders; invited staff; limited family/other people appearing in supplied narrative or images |
-| Data | learner initials/ID, birth month/year, class, observations, evidence images, baselines, judgements, framework mappings, staff account/membership and audit metadata |
+| Data | learner initials/ID, birth month/year, class, observations, private teacher notes, transient dictated audio, reviewed document text, report/planning records, historical evidence images, baselines, judgements, framework mappings, staff account/membership and audit metadata |
 | Sensitive data | Protected health information, medical records, diagnoses and safeguarding case information are prohibited. Educational narrative/images may still incidentally reveal disability, ethnicity, religion or other sensitive context; the Controller must minimise it and ensure that any necessary processing is specifically lawful and safeguarded |
 | Frequency | Continuous during authorised use; AI transfer only when a relevant feature is requested |
 

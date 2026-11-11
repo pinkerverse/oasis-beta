@@ -1,7 +1,7 @@
 # Security and privacy evidence register
 
 Owner: OASIS security lead (to be named)  
-Last updated: 10 September 2026
+Last updated: 11 November 2026
 
 Store links to provider dashboards or restricted evidence in the approved internal
 register, not in this public repository. Never capture secrets or learner content.
@@ -14,7 +14,8 @@ register, not in this public repository. Never capture secrets or learner conten
 | Privileged accounts | MFA policy/UI, unique admin register, session control test | Step 4 commit `20ae86d`; deployed and production table/RLS verified 10 September 2026 | service owner | monthly |
 | Security audit events | migration, sample event without content, access-denial test | Step 5 commit `a4fed8e`; deployed and production table/RLS verified 10 September 2026 | security lead | weekly/quarterly |
 | Secret exposure | scanner output and provider key inventory | `npm run security:secrets`; provider inventory incomplete | engineering | each release/quarterly |
-| Backups | plan screenshot, backup schedule, alert proof | Supabase Free dashboard showed **No backups** | service owner | daily/quarterly |
+| Current product data flows | repository review, route/table inventory, privacy text | v0.2 review covers dictation, document import, private notes, inbox, planning, reports, PWA and framework presets | engineering/privacy | material change/quarterly |
+| Backups | plan screenshot, backup schedule, alert proof | 10 September evidence showed a Free project with no managed backups; current dashboard must be rechecked | service owner | daily/quarterly |
 | Restore | completed restore-test record with timings/counts | template only: `docs/security/restore-test-record.md` | security lead | quarterly |
 | Monitoring | Vercel/Supabase alert rules and delivery test | manual review only; automation open | security lead | daily/test quarterly |
 | Provider contracts | executed DPA/SCC and plan coverage | register drafted; agreements not evidenced | legal/privacy | annually/change |

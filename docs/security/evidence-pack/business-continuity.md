@@ -1,7 +1,7 @@
 # Business continuity and disaster recovery plan
 
 Owner: OASIS service owner (to be named)  
-Last reviewed: 10 September 2026  
+Last reviewed: 11 November 2026
 Exercise frequency: six-monthly; restore test quarterly
 
 ## Scope and priorities
@@ -14,7 +14,8 @@ Recovery priority:
 
 1. protect people and contain security risk;
 2. restore authentication and tenant isolation;
-3. restore school/class/learner and observation records;
+3. restore school/class/learner, observation, private-note, document-context,
+   planning and report records;
 4. restore private evidence access;
 5. restore AI, invitation, support and administrative convenience features.
 
@@ -26,9 +27,10 @@ Recovery priority:
 - AI/email outage: core record entry should continue where dependencies allow; goal
   one business day, with no unsafe bypass.
 
-These are targets, not current guarantees. The production Supabase project was
-observed on the Free plan with no managed backup; the RPO/RTO cannot be claimed
-until backup and restore evidence exists.
+These are targets, not current guarantees. The last recorded production check on
+10 September 2026 observed a Free project with no managed backup. The current plan
+must be re-evidenced, and RPO/RTO cannot be claimed until backup and restore
+evidence exists.
 
 ## Critical dependencies
 
