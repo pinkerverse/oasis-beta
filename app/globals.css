@@ -114,6 +114,18 @@ html[data-oasis-embedded-overlay="true"] body main > :not(.fixed) {
   visibility: hidden !important;
 }
 
+html[data-oasis-embedded-overlay="true"] body main > .oasis-workspace-content {
+  visibility: visible !important;
+}
+
+html[data-oasis-embedded-overlay="true"] .oasis-workspace-content > :not(.fixed) {
+  visibility: hidden !important;
+}
+
+html[data-oasis-embedded-overlay="true"] .oasis-workspace-content > .fixed {
+  visibility: visible !important;
+}
+
 html[data-oasis-embedded-overlay="true"] body main > .fixed {
   visibility: visible !important;
 }

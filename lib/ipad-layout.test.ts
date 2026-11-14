@@ -72,5 +72,6 @@ test("the iPad header keeps touch targets at least 44 pixels wide", () => {
   const header = source("../app/components/OasisHeader.tsx");
 
   assert.match(header, /sm:h-11 sm:w-11/);
-  assert.match(header, /hidden xl:inline/);
+  assert.match(header, /max-w-7xl/);
+  assert.doesNotMatch(header, /xl:w-auto xl:px-3/);
 });

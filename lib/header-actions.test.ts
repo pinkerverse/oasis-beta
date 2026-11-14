@@ -51,3 +51,25 @@ test("shared classroom actions open as overlays without leaving the current page
     /if \(!closeEmbeddedHeaderOverlay\(\)\) \{\s*setShowTeacherNote\(false\)/
   );
 });
+
+test("the shared header uses one icon-only navigation system", () => {
+  const header = source("../app/components/OasisHeader.tsx");
+
+  assert.match(header, /\| "class"/);
+  assert.match(header, /<HeaderTooltip label="Your Class" \/>/);
+  assert.match(header, /<HeaderTooltip label="Weekly planning" \/>/);
+  assert.match(header, /<HeaderTooltip label="Observation Inbox" \/>/);
+  assert.match(header, /<HeaderTooltip label="Add Observation" \/>/);
+  assert.doesNotMatch(header, /xl:w-auto xl:px-3/);
+  assert.doesNotMatch(header, /title="Learner Insight"/);
+});
+
+test("the class dashboard uses the same centred workspace width as insight pages", () => {
+  const dashboard = source("../app/page.tsx");
+
+  assert.match(dashboard, /activePage="class"/);
+  assert.match(
+    dashboard,
+    /oasis-workspace-content mx-auto w-full max-w-7xl/
+  );
+});

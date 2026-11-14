@@ -6985,6 +6985,7 @@ if (checkingOnboarding) {
     <main className="min-h-screen w-full min-w-0 overflow-x-clip bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-8">
 <OasisHeader
   className="-mx-4 -mt-4 mb-8 sm:-mx-8 sm:-mt-8"
+  activePage="class"
   selectedLearnerIds={selectedChildren}
   accountName={accountName}
   accountEmail={accountEmail}
@@ -7009,6 +7010,8 @@ if (checkingOnboarding) {
   todaysFocusActive={showTodaysFocus}
   settingsActive={showSettings}
 />
+
+<div className="oasis-workspace-content mx-auto w-full max-w-7xl">
 
 {firstRunPreferenceLoaded &&
   classObservationsLoaded &&
@@ -14379,6 +14382,8 @@ onClick={() => {
     onOpenFormats={() => { setShowPTCNotes(false); setShowReportFormats(true); }}
   />
 )}
+
+</div>
 
     </main>
   );

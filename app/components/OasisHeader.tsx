@@ -12,6 +12,7 @@ import { inboxBadgeLabel } from "@/lib/observation-inbox";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type HeaderPage =
+  | "class"
   | "learner-intelligence"
   | "classroom-insights"
   | "class-attainment"
@@ -80,20 +81,51 @@ function iconClasses(active: boolean) {
 }
 
 function actionButtonClasses(active: boolean) {
-  return `group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 xl:w-auto xl:px-3 ${
+  return `group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border p-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 ${
     active
       ? "border-slate-900 bg-slate-900 text-white"
       : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
   }`;
 }
 
+function HeaderTooltip({ label }: { label: string }) {
+  return (
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute left-1/2 top-full z-[70] mt-2 w-max max-w-48 -translate-x-1/2 translate-y-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-center text-xs font-semibold leading-4 text-slate-700 opacity-0 shadow-lg transition group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+    >
+      {label}
+    </span>
+  );
+}
+
+function ClassIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="8" r="3" />
+      <circle cx="17" cy="9" r="2.4" />
+      <path d="M3.5 19c.4-4 2.2-6 5.5-6s5.1 2 5.5 6" />
+      <path d="M14.5 14c3.7-.6 5.6 1.1 6 4" />
+    </svg>
+  );
+}
+
 const menuItemClasses = "block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-600 disabled:cursor-not-allowed disabled:text-slate-400";
 
-type ToolIcon = "upload" | "report" | "note" | "insight" | "settings" | "install";
+type ToolIcon = "class" | "upload" | "report" | "note" | "insight" | "settings" | "install";
 const toolItemClasses = "group/tool flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-cyan-50/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
 
 function ToolMenuContent({ icon, label, description }: { icon: ToolIcon; label: string; description?: string }) {
   const paths: Record<ToolIcon, string> = {
+    class: "M3.5 19c.4-4 2.2-6 5.5-6s5.1 2 5.5 6M12 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0m2.5 6c3.7-.6 5.6 1.1 6 4M19.4 9a2.4 2.4 0 1 1-4.8 0 2.4 2.4 0 0 1 4.8 0",
     upload: "M12 16V4m-4 4 4-4 4 4M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4",
     report: "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5Zm0 0v5h5M8 12h8M8 16h5",
     note: "M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6M15 4l5 5M10 14l1-5 7-7 5 5-7 7-6 1Z",
@@ -382,6 +414,7 @@ export default function OasisHeader({
     setShowAccountModal(false);
   }, []);
 
+  const classActive = activePage === "class";
   const learnerIntelligenceActive = activePage === "learner-intelligence";
   const classroomInsightsActive = activePage === "classroom-insights";
   const classAttainmentActive = activePage === "class-attainment";
@@ -391,7 +424,7 @@ export default function OasisHeader({
     <header
       className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-2 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur sm:px-4 ${className}`}
     >
-      <div className="mx-auto flex min-h-20 max-w-[1600px] items-center gap-1 sm:min-h-24 sm:gap-4">
+      <div className="mx-auto flex min-h-20 max-w-7xl items-center gap-1 sm:min-h-24 sm:gap-4">
         <Link
           href={hasClass ? "/" : "/school-overview"}
           aria-label="Back to OASIS dashboard"
@@ -413,11 +446,20 @@ export default function OasisHeader({
           {hasClass && (
             <>
               <Link
+                href="/"
+                aria-label="Your Class"
+                aria-current={classActive ? "page" : undefined}
+                className={`${actionButtonClasses(classActive)} hidden md:flex`}
+              >
+                <ClassIcon />
+                <HeaderTooltip label="Your Class" />
+              </Link>
+
+              <Link
                 href="/learner-intelligence"
                 aria-label="Learner Insight"
                 aria-current={learnerIntelligenceActive ? "page" : undefined}
-                title="Learner Insight"
-                className={`${actionButtonClasses(learnerIntelligenceActive)} hidden sm:flex`}
+                className={`${actionButtonClasses(learnerIntelligenceActive)} hidden md:flex`}
               >
                 <Image
                   src="/learner-intelligence-brain.png"
@@ -427,14 +469,14 @@ export default function OasisHeader({
                   className={iconClasses(learnerIntelligenceActive)}
                   aria-hidden="true"
                 />
+                <HeaderTooltip label="Learner Insight" />
               </Link>
 
               <Link
                 href="/classroom-insights"
                 aria-label="Classroom Intelligence"
                 aria-current={classroomInsightsActive ? "page" : undefined}
-                title="Classroom Intelligence"
-                className={`${actionButtonClasses(classroomInsightsActive)} hidden sm:flex`}
+                className={`${actionButtonClasses(classroomInsightsActive)} hidden md:flex`}
               >
                 <Image
                   src="/classroom-insights-eye.png"
@@ -444,14 +486,14 @@ export default function OasisHeader({
                   className={iconClasses(classroomInsightsActive)}
                   aria-hidden="true"
                 />
+                <HeaderTooltip label="Classroom Intelligence" />
               </Link>
 
               <Link
                 href="/class-attainment"
                 aria-label="Class Attainment"
                 aria-current={classAttainmentActive ? "page" : undefined}
-                title="Class Attainment"
-                className={`${actionButtonClasses(classAttainmentActive)} hidden sm:flex`}
+                className={`${actionButtonClasses(classAttainmentActive)} hidden md:flex`}
               >
                 <Image
                   src="/class-attainment-icon.png"
@@ -461,31 +503,30 @@ export default function OasisHeader({
                   className={iconClasses(classAttainmentActive)}
                   aria-hidden="true"
                 />
+                <HeaderTooltip label="Class Attainment" />
               </Link>
 
               <Link
                 href="/planning"
                 aria-label="Weekly planning"
-                title="Weekly planning"
                 aria-current={activePage === "planning" ? "page" : undefined}
                 className={actionButtonClasses(activePage === "planning")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 10h18M7 14h3m4 0h3M7 17h3" /></svg>
-                <span className="hidden xl:inline">Planning</span>
+                <HeaderTooltip label="Weekly planning" />
               </Link>
 
               <button
                 type="button"
                 onClick={() => setShowObservationInbox(true)}
                 aria-label={`Observation Inbox${observationInboxCount ? `, ${observationInboxCount} awaiting review` : ""}`}
-                title="Observation Inbox"
-                className={`${actionButtonClasses(showObservationInbox)} relative`}
+                className={actionButtonClasses(showObservationInbox)}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
                   <path d="M4 4h16l2 10v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-5L4 4Z" />
                   <path d="M2 14h5l2 3h6l2-3h5" />
                 </svg>
-                <span className="hidden xl:inline">Inbox</span>
+                <HeaderTooltip label="Observation Inbox" />
                 {observationInboxCount > 0 && (
                   <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
                     {inboxBadgeLabel(observationInboxCount)}
@@ -497,21 +538,19 @@ export default function OasisHeader({
                 type="button"
                 onClick={() => runPanelAction("observation", onAddObservation)}
                 aria-label="Add Observation"
-                title="Add Observation"
                 className={actionButtonClasses(addObservationActive)}
               >
-                <span className="text-lg leading-none" aria-hidden="true">
-                  +
-                </span>
-                <span className="hidden xl:inline">Add Observation</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-5 w-5" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <HeaderTooltip label="Add Observation" />
               </button>
 
               <button
                 type="button"
                 onClick={() => runPanelAction("teacher-note", onTeacherNote)}
                 aria-label="Teacher Note"
-                title="Private Teacher Note"
-                className={`${actionButtonClasses(teacherNoteActive)} hidden sm:flex`}
+                className={`${actionButtonClasses(teacherNoteActive)} hidden md:flex`}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -533,33 +572,31 @@ export default function OasisHeader({
                     d="M16.2 4.8V3.6a1.8 1.8 0 0 1 3.6 0v1.2M15.3 4.8h5.4v4.5h-5.4z"
                   />
                 </svg>
-                <span className="hidden xl:inline">Teacher Note</span>
+                <HeaderTooltip label="Teacher Note" />
               </button>
 
               <button
                 type="button"
                 onClick={() => runPanelAction("focus", onTodaysFocus)}
                 aria-label="Today’s Focus"
-                title="Today’s Focus"
-                className={`group flex h-10 w-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-0 text-sm font-semibold shadow-sm transition active:border-slate-900 active:bg-slate-900 active:text-white sm:h-11 sm:w-11 xl:w-auto xl:px-3 ${
-                  todaysFocusActive
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-100 text-slate-900 hover:border-indigo-300 hover:from-cyan-100 hover:to-indigo-100"
-                }`}
+                className={actionButtonClasses(todaysFocusActive)}
               >
-                <span aria-hidden="true">◎</span>
-                <span className="hidden xl:inline">Today’s Focus</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <HeaderTooltip label="Today’s Focus" />
               </button>
             </>
           )}
 
           {hasClass && (
             <div ref={toolsRef} className="relative">
-              <button ref={toolsButtonRef} type="button" aria-label="Tools" title="Tools" aria-expanded={showToolsMenu} aria-controls={toolsMenuId}
+              <button ref={toolsButtonRef} type="button" aria-label="Tools" aria-expanded={showToolsMenu} aria-controls={toolsMenuId}
                 onClick={() => { setShowToolsMenu((current) => !current); setShowProfileMenu(false); }}
                 className={actionButtonClasses(showToolsMenu || ptcNotesActive || reportHelperActive || documentUploadActive || reportFormatsActive || settingsActive)}>
-                <span aria-hidden="true" className="text-xl leading-none">⋯</span>
-                <span className="hidden xl:inline">Tools</span>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                <HeaderTooltip label="Tools" />
               </button>
               {showToolsMenu && <nav id={toolsMenuId} aria-label="Class tools" className="absolute right-0 top-full mt-3 max-h-[min(75dvh,640px)] w-80 max-w-[calc(100vw-5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.24)]">
                 <div className="px-3 pb-2 pt-2"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700">Classroom tools</p></div>
@@ -568,7 +605,8 @@ export default function OasisHeader({
                 <button type="button" aria-label="PTC Notes" onClick={() => runPanelAction("ptc", onPTCNotes)} disabled={ptcNotesRequiresLearnerSelection && !hasLearnerSelection} className={toolItemClasses}><ToolMenuContent icon="report" label="PTC Notes" description={ptcNotesRequiresLearnerSelection && !hasLearnerSelection ? "Select a learner in My Class" : "Prepare conference summaries"} /></button>
                 <button type="button" aria-label="Report Helper" onClick={() => runPanelAction("report", onReportHelper)} className={toolItemClasses}><ToolMenuContent icon="report" label="Report Helper" description="Prepare and export mid-year reports" /></button>
                 <button type="button" aria-label="School report formats" onClick={() => runPanelAction("report-formats", onReportFormats)} className={toolItemClasses}><ToolMenuContent icon="settings" label="School report formats" description="Teach OASIS your required structure" /></button>
-                <div className="mt-2 border-t border-slate-100 pt-2 sm:hidden">
+                <div className="mt-2 border-t border-slate-100 pt-2 md:hidden">
+                  <Link href="/" aria-current={classActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="class" label="Your Class" /></Link>
                   <button type="button" aria-label="Teacher Note" onClick={() => runPanelAction("teacher-note", onTeacherNote)} className={toolItemClasses}><ToolMenuContent icon="note" label="Teacher Note" /></button>
                   <Link href="/learner-intelligence" aria-current={learnerIntelligenceActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="insight" label="Learner Insight" /></Link>
                   <Link href="/classroom-insights" aria-current={classroomInsightsActive ? "page" : undefined} onClick={() => setShowToolsMenu(false)} className={toolItemClasses}><ToolMenuContent icon="insight" label="Classroom Intelligence" /></Link>
