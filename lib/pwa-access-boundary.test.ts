@@ -34,3 +34,14 @@ test("the authentication proxy still matches the PWA start route", () => {
   assert.match(proxySource, /updateSession\(request\)/);
   assert.doesNotMatch(proxySource, /manifest\.webmanifest\|sw\.js\|offline\.html\|\//);
 });
+
+test("the desktop install shortcut uses a centred dismiss badge", () => {
+  const provider = readFileSync(
+    new URL("../app/components/PwaInstallProvider.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(provider, /function CloseIcon/);
+  assert.match(provider, /absolute -right-2 -top-2 z-10 grid h-7 w-7 place-items-center/);
+  assert.match(provider, /localStorage\.setItem\(DISMISS_KEY, "1"\)/);
+});

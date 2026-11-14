@@ -65,6 +65,14 @@ function AddIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-3.5 w-3.5">
+      <path d="m4 4 8 8M12 4l-8 8" />
+    </svg>
+  );
+}
+
 function InstructionStep({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <li className="flex gap-3 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3.5">
@@ -301,12 +309,12 @@ export default function PwaInstallProvider({ children }: { children: ReactNode }
       )}
 
       {!isStandalone && showShortcut && !showGuide && (
-        <div className="oasis-install-fab fixed right-6 z-[55] items-center gap-2" style={{ bottom: "max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem))" }}>
+        <div className="oasis-install-fab fixed right-6 z-[55] h-14 w-14" style={{ bottom: "max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem))" }}>
           <button type="button" onClick={openInstallGuide} className="group relative flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-[0_12px_35px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/10 transition hover:-translate-y-0.5 hover:shadow-xl" aria-label="Get OASIS on your phone">
             <Image src="/icons/oasis-192.png" alt="" width={48} height={48} className="h-11 w-11 rounded-xl" />
             <span role="tooltip" className="pointer-events-none absolute bottom-full right-0 mb-3 w-max max-w-56 translate-y-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">Get OASIS on your phone</span>
           </button>
-          <button type="button" onClick={dismissShortcut} aria-label="Dismiss installation shortcut" title="Dismiss" className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm text-slate-400 shadow-sm transition hover:text-slate-800">×</button>
+          <button type="button" onClick={dismissShortcut} aria-label="Dismiss installation shortcut" title="Dismiss" className="absolute -right-2 -top-2 z-10 grid h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white p-0 text-slate-400 shadow-sm transition hover:text-slate-800"><CloseIcon /></button>
         </div>
       )}
 
