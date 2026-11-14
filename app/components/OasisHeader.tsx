@@ -141,6 +141,7 @@ export default function OasisHeader({
   const [embeddedPanel, setEmbeddedPanel] =
     useState<EmbeddedHeaderPanel | null>(null);
   const [embeddedPanelReady, setEmbeddedPanelReady] = useState(false);
+  const [embeddedFrameLoaded, setEmbeddedFrameLoaded] = useState(false);
   const [loadedAccountName, setLoadedAccountName] = useState("");
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
   const [schoolName, setSchoolName] = useState("");
@@ -279,12 +280,31 @@ export default function OasisHeader({
       } else if (event.data.type === "oasis:close-header-overlay") {
         setEmbeddedPanel(null);
         setEmbeddedPanelReady(false);
+        setEmbeddedFrameLoaded(false);
       }
     }
 
     window.addEventListener("message", handleEmbeddedPanelMessage);
     return () => window.removeEventListener("message", handleEmbeddedPanelMessage);
   }, [embeddedPanel]);
+
+  useEffect(() => {
+    if (!embeddedPanel || !embeddedFrameLoaded || embeddedPanelReady) return;
+
+    const dialogCheck = window.setInterval(() => {
+      const embeddedDialog =
+        embeddedFrameRef.current?.contentDocument?.querySelector(
+          '[role="dialog"][aria-modal="true"]'
+        );
+
+      if (embeddedDialog) {
+        setEmbeddedPanelReady(true);
+        window.clearInterval(dialogCheck);
+      }
+    }, 100);
+
+    return () => window.clearInterval(dialogCheck);
+  }, [embeddedFrameLoaded, embeddedPanel, embeddedPanelReady]);
 
   const nameParts = accountName.trim().split(/\s+/).filter(Boolean);
   const profileInitials = nameParts.length
@@ -307,6 +327,7 @@ export default function OasisHeader({
 
     if (isEmbeddedHeaderPanel(panel)) {
       setEmbeddedPanelReady(false);
+      setEmbeddedFrameLoaded(false);
       setEmbeddedPanel(panel);
       return;
     }
@@ -664,14 +685,28 @@ export default function OasisHeader({
           >
             {!embeddedPanelReady && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <p className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-lg">
-                  Opening…
-                </p>
+                <div className="flex flex-col items-center gap-3">
+                  <p className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-lg">
+                    Opening…
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmbeddedPanel(null);
+                      setEmbeddedPanelReady(false);
+                      setEmbeddedFrameLoaded(false);
+                    }}
+                    className="rounded-xl bg-white/90 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-white hover:text-slate-900"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
             <iframe
               ref={embeddedFrameRef}
               src={embeddedPanelHref(embeddedPanel, selectedLearnerIds)}
+              onLoad={() => setEmbeddedFrameLoaded(true)}
               title={
                 embeddedPanel === "observation"
                   ? "Add observation"

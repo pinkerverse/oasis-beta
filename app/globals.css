@@ -35,6 +35,33 @@ body {
   }
 }
 
+@keyframes oasis-intelligence-progress {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+.oasis-intelligence-progress {
+  background-image: linear-gradient(
+    90deg,
+    #06b6d4 0%,
+    #38bdf8 28%,
+    #6366f1 58%,
+    #a855f7 100%
+  );
+  background-size: 200% 100%;
+  animation: oasis-intelligence-progress 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oasis-intelligence-progress {
+    animation: none;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

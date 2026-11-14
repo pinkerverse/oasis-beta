@@ -23,6 +23,14 @@ function Modal({ title, children, close }: { title: string; children: ReactNode;
   </dialog>;
 }
 
+function PlanningIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7" aria-hidden="true">
+    <rect x="3" y="5" width="18" height="16" rx="3" />
+    <path d="M7 3v4m10-4v4M3 10h18" />
+    <path d="m8 15 2 2 5-5" />
+  </svg>;
+}
+
 export default function WeeklyPlanner() {
   const [week, setWeek] = useState(localWeek);
   const [plan, setPlan] = useState<WeeklyPlan>(() => ({ week: localWeek(), notes: "", entries: [] }));
@@ -165,14 +173,25 @@ export default function WeeklyPlanner() {
   }
   const ideaEntry = plan.entries.find((entry) => entry.id === ideasFor);
 
-  return <div className="min-h-screen bg-slate-50 text-slate-900">
-    <OasisHeader activePage="planning" />
-    <main className="mx-auto max-w-[1600px] px-4 py-8 sm:px-8">
-      <section className="mb-6 rounded-3xl border border-slate-200 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 p-6 sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-700">From evidence to opportunity</p>
-        <h1 className="mt-2 text-3xl font-bold">Plan your week</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Choose what matters for your class. Add objectives from your framework, explore practical ideas, and make the plan your own.</p>
-        <div className="mt-5 flex flex-wrap items-end gap-3">
+  return <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 text-slate-900 sm:px-8">
+    <OasisHeader className="-mx-4 sm:-mx-8" activePage="planning" />
+    <div className="mx-auto max-w-7xl pt-10">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <PlanningIcon />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-cyan-700">From evidence to opportunity</p>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Plan your week</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">Choose what matters for your class. Add objectives from your framework, explore practical ideas, and make the plan your own.</p>
+              {context?.framework.name && <p className="mt-3 text-xs font-semibold text-slate-500">Active framework · {context.framework.name}</p>}
+            </div>
+          </div>
+        </div>
+        <div className="p-6 sm:p-8">
+          <div className="flex flex-wrap items-end gap-3">
           <div className="grid w-full max-w-md grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2 sm:gap-3">
             <button className={`${button} h-12 w-12 !px-0`} disabled={saving || loading} onClick={() => shiftWeek(-7)} aria-label="Previous week">←</button>
             <label className="min-w-0 text-sm font-semibold">Week beginning<input aria-label="Week beginning" type="date" value={week} disabled={saving || loading} onChange={(event) => chooseWeek(event.target.value)} className={`${input} mt-1 min-w-0`} /></label>
@@ -181,16 +200,15 @@ export default function WeeklyPlanner() {
           <button className={`${button} !bg-slate-900 !text-white`} disabled={loading || saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save week"}</button>
           <button className={button} disabled={loading || exporting} onClick={() => void download()}>{exporting ? "Preparing PDF…" : "Download PDF"}</button>
           <span role="status" className="py-2 text-sm text-slate-500">{loading ? "Loading your week…" : dirty ? "Unsaved changes" : notice || "A4 landscape · Monday to Friday"}</span>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">Opens on the upcoming week. Use the arrows or date picker to plan any week ahead.</p>
-        <label className="mt-3 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={includeSetupSheets} onChange={(event) => setIncludeSetupSheets(event.target.checked)} /> Include detailed room setup sheets (with images when available)</label>
-        <p className="mt-1 text-xs text-slate-500">The weekly grid includes a short setup description. Setup sheets add the materials and what to notice.</p>
-      </section>
-      {error && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</p>}
-      {contextError && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{contextError}</p>}
-      {context?.preview && <p className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600">Local preview: your full active framework and live activity suggestions. Coverage numbers are illustrative, not your class data. Plans here are temporary.</p>}
-      {!loading && <>
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-5">
+          </div>
+          <p className="mt-2 text-xs text-slate-500">Opens on the upcoming week. Use the arrows or date picker to plan any week ahead.</p>
+          <label className="mt-3 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={includeSetupSheets} onChange={(event) => setIncludeSetupSheets(event.target.checked)} /> Include detailed room setup sheets (with images when available)</label>
+          <p className="mt-1 text-xs text-slate-500">The weekly grid includes a short setup description. Setup sheets add the materials and what to notice.</p>
+          {error && <p role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</p>}
+          {contextError && <p role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{contextError}</p>}
+          {context?.preview && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Local preview: your full active framework and live activity suggestions. Coverage numbers are illustrative, not your class data. Plans here are temporary.</p>}
+          {!loading && <>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {PLAN_DAYS.map((day, index) => {
             const entries = plan.entries.filter((entry) => entry.day === index);
             return <section key={day} aria-label={day} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -220,9 +238,11 @@ export default function WeeklyPlanner() {
           })}
         </div>
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5"><label htmlFor="weekly-notes" className="font-bold">Annotations & notes</label><p className="mb-3 mt-1 text-sm text-slate-500">Resources to prepare, adaptations to try, and reflections for the week. Keep printed plans free of identifying learner details.</p><textarea id="weekly-notes" value={plan.notes} maxLength={6000} rows={4} className={input} onChange={(event) => change({ ...plan, notes: event.target.value })} /></section>
-        <p className="mt-4 text-xs text-slate-500">Planning does not record an observation or change learner attainment. Review suggested activities before using them.</p>
-      </>}
-    </main>
+            <p className="mt-4 text-xs text-slate-500">Planning does not record an observation or change learner attainment. Review suggested activities before using them.</p>
+          </>}
+        </div>
+      </section>
+    </div>
     {pickerDay !== null && context && <Modal title={`Add from framework · ${PLAN_DAYS[pickerDay]}`} close={() => setPickerDay(null)}>
       {context.preview && <p className="mb-2 text-xs font-semibold text-slate-600">Preview — real framework, illustrative coverage only.</p>}
       <p className="text-sm leading-6 text-slate-600">{context.framework.name} · Recorded evidence across {context.learnerCount} active learners. An empty objective means no linked evidence, not that it has never been taught.</p>
@@ -273,5 +293,5 @@ export default function WeeklyPlanner() {
       <div className="grid gap-4 sm:grid-cols-2">{ideas.map((idea, index) => <section key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><h3 className="mb-4 font-bold">Idea {index + 1}</h3>{PLAN_FIELDS.map((field) => <div key={field} className="mb-4">{field === "provocationSetup" && <h4 className="mb-3 border-t border-cyan-200 pt-4 font-bold text-cyan-900">Room provocation</h4>}<h4 className="text-xs font-bold uppercase tracking-wide text-cyan-800">{labels[field]}</h4><p className="mt-1 whitespace-pre-line text-sm leading-6">{idea[field]}</p></div>)}<button className={`${button} w-full`} onClick={() => { updateEntry(ideaEntry.id, { ...idea, provocationImage: undefined }); setIdeasFor(null); }}>Use this idea</button></section>)}</div>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Choosing an idea replaces the activity and room provocation as a matched set, clearing any previous setup image. You can edit each field or regenerate just the room setup afterward.</p><button disabled={generating} className={button} onClick={() => void generate(ideaEntry)}>Try two more</button></div>
     </Modal>}
-  </div>;
+  </main>;
 }
