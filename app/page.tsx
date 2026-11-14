@@ -5212,7 +5212,7 @@ useEffect(() => {
     openTodaysFocus();
   } else if (panel === "settings") {
     void openSettings();
-  } else if (panel === "ptc" && validLearnerId) {
+  } else if (panel === "ptc") {
     setShowPTCNotes(true);
   } else if (panel === "report") {
     setShowReportHelper(true);

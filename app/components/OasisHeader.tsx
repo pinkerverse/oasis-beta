@@ -104,7 +104,7 @@ export default function OasisHeader({
   onTeacherNote,
   onTodaysFocus,
   onSettings,
-  ptcNotesRequiresLearnerSelection = true,
+  ptcNotesRequiresLearnerSelection = false,
   ptcNotesActive = false,
   reportHelperActive = false,
   documentUploadActive = false,
@@ -271,6 +271,11 @@ export default function OasisHeader({
 
     if (onSettings) {
       onSettings();
+      return;
+    }
+
+    if (hasClass) {
+      window.location.assign(panelHref("settings", []));
       return;
     }
 
