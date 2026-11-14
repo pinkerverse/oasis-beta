@@ -64,7 +64,13 @@ function embeddedPanelHref(
   panel: EmbeddedHeaderPanel,
   selectedLearnerIds: string[]
 ) {
-  return `${panelHref(panel, selectedLearnerIds)}&embedded=1`;
+  const params = new URLSearchParams({ panel, embedded: "1" });
+
+  if (selectedLearnerIds.length === 1) {
+    params.set("learner", selectedLearnerIds[0]);
+  }
+
+  return `/embedded-overlay?${params.toString()}`;
 }
 
 function iconClasses(active: boolean) {
@@ -142,6 +148,11 @@ export default function OasisHeader({
     useState<EmbeddedHeaderPanel | null>(null);
   const [embeddedPanelReady, setEmbeddedPanelReady] = useState(false);
   const [embeddedFrameLoaded, setEmbeddedFrameLoaded] = useState(false);
+  const closeEmbeddedPanel = useCallback(() => {
+    setEmbeddedPanel(null);
+    setEmbeddedPanelReady(false);
+    setEmbeddedFrameLoaded(false);
+  }, []);
   const [loadedAccountName, setLoadedAccountName] = useState("");
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
   const [schoolName, setSchoolName] = useState("");
@@ -278,15 +289,24 @@ export default function OasisHeader({
       if (event.data.type === "oasis:header-overlay-ready") {
         setEmbeddedPanelReady(true);
       } else if (event.data.type === "oasis:close-header-overlay") {
-        setEmbeddedPanel(null);
-        setEmbeddedPanelReady(false);
-        setEmbeddedFrameLoaded(false);
+        closeEmbeddedPanel();
       }
     }
 
     window.addEventListener("message", handleEmbeddedPanelMessage);
     return () => window.removeEventListener("message", handleEmbeddedPanelMessage);
-  }, [embeddedPanel]);
+  }, [closeEmbeddedPanel, embeddedPanel]);
+
+  useEffect(() => {
+    if (!embeddedPanel) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeEmbeddedPanel();
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [closeEmbeddedPanel, embeddedPanel]);
 
   useEffect(() => {
     if (!embeddedPanel || !embeddedFrameLoaded || embeddedPanelReady) return;
@@ -684,18 +704,17 @@ export default function OasisHeader({
             }`}
           >
             {!embeddedPanelReady && (
-              <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center"
+                onPointerDown={closeEmbeddedPanel}
+              >
                 <div className="flex flex-col items-center gap-3">
                   <p className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-lg">
                     Opening…
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setEmbeddedPanel(null);
-                      setEmbeddedPanelReady(false);
-                      setEmbeddedFrameLoaded(false);
-                    }}
+                    onClick={closeEmbeddedPanel}
                     className="rounded-xl bg-white/90 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-white hover:text-slate-900"
                   >
                     Cancel
@@ -715,7 +734,7 @@ export default function OasisHeader({
                     : "Today’s Focus"
               }
               className={`h-[100dvh] w-full border-0 bg-transparent transition-opacity ${
-                embeddedPanelReady ? "opacity-100" : "opacity-0"
+                embeddedPanelReady ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
               }`}
             />
           </div>,

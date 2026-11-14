@@ -37,8 +37,11 @@ test("shared classroom actions open as overlays without leaving the current page
   assert.match(header, /setEmbeddedPanel\(panel\)/);
   assert.match(header, /oasis:header-overlay-ready/);
   assert.match(header, /oasis:close-header-overlay/);
+  assert.match(header, /return `\/embedded-overlay\?\$\{params\.toString\(\)\}`/);
   assert.match(header, /contentDocument\?\.querySelector/);
   assert.match(header, /onLoad=\{\(\) => setEmbeddedFrameLoaded\(true\)\}/);
+  assert.match(header, /pointer-events-none opacity-0/);
+  assert.match(header, /onPointerDown=\{closeEmbeddedPanel\}/);
   assert.match(
     dashboard,
     /!showObservationModal && !showTeacherNote && !showTodaysFocus/

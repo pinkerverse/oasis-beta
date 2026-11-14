@@ -315,26 +315,31 @@ export default function TeamSettingsPage() {
             <label htmlFor="access-type" className="sr-only">
               Access
             </label>
-            <select
-              id="access-type"
-              value={accessType}
-              onChange={(event) => setAccessType(event.target.value as AccessType)}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
-            >
-              {hasClass && (
-                <option value="class_educator">Educator in my class</option>
-              )}
-              <option value="new_class_teacher">Teacher with a new class</option>
-              {isOwner && (
-                <>
-                  <option value="school_admin">School administrator only</option>
-                  <option value="school_admin_teacher">
-                    Administrator and teacher
-                  </option>
-                  <option value="school_owner">New school owner</option>
-                </>
-              )}
-            </select>
+            <div className="relative min-w-0">
+              <select
+                id="access-type"
+                value={accessType}
+                onChange={(event) => setAccessType(event.target.value as AccessType)}
+                className="w-full appearance-none rounded-xl border border-slate-300 bg-white py-3 pl-4 pr-11 text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+              >
+                {hasClass && (
+                  <option value="class_educator">Educator in my class</option>
+                )}
+                <option value="new_class_teacher">Teacher with a new class</option>
+                {isOwner && (
+                  <>
+                    <option value="school_admin">School administrator only</option>
+                    <option value="school_admin_teacher">
+                      Administrator and teacher
+                    </option>
+                    <option value="school_owner">New school owner</option>
+                  </>
+                )}
+              </select>
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500">
+                <path d="m6 8 4 4 4-4" />
+              </svg>
+            </div>
             <button
               type="submit"
               disabled={sending || !email.trim()}

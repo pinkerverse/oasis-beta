@@ -56,6 +56,28 @@ const nextConfig: NextConfig = {
         headers: securityHeaders,
       },
       {
+        source: "/embedded-overlay",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value:
+              "base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'",
+          },
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+          {
+            key: "Cache-Control",
+            value: "private, no-store, max-age=0",
+          },
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow",
+          },
+        ],
+      },
+      {
         source: "/api/:path*",
         headers: [
           {

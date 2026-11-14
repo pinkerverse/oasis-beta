@@ -101,21 +101,25 @@ textarea::placeholder {
 
 html[data-oasis-embedded-overlay="true"],
 html[data-oasis-embedded-overlay="true"] body,
-html[data-oasis-embedded-overlay="true"] body > main {
+html[data-oasis-embedded-overlay="true"] body main {
   background: transparent !important;
 }
 
-html[data-oasis-embedded-overlay="true"] body > main {
+html[data-oasis-embedded-overlay="true"] body main {
   min-height: 0 !important;
   padding: 0 !important;
 }
 
-html[data-oasis-embedded-overlay="true"] body > main > :not(.fixed) {
+html[data-oasis-embedded-overlay="true"] body main > :not(.fixed) {
   visibility: hidden !important;
 }
 
-html[data-oasis-embedded-overlay="true"] body > main > .fixed {
+html[data-oasis-embedded-overlay="true"] body main > .fixed {
   visibility: visible !important;
+}
+
+html[data-oasis-embedded-overlay="true"] .oasis-install-fab {
+  display: none !important;
 }
 
 /*
