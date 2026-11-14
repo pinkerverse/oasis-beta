@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import AccountModal from "@/app/components/AccountModal";
 import ObservationInboxModal from "@/app/components/ObservationInboxModal";
@@ -43,6 +44,12 @@ type OasisHeaderProps = {
   settingsActive?: boolean;
 };
 
+type EmbeddedHeaderPanel = "observation" | "teacher-note" | "focus";
+
+function isEmbeddedHeaderPanel(panel: string): panel is EmbeddedHeaderPanel {
+  return panel === "observation" || panel === "teacher-note" || panel === "focus";
+}
+
 function panelHref(panel: string, selectedLearnerIds: string[]) {
   const params = new URLSearchParams({ panel });
 
@@ -51,6 +58,13 @@ function panelHref(panel: string, selectedLearnerIds: string[]) {
   }
 
   return `/?${params.toString()}`;
+}
+
+function embeddedPanelHref(
+  panel: EmbeddedHeaderPanel,
+  selectedLearnerIds: string[]
+) {
+  return `${panelHref(panel, selectedLearnerIds)}&embedded=1`;
 }
 
 function iconClasses(active: boolean) {
@@ -122,7 +136,11 @@ export default function OasisHeader({
   const profileRef = useRef<HTMLDivElement>(null);
   const toolsButtonRef = useRef<HTMLButtonElement>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const embeddedFrameRef = useRef<HTMLIFrameElement>(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [embeddedPanel, setEmbeddedPanel] =
+    useState<EmbeddedHeaderPanel | null>(null);
+  const [embeddedPanelReady, setEmbeddedPanelReady] = useState(false);
   const [loadedAccountName, setLoadedAccountName] = useState("");
   const [loadedAccountEmail, setLoadedAccountEmail] = useState("");
   const [schoolName, setSchoolName] = useState("");
@@ -243,6 +261,31 @@ export default function OasisHeader({
     };
   }, [showToolsMenu, showProfileMenu]);
 
+  useEffect(() => {
+    if (!embeddedPanel) return;
+
+    function handleEmbeddedPanelMessage(event: MessageEvent) {
+      if (
+        event.origin !== window.location.origin ||
+        event.source !== embeddedFrameRef.current?.contentWindow ||
+        !event.data ||
+        typeof event.data !== "object"
+      ) {
+        return;
+      }
+
+      if (event.data.type === "oasis:header-overlay-ready") {
+        setEmbeddedPanelReady(true);
+      } else if (event.data.type === "oasis:close-header-overlay") {
+        setEmbeddedPanel(null);
+        setEmbeddedPanelReady(false);
+      }
+    }
+
+    window.addEventListener("message", handleEmbeddedPanelMessage);
+    return () => window.removeEventListener("message", handleEmbeddedPanelMessage);
+  }, [embeddedPanel]);
+
   const nameParts = accountName.trim().split(/\s+/).filter(Boolean);
   const profileInitials = nameParts.length
     ? nameParts
@@ -259,6 +302,12 @@ export default function OasisHeader({
     setShowProfileMenu(false);
     if (callback) {
       callback();
+      return;
+    }
+
+    if (isEmbeddedHeaderPanel(panel)) {
+      setEmbeddedPanelReady(false);
+      setEmbeddedPanel(panel);
       return;
     }
 
@@ -605,6 +654,38 @@ export default function OasisHeader({
           onChanged={refreshObservationInboxCount}
         />
       )}
+
+      {embeddedPanel &&
+        createPortal(
+          <div
+            className={`fixed inset-0 z-[90] transition-colors ${
+              embeddedPanelReady ? "bg-transparent" : "bg-slate-950/30"
+            }`}
+          >
+            {!embeddedPanelReady && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-lg">
+                  Opening…
+                </p>
+              </div>
+            )}
+            <iframe
+              ref={embeddedFrameRef}
+              src={embeddedPanelHref(embeddedPanel, selectedLearnerIds)}
+              title={
+                embeddedPanel === "observation"
+                  ? "Add observation"
+                  : embeddedPanel === "teacher-note"
+                    ? "Teacher note"
+                    : "Today’s Focus"
+              }
+              className={`h-[100dvh] w-full border-0 bg-transparent transition-opacity ${
+                embeddedPanelReady ? "opacity-100" : "opacity-0"
+              }`}
+            />
+          </div>,
+          document.body
+        )}
     </header>
   );
 }

@@ -5251,7 +5251,7 @@ useEffect(() => {
   if (
     params.get("embedded") !== "1" ||
     window.parent === window ||
-    (!showObservationModal && !showTodaysFocus)
+    (!showObservationModal && !showTeacherNote && !showTodaysFocus)
   ) {
     return;
   }
@@ -5270,7 +5270,7 @@ useEffect(() => {
     window.cancelAnimationFrame(firstFrame);
     if (secondFrame) window.cancelAnimationFrame(secondFrame);
   };
-}, [showObservationModal, showTodaysFocus]);
+}, [showObservationModal, showTeacherNote, showTodaysFocus]);
 
 <div className="mt-6">
 
@@ -14320,8 +14320,10 @@ onClick={() => {
       await refreshClassTeacherEvidence();
     }}
     onClose={() => {
-      setShowTeacherNote(false);
-      setTeacherNoteFocusPrompt(null);
+      if (!closeEmbeddedHeaderOverlay()) {
+        setShowTeacherNote(false);
+        setTeacherNoteFocusPrompt(null);
+      }
     }}
   />
 )}

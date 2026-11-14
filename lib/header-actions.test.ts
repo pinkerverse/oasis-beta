@@ -25,3 +25,24 @@ test("class members reach the full shared settings experience from every page", 
     /if \(hasClass\) \{\s*window\.location\.assign\(panelHref\("settings", \[\]\)\);/
   );
 });
+
+test("shared classroom actions open as overlays without leaving the current page", () => {
+  const header = source("../app/components/OasisHeader.tsx");
+  const dashboard = source("../app/page.tsx");
+
+  assert.match(
+    header,
+    /type EmbeddedHeaderPanel = "observation" \| "teacher-note" \| "focus"/
+  );
+  assert.match(header, /setEmbeddedPanel\(panel\)/);
+  assert.match(header, /oasis:header-overlay-ready/);
+  assert.match(header, /oasis:close-header-overlay/);
+  assert.match(
+    dashboard,
+    /!showObservationModal && !showTeacherNote && !showTodaysFocus/
+  );
+  assert.match(
+    dashboard,
+    /if \(!closeEmbeddedHeaderOverlay\(\)\) \{\s*setShowTeacherNote\(false\)/
+  );
+});
