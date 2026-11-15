@@ -476,10 +476,17 @@ function FocusModal({
   onClose,
 }: {
   context: ClassActionContext;
-  onAddObservation: (learnerId: string) => void;
+  onAddObservation: (learnerIds: string[]) => void;
   onAddTeacherNote: (item: FocusItem) => void;
   onClose: () => void;
 }) {
+  const [focusOptionById, setFocusOptionById] = useState<
+    Record<string, 0 | 1>
+  >({});
+  const [evidenceChoiceId, setEvidenceChoiceId] = useState<string | null>(null);
+  const [focusDayNumber] = useState(() =>
+    Math.floor(Date.now() / 86_400_000)
+  );
   const reachedTarget = context.learners.filter(
     (learner) =>
       (context.weeklyCounts[learner.id] ?? 0) >= context.weeklyTarget
@@ -494,6 +501,72 @@ function FocusModal({
   const progress = possibleProgress
     ? Math.round((totalProgress / possibleProgress) * 100)
     : 0;
+  const dailyFocus = useMemo(() => {
+    const preferredPattern =
+      /math|number|count|quantity|pattern|shape|space|measure|sort|classif|position|communication|language|literacy|phon|reading|writing|vocabulary|story|listen|social|emotion|relationship|collaborat|self.?regulat|physical|motor|movement|balance|coordination/i;
+    const grouped = new Map<string, FocusItem[]>();
+
+    for (const item of context.focusItems) {
+      const key = `${item.area}|${item.frameworkStatement}`;
+      grouped.set(key, [...(grouped.get(key) ?? []), item]);
+    }
+
+    const groups = [...grouped.values()].sort(
+      (first, second) =>
+        second.length - first.length ||
+        first[0].guidanceId.localeCompare(second[0].guidanceId)
+    );
+    const preferredGroups = groups.filter((group) =>
+      preferredPattern.test(`${group[0].area} ${group[0].frameworkStatement}`)
+    );
+    const candidates = preferredGroups.length ? preferredGroups : groups;
+    const group = candidates.length
+      ? candidates[focusDayNumber % candidates.length]
+      : null;
+    const representative = group?.[0] ?? null;
+
+    if (!representative) return null;
+
+    const guidance = createFallbackFocusGuidance({
+      id: `shared:${representative.guidanceId}`,
+      kind: "Observe",
+      area: representative.area,
+      frameworkStatement: representative.frameworkStatement,
+      progressionLabel: representative.progressionLabel,
+      descriptor: representative.lookFor,
+      savedNextStep: representative.prompt,
+    });
+    const suggestion =
+      guidance.suggestions[focusDayNumber % guidance.suggestions.length];
+    const relatedLearners = context.focusItems
+      .filter((item) => item.area === representative.area)
+      .filter(
+        (item, index, all) =>
+          all.findIndex((candidate) => candidate.learnerId === item.learnerId) ===
+          index
+      )
+      .slice(0, 3);
+
+    return {
+      representative,
+      relatedLearners:
+        relatedLearners.length > 0
+          ? relatedLearners
+          : context.focusItems.slice(0, 3),
+      suggestion,
+      learningAim: guidance.friendlyGoal,
+      support:
+        context.focusItems.find(
+          (item) => item.area === representative.area && item.kind === "Support"
+        )?.prompt ??
+        "Model the first step, offer one clear visual or verbal cue, then pause so learners can take over.",
+      stretch:
+        context.focusItems.find(
+          (item) => item.area === representative.area && item.kind === "Stretch"
+        )?.prompt ??
+        "Invite learners to explain their thinking or apply the same learning in a new context.",
+    };
+  }, [context.focusItems, focusDayNumber]);
 
   return (
     <ModalShell
@@ -526,71 +599,378 @@ function FocusModal({
           </div>
         </section>
 
-        {context.focusItems.length ? (
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {context.focusItems.map((item, index) => {
-              const guidance = createFallbackFocusGuidance({
-                id: item.guidanceId,
-                kind: item.kind,
-                area: item.area,
-                frameworkStatement: item.frameworkStatement,
-                progressionLabel: item.progressionLabel,
-                descriptor: item.lookFor,
-                savedNextStep: item.prompt,
-              });
-              const kindClasses =
-                item.kind === "Support"
-                  ? "bg-amber-100 text-amber-800"
-                  : item.kind === "Stretch"
-                    ? "bg-purple-100 text-purple-800"
-                    : "bg-blue-100 text-blue-800";
+        {dailyFocus && (
+          <section className="mt-5 overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
+            <div className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
+                  Whole-class daily focus
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                  3–5 minutes
+                </span>
+              </div>
 
-              return (
-                <article
-                  key={item.guidanceId}
-                  className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-400">{index + 1}</span>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${kindClasses}`}>
-                      {item.kind}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-500">{item.area}</span>
-                  </div>
-                  <h3 className="mt-3 text-base font-bold text-slate-900">
-                    {item.learnerName}
-                  </h3>
-                  <p className="mt-2 text-sm font-semibold leading-5 text-slate-800">
-                    {guidance.friendlyGoal}
+              <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  This week’s learning thread
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {dailyFocus.representative.area}
+                  <span className="font-normal text-slate-500"> · </span>
+                  {dailyFocus.representative.frameworkStatement}
+                </p>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-white bg-white p-4 shadow-sm sm:p-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
+                  Today’s quick whole-class activity
+                </p>
+                <h3 className="mt-1 text-lg font-bold text-slate-900">
+                  {dailyFocus.suggestion.title}
+                </h3>
+                <p className="mt-1.5 text-sm leading-5 text-slate-700">
+                  <span className="font-bold text-indigo-700">Learning aim: </span>
+                  {dailyFocus.learningAim}
+                </p>
+
+                <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2.5">
+                  <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">
+                    You need
                   </p>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Look for: {item.lookFor}
+                  <p className="mt-1 text-sm leading-5 text-slate-700">
+                    Familiar classroom materials already within reach; no special preparation is needed.
                   </p>
-                  <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => onAddObservation(item.learnerId)}
-                      className="rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white"
+                </div>
+
+                <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
+                  What to do
+                </p>
+                <ol className="mt-2 space-y-2">
+                  {[
+                    dailyFocus.suggestion.setup,
+                    "Let several children try or respond together so the activity stays brief and active.",
+                    "Name the skill in one sentence, then return to the day’s routine.",
+                  ].map((step, index) => (
+                    <li
+                      key={step}
+                      className="flex gap-3 text-sm leading-5 text-slate-700"
                     >
-                      Add observation
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onAddTeacherNote(item)}
-                      className="rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-bold text-slate-700"
-                    >
-                      Teacher note
-                    </button>
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      You could ask
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {dailyFocus.suggestion.questions.map((question) => (
+                        <p
+                          key={question}
+                          className="text-sm font-medium leading-5 text-slate-800"
+                        >
+                          “{question}”
+                        </p>
+                      ))}
+                    </div>
                   </div>
-                </article>
-              );
-            })}
-          </div>
+                  <div className="rounded-xl bg-blue-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                      What to notice
+                    </p>
+                    <p className="mt-1 text-sm leading-5 text-slate-700">
+                      {dailyFocus.suggestion.notice}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-cyan-50 px-4 py-3">
+                <span className="text-xs font-bold uppercase tracking-wide text-cyan-800">
+                  Notice particularly
+                </span>
+                {dailyFocus.relatedLearners.map((learner) => (
+                  <span
+                    key={learner.learnerId}
+                    className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-800"
+                  >
+                    {learner.learnerName}
+                  </span>
+                ))}
+              </div>
+
+              <details className="mt-3 rounded-2xl border border-slate-200 bg-white/70 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                  Support and stretch
+                </summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl bg-amber-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+                      Support
+                    </p>
+                    <p className="mt-1 text-sm leading-5 text-slate-700">
+                      {dailyFocus.support}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-purple-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-purple-800">
+                      Stretch
+                    </p>
+                    <p className="mt-1 text-sm leading-5 text-slate-700">
+                      {dailyFocus.stretch}
+                    </p>
+                  </div>
+                </div>
+              </details>
+
+              <details className="mt-2 px-1 py-2">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-500">
+                  Why OASIS chose this
+                </summary>
+                <p className="mt-2 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600">
+                  This short opportunity comes from the active framework and the class’s saved evidence. It is an invitation to practise and notice together, not a judgement about what children cannot do.
+                </p>
+              </details>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onAddObservation(
+                    dailyFocus.relatedLearners.map(
+                      (learner) => learner.learnerId
+                    )
+                  )
+                }
+                className="mt-2 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto"
+              >
+                Add group observation
+              </button>
+            </div>
+          </section>
+        )}
+
+        {context.focusItems.length ? (
+          <>
+            <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+              <span className="mr-1 text-sm font-semibold text-slate-700">
+                {context.focusItems.length} learner priorities
+              </span>
+              {(["Observe", "Support", "Stretch"] as const).map((kind) => {
+                const count = context.focusItems.filter(
+                  (item) => item.kind === kind
+                ).length;
+                const summaryClasses =
+                  kind === "Support"
+                    ? "bg-amber-100 text-amber-800"
+                    : kind === "Stretch"
+                      ? "bg-purple-100 text-purple-800"
+                      : "bg-blue-100 text-blue-800";
+
+                return (
+                  <span
+                    key={kind}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${summaryClasses}`}
+                  >
+                    {count} {kind}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {context.focusItems.map((item, index) => {
+                const guidance = createFallbackFocusGuidance({
+                  id: item.guidanceId,
+                  kind: item.kind,
+                  area: item.area,
+                  frameworkStatement: item.frameworkStatement,
+                  progressionLabel: item.progressionLabel,
+                  descriptor: item.lookFor,
+                  savedNextStep: item.prompt,
+                });
+                const kindClasses =
+                  item.kind === "Support"
+                    ? "bg-amber-100 text-amber-800"
+                    : item.kind === "Stretch"
+                      ? "bg-purple-100 text-purple-800"
+                      : "bg-blue-100 text-blue-800";
+                const selectedSuggestionIndex =
+                  focusOptionById[item.guidanceId] ?? 0;
+                const selectedSuggestion =
+                  guidance.suggestions[selectedSuggestionIndex];
+
+                return (
+                  <article
+                    key={item.guidanceId}
+                    className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-400">
+                        {index + 1}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${kindClasses}`}
+                      >
+                        {item.kind}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {item.area}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 text-base font-bold text-slate-900">
+                      {item.learnerName}
+                    </h3>
+
+                    <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Choose an option for today
+                        </p>
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                          {item.readinessLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm leading-5 text-slate-700">
+                        {guidance.friendlyGoal}
+                      </p>
+
+                      <div className="mt-3 flex rounded-xl bg-slate-200/70 p-1">
+                        {guidance.suggestions.map((_, suggestionIndex) => {
+                          const isSelected =
+                            selectedSuggestionIndex === suggestionIndex;
+
+                          return (
+                            <button
+                              key={`${item.guidanceId}-option-${suggestionIndex}`}
+                              type="button"
+                              onClick={() =>
+                                setFocusOptionById((current) => ({
+                                  ...current,
+                                  [item.guidanceId]: suggestionIndex as 0 | 1,
+                                }))
+                              }
+                              aria-pressed={isSelected}
+                              className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                                isSelected
+                                  ? "bg-white text-blue-700 shadow-sm"
+                                  : "text-slate-500 hover:text-slate-800"
+                              }`}
+                            >
+                              Option {suggestionIndex + 1}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <h4 className="text-sm font-bold text-slate-900">
+                          {selectedSuggestion.title}
+                        </h4>
+                        <p className="mt-1 text-sm leading-5 text-slate-700">
+                          {selectedSuggestion.setup}
+                        </p>
+                        <div className="mt-2 rounded-lg bg-blue-50 px-2.5 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                            Notice
+                          </p>
+                          <p className="mt-0.5 text-xs leading-5 text-slate-700">
+                            {selectedSuggestion.notice}
+                          </p>
+                        </div>
+                        <div className="mt-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            You could ask
+                          </p>
+                          <ul className="mt-1 space-y-1 text-xs leading-5 text-slate-700">
+                            {selectedSuggestion.questions.map((question) => (
+                              <li key={question}>“{question}”</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </section>
+                    </div>
+
+                    <details className="mt-2 text-sm text-slate-600">
+                      <summary className="cursor-pointer font-semibold text-slate-500 hover:text-slate-800">
+                        Why this priority &amp; framework link
+                      </summary>
+                      <div className="mt-2 rounded-xl border border-slate-200 p-3 leading-5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Why selected
+                        </p>
+                        <p className="mt-1">{item.reason}</p>
+                        <div className="mt-3 border-t border-slate-200 pt-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Framework connection
+                          </p>
+                          <p className="mt-1 text-xs font-semibold text-blue-700">
+                            {item.frameworkStatement}
+                            {item.progressionLabel
+                              ? ` · ${item.progressionLabel}`
+                              : ""}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            {item.lookFor}
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+
+                    {evidenceChoiceId === item.guidanceId ? (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          How would you like to record it?
+                        </p>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onAddObservation([item.learnerId])
+                            }
+                            className="rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white"
+                          >
+                            Journal observation
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onAddTeacherNote(item)}
+                            className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700"
+                          >
+                            Quick teacher note
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEvidenceChoiceId(item.guidanceId)}
+                        className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                      >
+                        Record evidence
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <p className="mt-5 rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">
             Add learners and observations to begin building Today’s Focus.
           </p>
         )}
+
+        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <p className="text-xs font-medium text-emerald-800 sm:text-sm">
+            These are priorities, not a checklist. Choose the teaching episode that fits your day and record what the learner can do independently and after one prompt.
+          </p>
+        </div>
       </div>
     </ModalShell>
   );
@@ -718,8 +1098,8 @@ export default function ClassActionModals({
     <FocusModal
       context={context}
       onClose={onClose}
-      onAddObservation={(learnerId) => {
-        setActiveLearnerIds([learnerId]);
+      onAddObservation={(learnerIds) => {
+        setActiveLearnerIds(learnerIds);
         setActivePanel("observation");
       }}
       onAddTeacherNote={(item) => {
