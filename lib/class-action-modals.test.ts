@@ -25,6 +25,18 @@ test("classroom actions use direct shared modals instead of an embedded dashboar
   assert.match(modals, /event\.key === "Escape"/);
 });
 
+test("Today’s Focus keeps the detailed daily teaching flow", () => {
+  const modals = source("../app/components/ClassActionModals.tsx");
+
+  assert.match(modals, /Whole-class daily focus/);
+  assert.match(modals, /3–5 minutes/);
+  assert.match(modals, /Today’s quick whole-class activity/);
+  assert.match(modals, /Choose an option for today/);
+  assert.match(modals, /Why this priority &amp; framework link/);
+  assert.match(modals, /Journal observation/);
+  assert.match(modals, /Quick teacher note/);
+});
+
 test("the shared modal context is small, scoped and reused across navigation", () => {
   const modals = source("../app/components/ClassActionModals.tsx");
   const route = source("../app/api/class-actions/context/route.ts");
