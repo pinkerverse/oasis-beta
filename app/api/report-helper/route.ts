@@ -22,6 +22,7 @@ import {
   EARLY_YEARS_REPORT_WRITING_PROMPT,
   reportFrameworkBridgePrompt,
 } from "@/lib/report-writing-quality";
+import { findRepeatedReportExamples } from "@/lib/report-repetition";
 import {
   ASB_SUPPLEMENTAL_REPORTING_RULES,
   getRelevantAsbSupplementalReportingItems,
@@ -451,6 +452,7 @@ VOICE AND ACCURACY
 - Reviewed imported reports may help preserve the teacher's established understanding and voice, but newer direct observations take priority.
 - The PRIOR PTC PORTRAIT below is an exclusion baseline, not prose or evidence to recycle. The mid-year report must not copy, closely paraphrase, or reuse its sentence structure, descriptive sequence, concrete examples, activities, anecdotes, or learning moments. Select different documented evidence and show development since the PTC. A broad disposition may remain true, but express it through a different synthesis and different examples.
 - Give the communication and thinking paragraphs enough detail to be useful: normally three or four connected sentences, each grounded in supplied evidence. Do not pad a paragraph by repeating the same example or restating a framework label.
+- Allocate every concrete classroom example to one paragraph only. Even when an observation connects to several learning areas, do not retell or lightly paraphrase the same moment elsewhere. Conclusions synthesise; they do not repeat an earlier anecdote.
 - Do not include dates, full names, diagnoses, medical information, safeguarding information, family case details, IDs, citations, headings, bullet points, or source labels in the prose.
 
 CURRENT 2026-27 POI — ONLY THESE THREE UNITS HAVE STARTED
@@ -558,12 +560,19 @@ ${JSON.stringify(supplementalReportingItems, null, 2)}
 REPORT CONTRACT CORRECTION
 The previous draft was rejected for these reasons:
 ${contractIssues.map((issue) => `- ${issue}`).join("\n")}
-Rewrite the complete report using the same strongest evidence. Keep exactly two distinct active UOI units and stay within the word contract. Replace every sentence or classroom example that overlaps with the prior PTC portrait; use different documented moments instead.`);
+Rewrite the complete report using the same evidence bank. Keep exactly two distinct active UOI units and stay within the word contract. Give each detailed classroom example one home only; use a different documented moment in each paragraph whenever possible, and use a concise synthesis rather than retelling an example when evidence is limited. Replace every sentence or classroom example that overlaps with the prior PTC portrait.`);
       contractIssues = reviewReportContract(report, priorPtcExclusionText);
     }
 
-    if (contractIssues.length > 0) {
-      console.error("Mid-year report contract failed:", contractIssues);
+    const blockingContractIssues = contractIssues.filter(
+      (issue) =>
+        !issue.startsWith(
+          "The draft repeats or closely paraphrases a classroom example in more than one section."
+        )
+    );
+
+    if (blockingContractIssues.length > 0) {
+      console.error("Mid-year report contract failed:", blockingContractIssues);
       return Response.json(
         {
           error:
@@ -701,6 +710,23 @@ function reviewReportContract(
   if (reusedPtcSentences.length > 0) {
     issues.push(
       "The draft repeats or closely paraphrases content from the prior PTC portrait. Use different evidence, examples, and sentence construction."
+    );
+  }
+
+  const repeatedExamples = findRepeatedReportExamples([
+    { key: "introduction", text: report.introduction.text },
+    { key: "communication", text: report.communication.text },
+    { key: "thinking", text: report.thinking.text },
+    ...report.unitsOfInquiry.map((unit) => ({
+      key: `unit:${unit.unitKey}`,
+      text: unit.text,
+    })),
+    { key: "conclusion", text: report.conclusion.text },
+  ]);
+
+  if (repeatedExamples.length > 0) {
+    issues.push(
+      "The draft repeats or closely paraphrases a classroom example in more than one section. Keep the detailed example only in its strongest section and rewrite the other section with different evidence or a concise synthesis."
     );
   }
 
