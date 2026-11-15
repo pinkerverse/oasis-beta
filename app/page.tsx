@@ -6993,12 +6993,6 @@ if (checkingOnboarding) {
   onReportHelper={() => setShowReportHelper(true)}
   onUploadDocuments={() => setShowDocumentUploader(true)}
   onReportFormats={() => setShowReportFormats(true)}
-  onAddObservation={openObservationComposer}
-  onTeacherNote={() => {
-    setTeacherNoteFocusPrompt(null);
-    setShowTeacherNote(true);
-  }}
-  onTodaysFocus={openTodaysFocus}
   onSettings={() => void openSettings()}
   ptcNotesRequiresLearnerSelection={false}
   ptcNotesActive={showPTCNotes}

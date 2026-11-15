@@ -28,28 +28,20 @@ test("class members reach the full shared settings experience from every page", 
 
 test("shared classroom actions open as overlays without leaving the current page", () => {
   const header = source("../app/components/OasisHeader.tsx");
-  const dashboard = source("../app/page.tsx");
+  const sharedActions = source("../app/components/ClassActionModals.tsx");
 
   assert.match(
     header,
-    /type EmbeddedHeaderPanel = "observation" \| "teacher-note" \| "focus"/
+    /type ClassActionPanel/
   );
-  assert.match(header, /setEmbeddedPanel\(panel\)/);
-  assert.match(header, /oasis:header-overlay-ready/);
-  assert.match(header, /oasis:close-header-overlay/);
-  assert.match(header, /return `\/embedded-overlay\?\$\{params\.toString\(\)\}`/);
-  assert.match(header, /contentDocument\?\.querySelector/);
-  assert.match(header, /onLoad=\{\(\) => setEmbeddedFrameLoaded\(true\)\}/);
-  assert.match(header, /pointer-events-none opacity-0/);
-  assert.match(header, /onPointerDown=\{closeEmbeddedPanel\}/);
-  assert.match(
-    dashboard,
-    /!showObservationModal && !showTeacherNote && !showTodaysFocus/
-  );
-  assert.match(
-    dashboard,
-    /if \(!closeEmbeddedHeaderOverlay\(\)\) \{\s*setShowTeacherNote\(false\)/
-  );
+  assert.match(header, /setClassActionPanel\(panel\)/);
+  assert.match(header, /<ClassActionModals/);
+  assert.doesNotMatch(header, /<iframe/);
+  assert.doesNotMatch(header, /Opening…/);
+  assert.match(sharedActions, /fetch\("\/api\/class-actions\/context"/);
+  assert.match(sharedActions, /<ObservationModal/);
+  assert.match(sharedActions, /<TeacherNoteModal/);
+  assert.match(sharedActions, /<FocusModal/);
 });
 
 test("the shared header uses one icon-only navigation system", () => {
