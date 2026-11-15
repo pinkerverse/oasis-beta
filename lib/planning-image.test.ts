@@ -31,6 +31,6 @@ test("compressed JPEG saves and prints as an optional setup sheet", async () => 
     assert.equal(b.total, a.total + 1);
     assert.ok(!a.text.includes("AI-generated setup concept"));
     assert.ok(b.text.includes("AI-generated setup concept"));
-    assert.ok(b.text.includes(room.provocationMaterials));
+    assert.ok(b.text.replace(/\s+/g, " ").includes(room.provocationMaterials));
   } finally { await plain.destroy(); await illustrated.destroy(); }
 });

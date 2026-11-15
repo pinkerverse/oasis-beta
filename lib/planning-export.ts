@@ -18,8 +18,8 @@ export async function createPlanningPdf(plan: WeeklyPlan, options: { includeSetu
   const bottom = doc.page.height - 42;
   let y = 0;
   let slot = 0;
-  function text(value: string, x: number, top: number, w: number, bold = false, size = fontSize) {
-    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).fillColor("#213047").text(clean(value), x, top, { width: w, lineBreak: false });
+  function text(value: string, x: number, top: number, w: number, bold = false, size = fontSize, color = "#213047") {
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).fillColor(color).text(clean(value), x, top, { width: w, lineBreak: false });
   }
   function box(x: number, top: number, w: number, h: number, fill: string) {
     doc.rect(x, top, w, h).fillAndStroke(fill, "#d8e1eb");
@@ -34,8 +34,8 @@ export async function createPlanningPdf(plan: WeeklyPlan, options: { includeSetu
     days.forEach((day, index) => { const x = margin + labelWidth + index * col; box(x, y, col, 25, "#e8f3f5"); text(day, x + 7, y + 7, col - 14, true, 10); });
     y += 25;
   }
-  function wrap(value: string, w: number) {
-    doc.font("Helvetica").fontSize(fontSize);
+  function wrapAt(value: string, w: number, size = fontSize, bold = false) {
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size);
     const lines: string[] = [];
     for (const paragraph of clean(value).split("\n")) {
       let line = "";
@@ -52,6 +52,9 @@ export async function createPlanningPdf(plan: WeeklyPlan, options: { includeSetu
       lines.push(line);
     }
     return lines;
+  }
+  function wrap(value: string, w: number) {
+    return wrapAt(value, w);
   }
   function row(label: string, values: string[]) {
     const columns = values.map((value) => wrap(value, col - 14));
@@ -99,32 +102,119 @@ export async function createPlanningPdf(plan: WeeklyPlan, options: { includeSetu
     notes.slice(offset, offset + take).forEach((line, index) => text(line, margin + 10, y + 26 + index * leading, width - 20));
     y += height; offset += take;
   } while (offset < notes.length);
-  if (options.includeSetupSheets) for (const entry of plan.entries.filter((item) => item.provocationSetup || item.provocationMaterials || item.provocationNotice || item.provocationImage)) {
-    const imageWidth = entry.provocationImage ? 340 : 0;
-    const gap = entry.provocationImage ? 24 : 0;
-    const detailsX = margin + imageWidth + gap;
-    const detailsWidth = width - imageWidth - gap;
-    let detailsY = 80;
-    function setupHeading(continued = false) {
-      doc.addPage();
-      text(`ROOM PROVOCATION / ${days[entry.day]}${continued ? " (continued)" : ""}`, margin, 26, width, true, 16);
-      text(`Week beginning ${plan.week} | ${entry.provocationImage ? "AI-generated setup concept | " : ""}Review materials and safety`, margin, 52, width, false, 9);
-      detailsY = 80;
-    }
-    setupHeading();
-    if (entry.provocationImage) {
-      try { doc.image(Buffer.from(entry.provocationImage.split(",")[1], "base64"), margin, 80, { fit: [imageWidth, 300], align: "center" }); }
-      catch { text("Image unavailable. Use the written setup.", margin, 80, imageWidth, false, 10); }
-      text("Illustration only - not a photograph of your classroom.", margin, 398, imageWidth, false, 9);
-    }
-    for (const [label, value] of [["Learning objective", `${entry.objective}${entry.target ? `\n${entry.target}` : ""}`], ["Area & setup", entry.provocationSetup], ["Materials to prepare", entry.provocationMaterials], ["What to notice & ask", entry.provocationNotice]]) {
-      if (detailsY + 40 > bottom) setupHeading(true);
-      text(label, detailsX, detailsY, detailsWidth, true, 10); detailsY += 18;
-      for (const line of wrap(value || "", detailsWidth)) {
-        if (detailsY + leading > bottom) setupHeading(true);
-        text(line, detailsX, detailsY, detailsWidth); detailsY += leading;
+  if (options.includeSetupSheets) {
+    const setupEntries = days.map((_, day) =>
+      plan.entries.filter(
+        (entry) =>
+          entry.day === day &&
+          (entry.provocationSetup ||
+            entry.provocationMaterials ||
+            entry.provocationNotice ||
+            entry.provocationImage)
+      )
+    );
+    const setupSetCount = Math.max(
+      1,
+      ...setupEntries.map((entriesForDay) => entriesForDay.length)
+    );
+    const tableWidths = [75, 175, 225, 120, width - 595];
+    const tableLabels = [
+      "DAY",
+      "LEARNING OBJECTIVE",
+      "AREA & SETUP",
+      "MATERIALS",
+      "NOTICE & ASK",
+    ];
+    const dayFills = ["#dff7f7", "#e8f2ff", "#eef0ff", "#f3ecff", "#e8f7f2"];
+
+    function fittedText(value: string, x: number, top: number, w: number, h: number, options: { bold?: boolean; color?: string; maximumSize?: number } = {}) {
+      if (!value.trim()) return;
+      let size = options.maximumSize ?? 7.6;
+      let lines = wrapAt(value, w, size, options.bold);
+      let lineHeight = size * 1.24;
+      while (size > 3.8 && lines.length * lineHeight > h) {
+        size -= 0.25;
+        lineHeight = size * 1.2;
+        lines = wrapAt(value, w, size, options.bold);
       }
-      detailsY += 12;
+      doc.save();
+      doc.rect(x, top, w, h).clip();
+      lines.forEach((line, index) =>
+        text(line, x, top + index * lineHeight, w, options.bold, size, options.color)
+      );
+      doc.restore();
+    }
+
+    for (let setupSlot = 0; setupSlot < setupSetCount; setupSlot += 1) {
+      doc.addPage();
+      doc.roundedRect(margin, 22, width, 54, 10).fill("#10213b");
+      doc.rect(margin, 22, 7, 54).fill("#25c4c8");
+      text("ROOM PROVOCATION PLAN", margin + 20, 34, width - 40, true, 17, "#ffffff");
+      const setLabel = setupSetCount > 1 ? ` | Objective set ${setupSlot + 1}` : "";
+      const imageLabel = setupEntries.some((entriesForDay) => entriesForDay[setupSlot]?.provocationImage)
+        ? " | AI-generated setup concept"
+        : "";
+      text(`Week beginning ${plan.week}${setLabel}${imageLabel} | Review materials and safety before use`, margin + 20, 57, width - 40, false, 8.5, "#c8f3f4");
+
+      const tableTop = 92;
+      const headerHeight = 27;
+      const rowHeight = (bottom - tableTop - headerHeight - 7) / 5;
+      let columnX = margin;
+      tableLabels.forEach((label, index) => {
+        const columnWidth = tableWidths[index];
+        doc.rect(columnX, tableTop, columnWidth, headerHeight).fillAndStroke("#e9f4f6", "#cbd9e4");
+        text(label, columnX + 7, tableTop + 9, columnWidth - 14, true, 7.2, "#27526a");
+        columnX += columnWidth;
+      });
+
+      days.forEach((day, dayIndex) => {
+        const rowTop = tableTop + headerHeight + dayIndex * rowHeight;
+        const entry = setupEntries[dayIndex][setupSlot];
+        let x = margin;
+        tableWidths.forEach((columnWidth, columnIndex) => {
+          const fill = columnIndex === 0
+            ? dayFills[dayIndex]
+            : dayIndex % 2 === 0
+              ? "#ffffff"
+              : "#f8fafc";
+          doc.rect(x, rowTop, columnWidth, rowHeight).fillAndStroke(fill, "#d8e1eb");
+          x += columnWidth;
+        });
+        text(day, margin + 8, rowTop + 11, tableWidths[0] - 16, true, 10, "#10213b");
+        if (!entry) return;
+
+        const objective = [entry.area, entry.objective, entry.target ? `Next: ${entry.target}` : ""]
+          .filter(Boolean)
+          .join("\n");
+        const cellTop = rowTop + 7;
+        const cellHeight = rowHeight - 14;
+        const objectiveX = margin + tableWidths[0] + 7;
+        const setupX = margin + tableWidths[0] + tableWidths[1] + 7;
+        const materialsX = setupX + tableWidths[2];
+        const noticeX = materialsX + tableWidths[3];
+
+        fittedText(objective, objectiveX, cellTop, tableWidths[1] - 14, cellHeight, { maximumSize: 7.4 });
+
+        let setupTextWidth = tableWidths[2] - 14;
+        if (entry.provocationImage) {
+          const imageWidth = 58;
+          const imageHeight = Math.min(54, cellHeight);
+          setupTextWidth -= imageWidth + 8;
+          try {
+            doc.image(
+              Buffer.from(entry.provocationImage.split(",")[1], "base64"),
+              setupX + setupTextWidth + 8,
+              cellTop,
+              { fit: [imageWidth, imageHeight], align: "center", valign: "center" }
+            );
+          } catch {
+            setupTextWidth += imageWidth + 8;
+          }
+        }
+        fittedText(entry.provocationSetup, setupX, cellTop, setupTextWidth, cellHeight);
+        fittedText(entry.provocationMaterials, materialsX, cellTop, tableWidths[3] - 14, cellHeight);
+        fittedText(entry.provocationNotice, noticeX, cellTop, tableWidths[4] - 14, cellHeight);
+      });
     }
   }
   const pages = doc.bufferedPageRange();

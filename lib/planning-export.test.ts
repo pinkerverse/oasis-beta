@@ -26,3 +26,16 @@ test("long edited plans paginate without losing the last activity or notes", asy
     for (const marker of ["ACTIVITY_END", "SECOND_OBJECTIVE_END", "NOTES_END", "SETUP_END", "BLOCKS_END", "QUESTION_END"]) assert.ok(result.text.includes(marker), marker);
   } finally { await parser.destroy(); }
 });
+
+test("room provocations print as one compact weekly sheet with unplanned days left blank", async () => {
+  const entry: PlanEntry = { id: "one", day: 0, frameworkId: "framework", area: "Communication", statementId: "speaking", objective: "Speak clearly so most people understand", level: 2, target: "Say familiar names clearly", activity: "Name familiar objects.", resources: "Objects", support: "Model the words.", stretch: "Add a describing word.", questions: "What is it called?", ...parseProvocation({ provocationSetup: "Home corner with familiar toys and clear name cards.", provocationMaterials: "Five familiar toys and name cards.", provocationNotice: "Notice clear names and peer understanding. Which toy would you choose?" }) };
+  const buffer = await createPlanningPdf({ week: "2026-11-16", entries: [entry], notes: "" }, { includeSetupSheets: true });
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getText();
+    assert.equal(result.total, 2);
+    assert.equal((result.text.match(/ROOM PROVOCATION PLAN/g) ?? []).length, 1);
+    assert.equal(result.text.includes("No plan"), false);
+    for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]) assert.ok(result.text.includes(day), day);
+  } finally { await parser.destroy(); }
+});
