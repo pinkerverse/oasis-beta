@@ -18,12 +18,10 @@ test("PTC Notes can open its learner picker without a dashboard selection", () =
 });
 
 test("class members reach the full shared settings experience from every page", () => {
-  const header = source("../app/components/OasisHeader.tsx");
+  const chrome = source("../app/components/WorkspaceChrome.tsx");
 
-  assert.match(
-    header,
-    /if \(hasClass\) \{\s*window\.location\.assign\(panelHref\("settings", \[\]\)\);/
-  );
+  assert.match(chrome, /onSettings=\{\(\) => openDashboardPanel\("settings"\)\}/);
+  assert.match(chrome, /router\.push\(`\/\?\$\{params\.toString\(\)\}`\)/);
 });
 
 test("shared classroom actions open as overlays without leaving the current page", () => {
@@ -58,10 +56,36 @@ test("the shared header uses one icon-only navigation system", () => {
 
 test("the class dashboard uses the same centred workspace width as insight pages", () => {
   const dashboard = source("../app/page.tsx");
+  const chrome = source("../app/components/WorkspaceChrome.tsx");
 
-  assert.match(dashboard, /activePage="class"/);
+  assert.match(chrome, /"\/": "class"/);
   assert.match(
     dashboard,
-    /oasis-workspace-content mx-auto w-full max-w-7xl/
+    /oasis-workspace-content mx-auto w-full max-w-7xl pt-10/
   );
+  assert.doesNotMatch(dashboard, /-mt-4 mb-8/);
+});
+
+test("one root-level workspace header remains mounted during navigation", () => {
+  const layout = source("../app/layout.tsx");
+  const chrome = source("../app/components/WorkspaceChrome.tsx");
+  const dashboard = source("../app/page.tsx");
+  const learnerLoading = source("../app/learner-intelligence/loading.tsx");
+  const classroomLoading = source("../app/classroom-insights/loading.tsx");
+  const attainmentLoading = source("../app/class-attainment/loading.tsx");
+  const planningLoading = source("../app/planning/loading.tsx");
+
+  assert.match(layout, /<WorkspaceChrome \/>/);
+  assert.match(chrome, /const activePage = workspacePages\[pathname\]/);
+  assert.match(chrome, /<OasisHeader/);
+  assert.match(dashboard, /aria-label="Loading My Class"/);
+  for (const loadingState of [
+    learnerLoading,
+    classroomLoading,
+    attainmentLoading,
+    planningLoading,
+  ]) {
+    assert.doesNotMatch(loadingState, /OasisHeader/);
+    assert.match(loadingState, /pt-10/);
+  }
 });

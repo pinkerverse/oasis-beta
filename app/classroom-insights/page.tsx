@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import OasisHeader from "@/app/components/OasisHeader";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import { getLearnerInitials } from "@/lib/learner-privacy";
@@ -572,11 +571,6 @@ export default function ClassroomInsightsPage() {
 
   return (
     <main className="min-h-screen min-w-0 overflow-x-hidden bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
-      <OasisHeader
-        className="-mx-4 sm:-mx-8"
-        activePage="classroom-insights"
-      />
-
       <div className="mx-auto w-full min-w-0 max-w-7xl pt-10">
         <section className="w-full min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
           <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">

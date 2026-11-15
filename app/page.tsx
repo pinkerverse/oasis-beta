@@ -17,7 +17,6 @@ import AsbPtcNotesModal from "@/app/components/AsbPtcNotesModal";
 import MidYearReportHelperModal from "@/app/components/MidYearReportHelperModal";
 import GenericSchoolReportModal from "@/app/components/GenericSchoolReportModal";
 import DocumentUploader from "@/app/documents/DocumentUploader";
-import OasisHeader from "@/app/components/OasisHeader";
 import SchoolReportFormatsModal from "@/app/components/SchoolReportFormatsModal";
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import VoiceDictation from "@/app/components/VoiceDictation";
@@ -294,6 +293,18 @@ const [classTeacherEvidence, setClassTeacherEvidence] = useState<ClassTeacherEvi
 const [learnerEvidenceRefreshKey, setLearnerEvidenceRefreshKey] = useState(0);
 const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+
+  useEffect(() => {
+    const updateHeader = window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("oasis:header-context", {
+          detail: { learnerIds: selectedChildren },
+        })
+      );
+    }, 0);
+
+    return () => window.clearTimeout(updateHeader);
+  }, [selectedChildren]);
   const [previewLearnerId, setPreviewLearnerId] = useState<string | null>(null);
   const [loadingJournal, setLoadingJournal] = useState(false);
   const [observation, setObservation] = useState("");
@@ -5234,6 +5245,45 @@ useEffect(() => {
 }, [learnersLoading, pupils]);
 
 useEffect(() => {
+  const openDashboardPanel = (event: Event) => {
+    const panel = (event as CustomEvent<{ panel?: string }>).detail?.panel;
+
+    if (panel === "ptc") {
+      setShowPTCNotes(true);
+    } else if (panel === "report") {
+      setShowReportHelper(true);
+    } else if (panel === "documents") {
+      setShowDocumentUploader(true);
+    } else if (panel === "report-formats") {
+      setShowReportFormats(true);
+    } else if (panel === "settings") {
+      setSettingsStatusLabels([...assessmentStatusLabels]);
+      setSettingsExpectationMode(
+        schoolAssessmentSettings?.expectation_mode === "end_of_year_threshold"
+          ? "end_of_year_threshold"
+          : "developmental_trajectory"
+      );
+      setSettingsWeeklyTarget(weeklyObservationTarget);
+      setSettingsError("");
+      setSettingsMessage("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowSettings(true);
+      void loadAccount();
+    }
+  };
+
+  window.addEventListener("oasis:dashboard-panel", openDashboardPanel);
+  return () =>
+    window.removeEventListener("oasis:dashboard-panel", openDashboardPanel);
+}, [
+  assessmentStatusLabels,
+  loadAccount,
+  schoolAssessmentSettings?.expectation_mode,
+  weeklyObservationTarget,
+]);
+
+useEffect(() => {
   const params = new URLSearchParams(window.location.search);
 
   if (params.get("embedded") !== "1") return;
@@ -6972,40 +7022,18 @@ async function confirmObservationDeletion() {
 
 if (checkingOnboarding) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50">
-      <p className="text-sm text-slate-500">
-        Loading OASIS…
-      </p>
+    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
+      <div className="mx-auto max-w-7xl pt-10" aria-label="Loading My Class">
+        <div className="h-44 animate-pulse rounded-3xl border border-slate-200 bg-white shadow-sm" />
+      </div>
     </main>
   );
 }
 
 
   return (
-    <main className="min-h-screen w-full min-w-0 overflow-x-clip bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-8">
-<OasisHeader
-  className="-mx-4 -mt-4 mb-8 sm:-mx-8 sm:-mt-8"
-  activePage="class"
-  selectedLearnerIds={selectedChildren}
-  accountName={accountName}
-  accountEmail={accountEmail}
-  onPTCNotes={() => setShowPTCNotes(true)}
-  onReportHelper={() => setShowReportHelper(true)}
-  onUploadDocuments={() => setShowDocumentUploader(true)}
-  onReportFormats={() => setShowReportFormats(true)}
-  onSettings={() => void openSettings()}
-  ptcNotesRequiresLearnerSelection={false}
-  ptcNotesActive={showPTCNotes}
-  reportHelperActive={showReportHelper}
-  documentUploadActive={showDocumentUploader}
-  reportFormatsActive={showReportFormats}
-  addObservationActive={showObservationModal}
-  teacherNoteActive={showTeacherNote}
-  todaysFocusActive={showTodaysFocus}
-  settingsActive={showSettings}
-/>
-
-<div className="oasis-workspace-content mx-auto w-full max-w-7xl">
+    <main className="min-h-screen w-full min-w-0 overflow-x-clip bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
+<div className="oasis-workspace-content mx-auto w-full max-w-7xl pt-10">
 
 {firstRunPreferenceLoaded &&
   classObservationsLoaded &&

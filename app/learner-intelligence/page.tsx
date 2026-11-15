@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import OasisHeader from "@/app/components/OasisHeader";
 import {
   getLearnerInitials,
   replaceLearnerNamesWithInitials,
@@ -638,6 +637,20 @@ export default function LearnerIntelligencePage() {
   const [learnersLoading, setLearnersLoading] = useState(true);
   const [learnersError, setLearnersError] = useState("");
   const [selectedLearnerId, setSelectedLearnerId] = useState("");
+
+  useEffect(() => {
+    const updateHeader = window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("oasis:header-context", {
+          detail: {
+            learnerIds: selectedLearnerId ? [selectedLearnerId] : [],
+          },
+        })
+      );
+    }, 0);
+
+    return () => window.clearTimeout(updateHeader);
+  }, [selectedLearnerId]);
   const [classObservations, setClassObservations] = useState<
     ClassObservation[]
   >([]);
@@ -1091,14 +1104,6 @@ export default function LearnerIntelligencePage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
-      <OasisHeader
-        className="-mx-4 sm:-mx-8"
-        activePage="learner-intelligence"
-        selectedLearnerIds={
-          selectedLearnerId ? [selectedLearnerId] : []
-        }
-      />
-
       <div className="mx-auto max-w-7xl pt-10">
         <section className="rounded-3xl border border-slate-200 bg-white shadow-lg">
           <div className="rounded-t-3xl border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">

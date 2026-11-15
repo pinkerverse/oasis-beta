@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import OasisHeader from "@/app/components/OasisHeader";
 import { mondayOf, upcomingMonday, planningHeatClasses, parsePlan, parseProvocation, parseProvocationImage, ACTIVITY_FIELDS, PROVOCATION_FIELDS, PLAN_DAYS, PLAN_FIELDS, type ActivityIdea, type PlanEntry, type PlanField, type PlanningContext, type WeeklyPlan } from "@/lib/planning";
 import { closeDialogOnBackdropPress } from "@/lib/modal-backdrop";
 
@@ -174,7 +173,6 @@ export default function WeeklyPlanner() {
   const ideaEntry = plan.entries.find((entry) => entry.id === ideasFor);
 
   return <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 text-slate-900 sm:px-8">
-    <OasisHeader className="-mx-4 sm:-mx-8" activePage="planning" />
     <div className="mx-auto max-w-7xl pt-10">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
         <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">

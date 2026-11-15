@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import LegalFooter from "@/app/components/LegalFooter";
 import PwaInstallProvider from "@/app/components/PwaInstallProvider";
 import SessionTimeoutGuard from "@/app/components/SessionTimeoutGuard";
+import WorkspaceChrome from "@/app/components/WorkspaceChrome";
 
 import "./globals.css";
 
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <PwaInstallProvider>
           <SessionTimeoutGuard />
+          <WorkspaceChrome />
           <div className="flex-1">{children}</div>
           <LegalFooter />
         </PwaInstallProvider>

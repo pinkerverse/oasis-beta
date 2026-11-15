@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
-import OasisHeader from "@/app/components/OasisHeader";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import { getLearnerInitials } from "@/lib/learner-privacy";
@@ -391,11 +390,6 @@ export default function ClassAttainmentPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 sm:px-8">
-      <OasisHeader
-        className="-mx-4 sm:-mx-8"
-        activePage="class-attainment"
-      />
-
       <div className="mx-auto max-w-7xl pt-10">
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
           <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">
