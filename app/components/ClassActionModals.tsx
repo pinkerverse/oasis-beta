@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import TeacherNoteModal from "@/app/components/TeacherNoteModal";
 import VoiceDictation from "@/app/components/VoiceDictation";
@@ -644,7 +645,7 @@ export default function ClassActionModals({
   if (!panel || !activePanel) return null;
 
   if (error) {
-    return (
+    return createPortal(
       <ContextMessage
         error={error}
         onClose={onClose}
@@ -662,26 +663,33 @@ export default function ClassActionModals({
               )
             );
         }}
-      />
+      />,
+      document.body
     );
   }
 
-  if (!context) return <LoadingModal panel={activePanel} onClose={onClose} />;
+  if (!context) {
+    return createPortal(
+      <LoadingModal panel={activePanel} onClose={onClose} />,
+      document.body
+    );
+  }
 
   if (activePanel === "observation") {
-    return (
+    return createPortal(
       <ObservationModal
         key={`observation:${activeLearnerIds.join(",")}`}
         context={context}
         initialLearnerIds={activeLearnerIds}
         onClose={onClose}
         onSaved={onObservationSaved}
-      />
+      />,
+      document.body
     );
   }
 
   if (activePanel === "teacher-note") {
-    return (
+    return createPortal(
       <TeacherNoteModal
         key={`teacher-note:${activeLearnerIds.join(",")}:${focusPrompt?.guidanceId ?? ""}`}
         learners={context.learners}
@@ -701,11 +709,12 @@ export default function ClassActionModals({
           cachedContext = null;
         }}
         onClose={onClose}
-      />
+      />,
+      document.body
     );
   }
 
-  return (
+  return createPortal(
     <FocusModal
       context={context}
       onClose={onClose}
@@ -718,6 +727,7 @@ export default function ClassActionModals({
         setActiveLearnerIds([item.learnerId]);
         setActivePanel("teacher-note");
       }}
-    />
+    />,
+    document.body
   );
 }

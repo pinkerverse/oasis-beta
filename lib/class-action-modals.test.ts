@@ -19,6 +19,8 @@ test("classroom actions use direct shared modals instead of an embedded dashboar
   assert.match(modals, /function ObservationModal/);
   assert.match(modals, /<TeacherNoteModal/);
   assert.match(modals, /function FocusModal/);
+  assert.match(modals, /createPortal/);
+  assert.match(modals, /document\.body/);
   assert.match(modals, /closeModalOnBackdropPress/);
   assert.match(modals, /event\.key === "Escape"/);
 });
