@@ -86,7 +86,7 @@ test("plan validation rejects oversized text, duplicate IDs and invalid days", (
   assert.throws(() => parsePlan({ ...plan, week: "2026-10-20" }));
 });
 
-test("planned activities move into open days and swap with occupied slots", () => {
+test("planned activities move into open days and automatically swap with occupied days", () => {
   const monday = entry;
   const tuesday = {
     ...entry,
@@ -100,12 +100,7 @@ test("planned activities move into open days and swap with occupied slots", () =
   assert.equal(moved[0].day, 1);
   assert.equal(moved[0].activity, monday.activity);
 
-  const swapped = rearrangePlanEntries(
-    [monday, tuesday],
-    monday.id,
-    1,
-    tuesday.id
-  );
+  const swapped = rearrangePlanEntries([monday, tuesday], monday.id, 1);
   assert.equal(swapped.find((item) => item.id === monday.id)?.day, 1);
   assert.equal(swapped.find((item) => item.id === tuesday.id)?.day, 0);
   assert.equal(
@@ -114,16 +109,16 @@ test("planned activities move into open days and swap with occupied slots", () =
   );
 });
 
-test("a full day requires an explicit activity swap", () => {
+test("legacy multi-activity days still swap without losing an activity", () => {
   const fullTuesday = Array.from({ length: 3 }, (_, index) => ({
     ...entry,
     id: `tuesday-${index}`,
     day: 1,
   }));
 
-  assert.throws(
-    () => rearrangePlanEntries([entry, ...fullTuesday], entry.id, 1),
-    /Tuesday is full/
-  );
+  const swapped = rearrangePlanEntries([entry, ...fullTuesday], entry.id, 1);
+  assert.equal(swapped.filter((item) => item.day === 1).length, 3);
+  assert.equal(swapped.filter((item) => item.day === 0).length, 1);
+  assert.equal(swapped.find((item) => item.id === entry.id)?.day, 1);
   assert.throws(() => rearrangePlanEntries([entry], entry.id, 8));
 });

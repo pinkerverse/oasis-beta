@@ -38,7 +38,10 @@ test("the weekly planner offers drag-and-drop and a touch move control", () => {
 
   assert.match(planner, /draggable/);
   assert.match(planner, /cursor-grab/);
-  assert.match(planner, /Drop it onto another activity to swap them/);
+  assert.match(planner, /An occupied day swaps automatically/);
+  assert.match(planner, /overflow-x-clip/);
+  assert.match(planner, /entries\.length > 1/);
+  assert.doesNotMatch(planner, /entries\.length\}\/3/);
   assert.match(planner, /planner-mobile-move/);
   assert.match(planner, /rearrangePlanEntries/);
   assert.match(styles, /pointer: fine/);

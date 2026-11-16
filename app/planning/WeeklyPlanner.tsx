@@ -108,19 +108,25 @@ export default function WeeklyPlanner() {
   }
   function moveEntry(entryId: string, targetDay: number, swapWithEntryId?: string) {
     try {
-      const sourceDay = planRef.current.entries.find(
+      const currentEntries = planRef.current.entries;
+      const sourceDay = currentEntries.find(
         (entry) => entry.id === entryId
       )?.day;
+      const automaticSwapId =
+        swapWithEntryId ??
+        currentEntries.find(
+          (entry) => entry.day === targetDay && entry.id !== entryId
+        )?.id;
       const nextEntries = rearrangePlanEntries(
-        planRef.current.entries,
+        currentEntries,
         entryId,
         targetDay,
-        swapWithEntryId
+        automaticSwapId
       );
-      if (nextEntries === planRef.current.entries) return;
+      if (nextEntries === currentEntries) return;
       change({ ...planRef.current, entries: nextEntries });
       setNotice(
-        swapWithEntryId
+        automaticSwapId
           ? `Activities swapped between ${sourceDay === undefined ? "the original day" : PLAN_DAYS[sourceDay]} and ${PLAN_DAYS[targetDay]}. Save the week to keep this change.`
           : `Activity moved to ${PLAN_DAYS[targetDay]}. Save the week to keep this change.`
       );
@@ -135,14 +141,11 @@ export default function WeeklyPlanner() {
     setDropTarget(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", entryId);
-    const card = event.currentTarget.closest("article");
-    if (card instanceof HTMLElement) {
-      event.dataTransfer.setDragImage(
-        card,
-        Math.min(card.clientWidth / 2, 180),
-        18
-      );
-    }
+    event.dataTransfer.setDragImage(
+      event.currentTarget,
+      Math.min(event.currentTarget.clientWidth / 2, 80),
+      14
+    );
   }
   function draggedId(event: DragEvent<HTMLElement>) {
     return draggedEntryId || event.dataTransfer.getData("text/plain");
@@ -216,13 +219,18 @@ export default function WeeklyPlanner() {
   const target = selected?.progression?.find((item) => String(item.level) === level);
   function addObjective(withIdeas: boolean) {
     if (!selected || !selectedArea || !context || pickerDay === null || (selected.progression?.length && !target)) return;
+    if (planRef.current.entries.some((entry) => entry.day === pickerDay)) {
+      setNotice(`${PLAN_DAYS[pickerDay]} already has an activity. Move or swap it first.`);
+      setPickerDay(null);
+      return;
+    }
     const entry: PlanEntry = { id: crypto.randomUUID(), day: pickerDay, frameworkId: context.frameworkId, statementId: selected.id, area: selectedArea.name, objective: selected.text, target: target?.descriptors.join("; ") ?? "", level: target?.level ?? null, activity: "", resources: "", support: "", stretch: "", questions: "", ...parseProvocation({}) };
     change({ ...plan, entries: [...plan.entries, entry] }); setPickerDay(null);
     if (withIdeas) void generate(entry);
   }
   const ideaEntry = plan.entries.find((entry) => entry.id === ideasFor);
 
-  return <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 text-slate-900 sm:px-8">
+  return <main className="min-h-screen overflow-x-clip bg-gradient-to-b from-slate-50 to-slate-100 px-4 pb-12 text-slate-900 sm:px-8">
     <div className="mx-auto max-w-7xl pt-10">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
         <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 via-white to-indigo-50 px-6 py-8 sm:px-8">
@@ -256,7 +264,7 @@ export default function WeeklyPlanner() {
           {contextError && <p role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{contextError}</p>}
           {context?.preview && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Local preview: your full active framework and live activity suggestions. Coverage numbers are illustrative, not your class data. Plans here are temporary.</p>}
           {!loading && <>
-        {plan.entries.length > 0 && <p className="mt-5 text-xs text-slate-500"><span className="hidden md:inline">Drag an activity by its top handle to another day. Drop it onto another activity to swap them.</span><span className="md:hidden">Use the move control on an activity to place or swap it on another day.</span></p>}
+        {plan.entries.length > 0 && <p className="mt-5 text-xs text-slate-500"><span className="hidden md:inline">Drag an activity by its top handle to another weekday. An occupied day swaps automatically.</span><span className="md:hidden">Use the move control to move an activity. An occupied day swaps automatically.</span></p>}
         <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {PLAN_DAYS.map((day, index) => {
             const entries = plan.entries.filter((entry) => entry.day === index);
@@ -280,7 +288,7 @@ export default function WeeklyPlanner() {
               }}
               className={`min-w-0 rounded-2xl border bg-white p-4 shadow-sm transition ${dayIsDropTarget ? "border-cyan-500 bg-cyan-50/60 ring-2 ring-cyan-200" : "border-slate-200"}`}
             >
-              <div className="mb-4 flex items-center justify-between"><h2 className="font-bold">{day}</h2><span className="text-xs text-slate-400">{entries.length}/3</span></div>
+              <div className="mb-4 flex items-center justify-between"><h2 className="font-bold">{day}</h2>{entries.length > 1 && <span className="text-xs text-slate-400">{entries.length} saved</span>}</div>
               {!entries.length && <div className="mb-4 rounded-xl border border-dashed border-slate-200 px-3 py-10 text-center text-sm leading-6 text-slate-500">A little space for possibility.<br />Choose an objective to begin.</div>}
               {entries.map((entry) => {
                 const entryIsDropTarget =
@@ -343,20 +351,18 @@ export default function WeeklyPlanner() {
                         const targetEntries = plan.entries.filter(
                           (item) => item.day === targetDay
                         );
-                        return [
-                          ...(targetEntries.length < 3
-                            ? [
-                                <option key={`move-${targetDay}`} value={`move:${targetDay}`}>
-                                  Move to {targetDayName}
-                                </option>,
-                              ]
-                            : []),
-                          ...targetEntries.map((targetEntry) => (
+                        if (!targetEntries.length) {
+                          return [
+                            <option key={`move-${targetDay}`} value={`move:${targetDay}`}>
+                              Move to {targetDayName}
+                            </option>,
+                          ];
+                        }
+                        return targetEntries.map((targetEntry) => (
                             <option key={`swap-${targetEntry.id}`} value={`swap:${targetEntry.id}`}>
                               Swap with {targetDayName}: {targetEntry.objective}
                             </option>
-                          )),
-                        ];
+                          ));
                       })}
                     </select>
                     <span className="pointer-events-none absolute left-2.5 top-1.5 text-sm text-slate-500" aria-hidden="true">↔</span>
@@ -380,7 +386,7 @@ export default function WeeklyPlanner() {
                 </section>
               </article>;
               })}
-              <button className={`${button} w-full !px-2`} disabled={!context || entries.length >= 3} onClick={() => { setChosen(""); setLevel(""); setSearch(""); setOnlyGaps(false); setOpenArea(null); setPickerDay(index); }}>+ Add from framework</button>
+              {!entries.length && <button className={`${button} w-full !px-2`} disabled={!context} onClick={() => { setChosen(""); setLevel(""); setSearch(""); setOnlyGaps(false); setOpenArea(null); setPickerDay(index); }}>+ Add from framework</button>}
             </section>;
           })}
         </div>

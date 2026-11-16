@@ -44,9 +44,17 @@ export function rearrangePlanEntries(
   const source = entries.find((entry) => entry.id === sourceEntryId);
   if (!source) throw new Error("That planned activity is no longer available.");
 
-  if (swapWithEntryId) {
-    const target = entries.find((entry) => entry.id === swapWithEntryId);
-    if (!target) throw new Error("The activity to swap with is no longer available.");
+  const target = swapWithEntryId
+    ? entries.find((entry) => entry.id === swapWithEntryId)
+    : entries.find(
+        (entry) => entry.day === targetDay && entry.id !== sourceEntryId
+      );
+
+  if (swapWithEntryId && !target) {
+    throw new Error("The activity to swap with is no longer available.");
+  }
+
+  if (target) {
     if (target.id === source.id || target.day === source.day) return entries;
     if (target.day !== targetDay) throw new Error("Choose an activity in the destination day.");
 
@@ -60,11 +68,6 @@ export function rearrangePlanEntries(
   }
 
   if (source.day === targetDay) return entries;
-  if (entries.filter((entry) => entry.day === targetDay).length >= 3) {
-    throw new Error(
-      `${PLAN_DAYS[targetDay]} is full. Drop onto an activity there to swap them.`
-    );
-  }
 
   return entries.map((entry) =>
     entry.id === source.id ? { ...entry, day: targetDay } : entry
