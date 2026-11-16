@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   appendDictationText,
   DICTATION_MAX_BYTES,
+  dictationPrompt,
   normaliseDictationMode,
   validateDictationAudio,
 } from "./dictation.ts";
@@ -47,4 +48,21 @@ test("dictation validates audio size and type", () => {
     }),
     /too large/
   );
+});
+
+test("observation dictation uses a warm learning-journal voice without inventing evidence", () => {
+  const prompt = dictationPrompt("observation");
+
+  assert.match(prompt, /warm, vivid early-years learning-journal observation/i);
+  assert.match(prompt, /Seesaw/i);
+  assert.match(prompt, /concrete details, precise active verbs/i);
+  assert.match(prompt, /Do not invent sensory detail, dialogue, feelings, motives/i);
+  assert.match(prompt, /Keep learner initials and quotations exactly as supplied/i);
+});
+
+test("private teacher-note dictation remains concise and factual", () => {
+  const prompt = dictationPrompt("teacher_note");
+
+  assert.match(prompt, /concise, factual private early-years teacher note/i);
+  assert.doesNotMatch(prompt, /Seesaw/i);
 });
