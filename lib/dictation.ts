@@ -62,11 +62,15 @@ export function dictationPrompt(mode: DictationMode) {
 - Use one short professional paragraph.`;
   }
 
-  return `Rewrite the transcript as a concise professional early-years observation in the past tense.
-- Preserve exactly what happened, the context, any child words, and any adult support or prompts.
+  return `Rewrite the transcript as a warm, vivid early-years learning-journal observation in the past tense. It should feel natural and engaging for a family to read on Seesaw while remaining an accurate professional record.
+- Preserve exactly what happened, the meaningful context, any child words, and any adult support or prompts.
+- Bring the moment to life using the transcript's concrete details, precise active verbs and varied sentence structure. Let the child's actions, choices, collaboration and quoted words carry the interest.
+- Begin with the child or the meaningful moment rather than a generic opening such as "During the session" when the timing is not important.
+- Weave related details into a flowing narrative instead of listing them or repeatedly starting sentences with "They" or "also".
 - Preserve uncertainty and frequency when mentioned.
-- Remove speech fillers and repetition.
-- Do not invent details, praise, attainment, developmental interpretation, framework claims or next steps.
-- Keep learner initials exactly as supplied.
-- Use one or two short, natural paragraphs.`;
+- Remove speech fillers, repetition and administrative wording.
+- Do not invent sensory detail, dialogue, feelings, motives, praise, attainment, developmental interpretation, framework claims or next steps.
+- Do not use emojis, exclamation marks, headings or over-celebratory language.
+- Keep learner initials and quotations exactly as supplied.
+- Use one compact, natural paragraph, or two short paragraphs when that improves readability.`;
 }
