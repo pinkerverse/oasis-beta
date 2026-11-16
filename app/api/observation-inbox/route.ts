@@ -423,3 +423,34 @@ export async function PATCH(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ observation: data });
 }
+
+export async function DELETE(request: Request) {
+  const context = await getCurrentWorkspaceContext();
+  if (!context) {
+    return NextResponse.json({ error: "You must be signed in to delete an observation." }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const id = text(body.id, 100);
+  if (!id) {
+    return NextResponse.json({ error: "Observation ID is required." }, { status: 400 });
+  }
+
+  const { data: existing, error: lookupError } = await findObservation(id, context);
+  if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "Observation not found." }, { status: 404 });
+
+  let deleteQuery = supabaseAdmin
+    .from("observations")
+    .delete()
+    .eq("id", id)
+    .eq("school_id", context.schoolId);
+  deleteQuery = isSchoolAdmin(context.role)
+    ? deleteQuery.or(`workspace_id.eq.${context.workspaceId},workspace_id.is.null`)
+    : deleteQuery.eq("workspace_id", context.workspaceId);
+
+  const { data, error } = await deleteQuery.select("id").maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Observation not found." }, { status: 404 });
+  return NextResponse.json({ deletedId: data.id });
+}

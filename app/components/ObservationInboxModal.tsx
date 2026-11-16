@@ -513,6 +513,32 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
     }
   }
 
+  async function deleteObservation(observation: InboxObservation) {
+    if (!window.confirm("Permanently delete this observation? It will be removed from learner evidence and cannot be recovered.")) return;
+    setSavingId(observation.id);
+    setError("");
+    try {
+      const response = await fetch("/api/observation-inbox", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: observation.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "The observation could not be deleted.");
+      setObservations((current) => current.filter((item) => item.id !== observation.id));
+      if (editingId === observation.id) stopEditing();
+      if (learningReview?.observationId === observation.id) setLearningReview(null);
+      window.dispatchEvent(new CustomEvent("oasis:observation-inbox-updated", {
+        detail: { source: "inbox-modal" },
+      }));
+      onChanged?.();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "The observation could not be deleted.");
+    } finally {
+      setSavingId("");
+    }
+  }
+
   async function saveDraft(id: string) {
     if (!draft) return;
     const updated = await updateObservation(id, {
@@ -750,6 +776,7 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
                                 {observation.sharing_status === "ready_to_share" && <button type="button" onClick={() => void updateObservation(observation.id, { action: "mark_shared" })} className="rounded-xl bg-cyan-700 px-3 py-2 text-sm font-semibold text-white">Mark as shared</button>}
                               </>
                             )}
+                            <button type="button" onClick={() => void deleteObservation(observation)} disabled={savingId === observation.id} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"><Icon name="trash" className="h-4 w-4" />{savingId === observation.id ? "Working…" : "Delete"}</button>
                           </div>
                         </>
                       )}

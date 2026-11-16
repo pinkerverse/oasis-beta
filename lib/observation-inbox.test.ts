@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -49,4 +50,22 @@ test("processing observations become recoverable after the analysis timeout", ()
     processing_status: "processing",
     updated_at: "not-a-date",
   }, now), false);
+});
+
+test("Observation Inbox deletion is confirmed and scoped through its API", () => {
+  const modal = readFileSync(
+    new URL("../app/components/ObservationInboxModal.tsx", import.meta.url),
+    "utf8"
+  );
+  const route = readFileSync(
+    new URL("../app/api/observation-inbox/route.ts", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(modal, /Permanently delete this observation\?/);
+  assert.match(modal, /method: "DELETE"/);
+  assert.match(modal, /current\.filter\(\(item\) => item\.id !== observation\.id\)/);
+  assert.match(route, /export async function DELETE/);
+  assert.match(route, /\.eq\("school_id", context\.schoolId\)/);
+  assert.match(route, /workspace_id\.eq/);
 });
