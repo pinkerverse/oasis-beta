@@ -61,6 +61,80 @@ OASIS EARLY-YEARS REPORT WRITING STANDARD
 - Never borrow a sentence, anecdote or distinctive sequence from another learner or an earlier report. Shared platform learning is limited to editorial quality, curriculum balance and report craft.
 `.trim();
 
+/**
+ * Report-only voice guidance. PTC notes deliberately keep their own shorter
+ * conference-writing contract, while mid-year and end-of-year reports use this
+ * fuller narrative standard.
+ */
+export const EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT = `
+OASIS REPORT NARRATIVE VOICE
+- Write with the warmth of a teacher who knows the learner well, but keep every sentence precise, natural and professionally grammatical. Warmth comes from the specificity of the observation, not sentimental praise.
+- Build strong evidence paragraphs in this order when the evidence allows it: documented context; what the learner said, chose, made or did; what this reveals about learning; and the level of support, development or useful next direction. Do not force all four parts into every paragraph.
+- Use a learner quotation only when it is supplied verbatim and adds something that a paraphrase would lose. Introduce it naturally and punctuate it correctly.
+- Prefer observable verbs and concrete classroom nouns. Replace vague claims such as "showed confidence" with the action that made the confidence visible.
+- Make each learner sound individual. Vary sentence length and openings across the report, but never manufacture a scene, feeling, motive or relationship for variety.
+- Do not use flowery, sentimental or AI-polished language such as "settled in warmly," "settled beautifully," "confidence blossomed," "confidence unfolded," "shines brightly," "brings warmth," "grown beautifully," "wonderful journey," or "a joy/pleasure to have." Do not describe progress as magical, beautiful or heart-warming.
+- Avoid awkward complements such as "confident to" or "comfortable to." State the observable action instead, or use natural constructions such as "confident in," "comfortable with," or "can ... independently" when directly supported.
+- Avoid stock conclusions about a "positive mindset," "flexibility in thinking and play," or being "a wonderful addition" unless the report has already established the idea through distinct evidence. Even then, synthesize it in fresh, plain language.
+- Do not repeatedly begin sentences with the learner's initials, "They," "Their," "Also," or "During." Do not use "demonstrates," "showcases," "highlights," "reflects," or "continues to" as filler.
+- Read the finished report aloud in your head. Rewrite any sentence that sounds translated, overly formal, sentimental, repetitive or unlike a thoughtful teacher speaking to a family.
+`.trim();
+
+const REPORT_STYLE_PATTERNS: Array<{
+  pattern: RegExp;
+  message: string;
+}> = [
+  {
+    pattern: /settled\s+(?:in\s+)?warmly/i,
+    message:
+      'Replace "settled in warmly" with specific evidence of belonging, routines or relationships.',
+  },
+  {
+    pattern: /settled\s+(?:in\s+)?beautifully/i,
+    message:
+      'Replace "settled beautifully" with a precise description of adjustment to classroom life.',
+  },
+  {
+    pattern: /confidence\s+(?:has\s+)?(?:blossomed|unfolded)/i,
+    message:
+      "Replace metaphorical confidence language with the observable action that changed.",
+  },
+  {
+    pattern: /(?:shines?\s+brightly|grown\s+beautifully|brings?\s+warmth)/i,
+    message:
+      "Replace sentimental praise with specific, evidence-led teacher language.",
+  },
+  {
+    pattern: /(?:wonderful|beautiful)\s+journey/i,
+    message:
+      "Replace the generic journey metaphor with a precise summary of development.",
+  },
+  {
+    pattern: /(?:a\s+)?(?:joy|pleasure)\s+to\s+(?:have|teach)/i,
+    message:
+      "Replace generic praise with a distinctive, evidence-grounded closing sentence.",
+  },
+  {
+    pattern: /\b(?:is|are|was|were|become|became|seems?|appears?)\s+confident\s+to\b/i,
+    message:
+      'Rewrite "confident to" as an observable action or a natural "confident in" construction.',
+  },
+  {
+    pattern: /\b(?:is|are|was|were|become|became|seems?|appears?)\s+comfortable\s+to\b/i,
+    message:
+      'Rewrite "comfortable to" as an observable action or a natural "comfortable with" construction.',
+  },
+];
+
+export function findReportWritingStyleIssues(value: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return [];
+
+  return REPORT_STYLE_PATTERNS.flatMap(({ pattern, message }) =>
+    pattern.test(text) ? [message] : []
+  );
+}
+
 function isFrameworkDefinition(value: unknown): value is FrameworkDefinition {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<FrameworkDefinition>;

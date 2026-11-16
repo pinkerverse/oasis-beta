@@ -13,7 +13,9 @@ import {
 } from "@/lib/learner-privacy";
 import { privacyReviewResponse, reviewPrivacyText } from "@/lib/privacy-guardrails";
 import {
+  EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT,
   EARLY_YEARS_REPORT_WRITING_PROMPT,
+  findReportWritingStyleIssues,
   reportFrameworkBridgePrompt,
 } from "@/lib/report-writing-quality";
 import { findRepeatedReportExamples } from "@/lib/report-repetition";
@@ -190,8 +192,33 @@ export async function POST(request: Request) {
 
     let report = null;
     let qualityFeedback = "";
+    const narrativeStylePrompt =
+      reportKind === "ptc" ? "" : EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const prompt = `You are an experienced early-years educator writing a ${reportKind} draft for learner ${learnerInitials}. Use only the supplied learner evidence. Never invent, diagnose, infer family information, or turn support into independence. Use initials only.\n\n${EARLY_YEARS_REPORT_WRITING_PROMPT}\n\n${reportFrameworkBridgePrompt(frameworkResult.data?.definition)}\n\nREPORT OUTPUT CONTRACT\n- Include evidence IDs only in evidenceEntryIds.\n- Every section key must appear exactly once in the supplied order. For narrative sections, bullets must be empty. For bullet sections, text must be empty. Mixed sections may use both.\n- Follow each section word limit and the total limit. If no limit is stated, be concise without making the section thin.\n${priorPtc ? "- This is a later report. The prior PTC is exclusion material only: use new evidence and different examples. Do not copy, lightly paraphrase, or reuse its sentences, structure, anecdotes or learning moments.\n" : ""}${qualityFeedback}\n\nPRIVATE SCHOOL FORMAT — APPLIES ONLY TO THIS SCHOOL\n${schoolReportTemplatePrompt(template.profile)}\n\n${DOCUMENT_CONTEXT_RULES}\n\nLEARNER EVIDENCE\n${sourceText}\n\nPRIOR PTC TO AVOID REPEATING\n${priorPtc || "None"}`;
+      const prompt = `You are an experienced early-years educator writing a ${reportKind} draft for learner ${learnerInitials}. Use only the supplied learner evidence. Never invent, diagnose, infer family information, or turn support into independence. Use initials only.
+
+${EARLY_YEARS_REPORT_WRITING_PROMPT}
+
+${narrativeStylePrompt}
+
+${reportFrameworkBridgePrompt(frameworkResult.data?.definition)}
+
+REPORT OUTPUT CONTRACT
+- Include evidence IDs only in evidenceEntryIds.
+- Every section key must appear exactly once in the supplied order. For narrative sections, bullets must be empty. For bullet sections, text must be empty. Mixed sections may use both.
+- Follow each section word limit and the total limit. If no limit is stated, be concise without making the section thin.
+${priorPtc ? "- This is a later report. The prior PTC is exclusion material only: use new evidence and different examples. Do not copy, lightly paraphrase, or reuse its sentences, structure, anecdotes or learning moments.\n" : ""}${qualityFeedback}
+
+PRIVATE SCHOOL FORMAT — APPLIES ONLY TO THIS SCHOOL
+${schoolReportTemplatePrompt(template.profile)}
+
+${DOCUMENT_CONTEXT_RULES}
+
+LEARNER EVIDENCE
+${sourceText}
+
+PRIOR PTC TO AVOID REPEATING
+${priorPtc || "None"}`;
       const response = await openai.responses.create({
         model: process.env.REPORT_HELPER_MODEL || "gpt-4.1-mini",
         store: false,
@@ -217,12 +244,17 @@ export async function POST(request: Request) {
           text: [section.text, ...section.bullets].filter(Boolean).join(" "),
         }))
       );
-      if (!reused.length && !repeatedExamples.length) break;
-      if (attempt === 1 && !reused.length) break;
+      const styleIssues =
+        reportKind === "ptc"
+          ? []
+          : findReportWritingStyleIssues(genericSchoolReportToPlainText(report));
+      if (!reused.length && !repeatedExamples.length && !styleIssues.length) {
+        break;
+      }
       report = null;
-      qualityFeedback = `\nYour previous attempt needs an editorial rewrite.${reused.length ? ` It reused or lightly paraphrased these prior-PTC sentences: ${JSON.stringify(reused)}.` : ""}${repeatedExamples.length ? ` It also repeated a classroom example across these report sections: ${JSON.stringify(repeatedExamples.map((item) => ({ from: item.firstSectionKey, to: item.repeatedSectionKey, sentence: item.repeatedSentence })))}. Give that example one home only and use different evidence or a concise synthesis in the other section.` : ""}`;
+      qualityFeedback = `\nYour previous attempt needs an editorial rewrite.${reused.length ? ` It reused or lightly paraphrased these prior-PTC sentences: ${JSON.stringify(reused)}.` : ""}${repeatedExamples.length ? ` It also repeated a classroom example across these report sections: ${JSON.stringify(repeatedExamples.map((item) => ({ from: item.firstSectionKey, to: item.repeatedSectionKey, sentence: item.repeatedSentence })))}. Give that example one home only and use different evidence or a concise synthesis in the other section.` : ""}${styleIssues.length ? ` Correct these report-writing problems: ${JSON.stringify(styleIssues)}.` : ""}`;
     }
-    if (!report) return Response.json({ error: "OASIS could not create a sufficiently distinct, non-repetitive report from the saved evidence. Add a newer teacher note or observation and try again." }, { status: 409 });
+    if (!report) return Response.json({ error: "OASIS could not create a sufficiently distinct, natural report from the saved evidence. Add a newer teacher note or observation, or try again." }, { status: 409 });
 
     const outputPrivacy = reviewPrivacyText(genericSchoolReportToPlainText(report));
     if (outputPrivacy.requiresReview) return Response.json(privacyReviewResponse(outputPrivacy), { status: 422 });

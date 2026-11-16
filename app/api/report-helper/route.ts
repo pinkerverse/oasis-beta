@@ -19,7 +19,9 @@ import {
   reviewPrivacyText,
 } from "@/lib/privacy-guardrails";
 import {
+  EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT,
   EARLY_YEARS_REPORT_WRITING_PROMPT,
+  findReportWritingStyleIssues,
   reportFrameworkBridgePrompt,
 } from "@/lib/report-writing-quality";
 import { findRepeatedReportExamples } from "@/lib/report-repetition";
@@ -424,10 +426,12 @@ Write a warm, precise report that sounds like a teacher who knows the learner we
 
 ${EARLY_YEARS_REPORT_WRITING_PROMPT}
 
+${EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT}
+
 ${reportFrameworkBridgePrompt(null)}
 
 FIXED REPORT STRUCTURE
-1. INTRODUCTION: one paragraph about the whole learner, how they have settled, their approach to classroom life, relationships, self-management, organization, and social-emotional development. Begin with ${learnerInitials} as a person and learner, not with an academic skill or favorite activity.
+1. INTRODUCTION: one paragraph about the whole learner: their sense of belonging and adjustment to classroom life, learning disposition, relationships, self-management, organization, and social-emotional development. Begin with ${learnerInitials} as a person and learner, not with an academic skill or favorite activity.
 2. COMMUNICATION AND EARLY LITERACY: one substantial paragraph about collaboration, social communication, listening, speaking, exchanging information, expression, interpretation, and emergent literacy. Include concrete examples from conversations, group experiences, play, books, storytelling, mark-making, phonological awareness, or early reading and writing only when they are directly evidenced. Show how the learner communicates with children and adults, not only how they participate in a group.
 3. RESEARCH, THINKING AND EMERGING MATH: one substantial paragraph about research skills, information literacy, creative and critical thinking, transfer, reflection, metacognition, mindset, and mathematical thinking. Treat the Thinking Skills (Emergent Math) framework as part of this paragraph. Include directly evidenced examples of number sense, shape, pattern, measurement, classification, spatial reasoning, comparison, or mathematical problem solving. Do not omit mathematical learning when relevant evidence is supplied.
 4. UNITS OF INQUIRY: exactly two separate paragraphs. Choose the two most strongly evidenced units from the three active units supplied below. Name each unit and use its current 2026-27 central idea accurately. Connect documented learner actions to the unit without claiming participation or understanding that is not in the evidence.
@@ -729,6 +733,10 @@ function reviewReportContract(
       "The draft repeats or closely paraphrases a classroom example in more than one section. Keep the detailed example only in its strongest section and rewrite the other section with different evidence or a concise synthesis."
     );
   }
+
+  issues.push(
+    ...findReportWritingStyleIssues(asbMidYearReportToPlainText(report))
+  );
 
   return issues;
 }

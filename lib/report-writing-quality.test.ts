@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT,
   EARLY_YEARS_REPORT_WRITING_PROMPT,
+  findReportWritingStyleIssues,
   reportFrameworkBridgePrompt,
 } from "./report-writing-quality.ts";
 
@@ -11,6 +13,29 @@ test("report standard connects ATL, framework evidence and areas of learning", (
   assert.match(EARLY_YEARS_REPORT_WRITING_PROMPT, /mathematical thinking/i);
   assert.match(EARLY_YEARS_REPORT_WRITING_PROMPT, /Never borrow a sentence/i);
   assert.match(EARLY_YEARS_REPORT_WRITING_PROMPT, /support, prompt, reminder/i);
+});
+
+test("report narrative voice rejects awkward or sentimental stock language", () => {
+  assert.match(
+    EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT,
+    /settled in warmly/i
+  );
+  assert.match(
+    EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT,
+    /context; what the learner said, chose, made or did/i
+  );
+  assert.equal(
+    findReportWritingStyleIssues(
+      "AB settled in warmly and their confidence has blossomed."
+    ).length,
+    2
+  );
+  assert.deepEqual(
+    findReportWritingStyleIssues(
+      "During block play, AB invited two peers to test a wider base and revised the design after it tipped."
+    ),
+    []
+  );
 });
 
 test("framework bridge exposes school area names without inventing statements", () => {
