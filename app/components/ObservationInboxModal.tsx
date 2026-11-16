@@ -146,6 +146,7 @@ function statusClasses(observation: InboxObservation, processingIsStale: boolean
 
 export default function ObservationInboxModal({ onClose, onChanged }: Props) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const activeLoadRef = useRef<AbortController | null>(null);
   const [observations, setObservations] = useState<InboxObservation[]>([]);
   const [learners, setLearners] = useState<Learner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,35 +176,71 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
   const [manualAssessmentLevel, setManualAssessmentLevel] = useState("");
   const [manualEvidence, setManualEvidence] = useState("");
 
-  const loadInbox = useCallback(async () => {
+  const loadInbox = useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
+    const controller = new AbortController();
+    let timedOut = false;
+    activeLoadRef.current?.abort();
+    activeLoadRef.current = controller;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 20_000);
+
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       setError("");
-      const response = await fetch("/api/observation-inbox", { cache: "no-store" });
+      const response = await fetch("/api/observation-inbox", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "The Observation Inbox could not be loaded.");
       setObservations(Array.isArray(result.observations) ? result.observations : []);
       setLearners(Array.isArray(result.learners) ? result.learners : []);
     } catch (loadError) {
+      if (controller.signal.aborted) {
+        if (timedOut) {
+          setError("The Observation Inbox is taking longer than expected. Check your connection and try again.");
+        }
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : "The Observation Inbox could not be loaded.");
     } finally {
-      setLoading(false);
+      window.clearTimeout(timeout);
+      if (activeLoadRef.current === controller) {
+        activeLoadRef.current = null;
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    const loadTimer = window.setTimeout(() => void loadInbox(), 0);
+    const loadTimer = window.setTimeout(
+      () => void loadInbox({ showLoading: true }),
+      0
+    );
     closeButtonRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       window.clearTimeout(loadTimer);
+      const activeLoad = activeLoadRef.current;
+      activeLoadRef.current = null;
+      activeLoad?.abort();
       document.body.style.overflow = previousOverflow;
     };
   }, [loadInbox]);
 
   useEffect(() => {
-    const refresh = () => void loadInbox();
+    const refresh = (event: Event) => {
+      if (
+        event instanceof CustomEvent &&
+        event.detail?.source === "inbox-modal"
+      ) {
+        return;
+      }
+      void loadInbox();
+    };
     window.addEventListener("oasis:observation-inbox-updated", refresh);
     return () => window.removeEventListener("oasis:observation-inbox-updated", refresh);
   }, [loadInbox]);
@@ -463,7 +500,9 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "The observation could not be updated.");
       setObservations((current) => current.map((item) => item.id === id ? result.observation : item));
-      window.dispatchEvent(new Event("oasis:observation-inbox-updated"));
+      window.dispatchEvent(new CustomEvent("oasis:observation-inbox-updated", {
+        detail: { source: "inbox-modal" },
+      }));
       onChanged?.();
       return result.observation as InboxObservation;
     } catch (updateError) {
@@ -592,8 +631,8 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
   return createPortal(
     <>
     <div onPointerDown={(event) => closeModalOnBackdropPress(event, requestClose)} className="oasis-modal-backdrop fixed inset-0 z-[70] flex justify-center bg-black/35 p-2 backdrop-blur-sm sm:p-5">
-      <section role="dialog" aria-modal="true" aria-labelledby="observation-inbox-title" className="oasis-modal-surface flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl sm:h-[min(900px,calc(100dvh-2.5rem))]">
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
+      <section role="dialog" aria-modal="true" aria-labelledby="observation-inbox-title" className="oasis-modal-surface oasis-contained-mobile-modal flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl sm:h-[min(900px,calc(100dvh-2.5rem))]">
+        <header className="flex shrink-0 items-start justify-between gap-4 rounded-t-3xl border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white"><Icon name="inbox" /></span>
             <div>
@@ -645,7 +684,18 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
               </select>
             </div>
 
-            {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+            {error && (
+              <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  onClick={() => void loadInbox({ showLoading: observations.length === 0 })}
+                  className="shrink-0 self-start rounded-xl border border-red-200 bg-white px-3 py-2 font-semibold text-red-700 hover:bg-red-100 sm:self-auto"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
             {loading ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading observations…</div>
             ) : filtered.length === 0 ? (
@@ -724,9 +774,9 @@ export default function ObservationInboxModal({ onClose, onChanged }: Props) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="learning-review-title"
-          className="oasis-modal-surface flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl sm:h-[min(920px,calc(100dvh-2.5rem))]"
+          className="oasis-modal-surface oasis-contained-mobile-modal flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl sm:h-[min(920px,calc(100dvh-2.5rem))]"
         >
-          <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
+          <header className="flex shrink-0 items-start justify-between gap-4 rounded-t-3xl border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-800 text-white">
                 <Icon name="learning" />

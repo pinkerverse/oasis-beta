@@ -183,18 +183,14 @@ export async function GET(request: Request) {
 
   let observationQuery = db
     .from("observations")
-    .select("id, learner_ids, observation, original_observation, observation_date, created_at, updated_at, review_status, processing_status, observation_category, sharing_status, parent_friendly_text, confirmed_at, shared_at, framework_key, framework_matches, next_steps, teacher_level, ai_level")
+    .select("id, learner_ids, observation, observation_date, created_at, updated_at, review_status, processing_status, observation_category, sharing_status, parent_friendly_text, framework_key, framework_matches")
     .eq("school_id", context.schoolId);
   observationQuery = workspaceScope(observationQuery, context);
 
-  const { data: observations, error } = await observationQuery
+  const observationRequest = observationQuery
     .order("observation_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(500);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
 
   let learnerQuery = db
     .from("learners")
@@ -202,13 +198,31 @@ export async function GET(request: Request) {
     .eq("school_id", context.schoolId)
     .eq("active", true);
   learnerQuery = workspaceScope(learnerQuery, context);
-  const { data: learners, error: learnerError } = await learnerQuery.order("first_name");
 
-  if (learnerError) {
-    return NextResponse.json({ error: learnerError.message }, { status: 500 });
+  const learnerRequest = learnerQuery.order("first_name");
+  const [observationResult, learnerResult] = await Promise.all([
+    observationRequest,
+    learnerRequest,
+  ]);
+
+  if (observationResult.error) {
+    return NextResponse.json(
+      { error: observationResult.error.message },
+      { status: 500 }
+    );
   }
 
-  return NextResponse.json({ observations: observations ?? [], learners: learners ?? [] });
+  if (learnerResult.error) {
+    return NextResponse.json(
+      { error: learnerResult.error.message },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    observations: observationResult.data ?? [],
+    learners: learnerResult.data ?? [],
+  });
 }
 
 export async function POST(request: Request) {

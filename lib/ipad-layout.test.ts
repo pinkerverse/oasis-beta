@@ -35,6 +35,18 @@ test("tablet modals use safe-area and dynamic viewport scrolling", () => {
   assert.match(css, /-webkit-overflow-scrolling:\s*touch/);
 });
 
+test("the Observation Inbox keeps its rounded contained shell on mobile", () => {
+  const css = source("../app/globals.css");
+  const inbox = source("../app/components/ObservationInboxModal.tsx");
+
+  assert.match(inbox, /oasis-modal-surface oasis-contained-mobile-modal/);
+  assert.match(inbox, /rounded-t-3xl/);
+  assert.match(
+    css,
+    /\.oasis-modal-surface\.oasis-contained-mobile-modal\s*\{[\s\S]*?overflow:\s*hidden !important;/
+  );
+});
+
 test("every legacy closeable modal opts into the shared tablet shell", () => {
   const files = [
     "../app/page.tsx",
