@@ -51,6 +51,23 @@ test("the shared modal context is small, scoped and reused across navigation", (
   assert.match(route, /Cache-Control": "private, no-store"/);
 });
 
+test("an Observe priority keeps its area, statement and activity on the same framework objective", () => {
+  const route = source("../app/api/class-actions/context/route.ts");
+
+  assert.match(
+    route,
+    /const frameworkStatement =\s*statement\?\.text \|\|\s*\(latestStatementBelongsToSelectedArea/
+  );
+  assert.match(
+    route,
+    /latest\?\.match\.strand === selectedArea\?\.name/
+  );
+  assert.doesNotMatch(
+    route,
+    /latestStatement\?\.statementText \|\| statement\?\.text/
+  );
+});
+
 test("saving an observation stays responsive while analysis finishes in the background", () => {
   const modals = source("../app/components/ClassActionModals.tsx");
 

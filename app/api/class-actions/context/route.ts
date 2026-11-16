@@ -143,11 +143,15 @@ function createFocusItems({
             })[0]
           : areas.find((area) => area.name === latest?.match.strand) ?? areas[0];
       const latestStatement = latest?.match.statementMatches?.[0];
+      const latestStatementBelongsToSelectedArea =
+        latest?.match.strand === selectedArea?.name;
       const statement =
-        kind !== "Observe" && latestStatement
+        kind !== "Observe" &&
+        latestStatement &&
+        latestStatementBelongsToSelectedArea
           ? selectedArea?.statements.find(
               (candidate) => candidate.id === latestStatement.statementId
-            ) ?? selectedArea?.statements[0]
+            )
           : selectedArea?.statements.length
             ? selectedArea.statements[
                 (daySeed + learnerIndex) % selectedArea.statements.length
@@ -159,7 +163,12 @@ function createFocusItems({
           ]
         : undefined;
       const frameworkStatement =
-        latestStatement?.statementText || statement?.text || selectedArea?.name || "Current learning";
+        statement?.text ||
+        (latestStatementBelongsToSelectedArea
+          ? latestStatement?.statementText
+          : undefined) ||
+        selectedArea?.name ||
+        "Current learning";
       const lookFor =
         progression?.descriptors.filter(Boolean).join(" · ") ||
         statement?.guidance ||
