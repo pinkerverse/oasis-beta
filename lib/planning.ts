@@ -31,6 +31,46 @@ export type PlanningContext = {
   unmatchedObservations: number;
 };
 
+export function rearrangePlanEntries(
+  entries: PlanEntry[],
+  sourceEntryId: string,
+  targetDay: number,
+  swapWithEntryId?: string
+) {
+  if (!Number.isInteger(targetDay) || targetDay < 0 || targetDay >= PLAN_DAYS.length) {
+    throw new Error("Choose a weekday in this plan.");
+  }
+
+  const source = entries.find((entry) => entry.id === sourceEntryId);
+  if (!source) throw new Error("That planned activity is no longer available.");
+
+  if (swapWithEntryId) {
+    const target = entries.find((entry) => entry.id === swapWithEntryId);
+    if (!target) throw new Error("The activity to swap with is no longer available.");
+    if (target.id === source.id || target.day === source.day) return entries;
+    if (target.day !== targetDay) throw new Error("Choose an activity in the destination day.");
+
+    return entries.map((entry) =>
+      entry.id === source.id
+        ? { ...entry, day: target.day }
+        : entry.id === target.id
+          ? { ...entry, day: source.day }
+          : entry
+    );
+  }
+
+  if (source.day === targetDay) return entries;
+  if (entries.filter((entry) => entry.day === targetDay).length >= 3) {
+    throw new Error(
+      `${PLAN_DAYS[targetDay]} is full. Drop onto an activity there to swap them.`
+    );
+  }
+
+  return entries.map((entry) =>
+    entry.id === source.id ? { ...entry, day: targetDay } : entry
+  );
+}
+
 export function mondayOf(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Choose a valid week.");
   const value = new Date(`${date}T12:00:00Z`);

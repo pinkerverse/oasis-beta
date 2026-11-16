@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { mondayOf, upcomingMonday, planningHeatClasses, parsePlan, parseProvocation, parseProvocationImage, ACTIVITY_FIELDS, PROVOCATION_FIELDS, PLAN_DAYS, PLAN_FIELDS, type ActivityIdea, type PlanEntry, type PlanField, type PlanningContext, type WeeklyPlan } from "@/lib/planning";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { mondayOf, upcomingMonday, planningHeatClasses, parsePlan, parseProvocation, parseProvocationImage, rearrangePlanEntries, ACTIVITY_FIELDS, PROVOCATION_FIELDS, PLAN_DAYS, PLAN_FIELDS, type ActivityIdea, type PlanEntry, type PlanField, type PlanningContext, type WeeklyPlan } from "@/lib/planning";
 import { closeDialogOnBackdropPress } from "@/lib/modal-backdrop";
 
 const button = "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
@@ -55,6 +55,11 @@ export default function WeeklyPlanner() {
   const [roomJob, setRoomJob] = useState<{ id: string; kind: "provocation" | "image" } | null>(null);
   const [roomError, setRoomError] = useState<{ id: string; message: string } | null>(null);
   const [includeSetupSheets, setIncludeSetupSheets] = useState(false);
+  const [draggedEntryId, setDraggedEntryId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    day: number;
+    entryId: string | null;
+  } | null>(null);
   const requestId = useRef(0);
   const editVersion = useRef(0);
   const roomRequestId = useRef(0);
@@ -97,6 +102,51 @@ export default function WeeklyPlanner() {
 
   function change(next: WeeklyPlan) { editVersion.current++; planRef.current = next; setPlan(next); setDirty(true); setNotice(""); }
   function updateEntry(id: string, values: Partial<PlanEntry>) { change({ ...plan, entries: plan.entries.map((entry) => entry.id === id ? { ...entry, ...values } : entry) }); }
+  function finishDragging() {
+    setDraggedEntryId(null);
+    setDropTarget(null);
+  }
+  function moveEntry(entryId: string, targetDay: number, swapWithEntryId?: string) {
+    try {
+      const sourceDay = planRef.current.entries.find(
+        (entry) => entry.id === entryId
+      )?.day;
+      const nextEntries = rearrangePlanEntries(
+        planRef.current.entries,
+        entryId,
+        targetDay,
+        swapWithEntryId
+      );
+      if (nextEntries === planRef.current.entries) return;
+      change({ ...planRef.current, entries: nextEntries });
+      setNotice(
+        swapWithEntryId
+          ? `Activities swapped between ${sourceDay === undefined ? "the original day" : PLAN_DAYS[sourceDay]} and ${PLAN_DAYS[targetDay]}. Save the week to keep this change.`
+          : `Activity moved to ${PLAN_DAYS[targetDay]}. Save the week to keep this change.`
+      );
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "That activity could not be moved.");
+    } finally {
+      finishDragging();
+    }
+  }
+  function startDragging(event: DragEvent<HTMLElement>, entryId: string) {
+    setDraggedEntryId(entryId);
+    setDropTarget(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", entryId);
+    const card = event.currentTarget.closest("article");
+    if (card instanceof HTMLElement) {
+      event.dataTransfer.setDragImage(
+        card,
+        Math.min(card.clientWidth / 2, 180),
+        18
+      );
+    }
+  }
+  function draggedId(event: DragEvent<HTMLElement>) {
+    return draggedEntryId || event.dataTransfer.getData("text/plain");
+  }
   function chooseWeek(value: string) {
     if (!value) return;
     const next = mondayOf(value);
@@ -206,15 +256,113 @@ export default function WeeklyPlanner() {
           {contextError && <p role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{contextError}</p>}
           {context?.preview && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Local preview: your full active framework and live activity suggestions. Coverage numbers are illustrative, not your class data. Plans here are temporary.</p>}
           {!loading && <>
+        {plan.entries.length > 0 && <p className="mt-5 text-xs text-slate-500"><span className="hidden md:inline">Drag an activity by its top handle to another day. Drop it onto another activity to swap them.</span><span className="md:hidden">Use the move control on an activity to place or swap it on another day.</span></p>}
         <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {PLAN_DAYS.map((day, index) => {
             const entries = plan.entries.filter((entry) => entry.day === index);
-            return <section key={day} aria-label={day} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            const dayIsDropTarget =
+              draggedEntryId &&
+              dropTarget?.day === index &&
+              dropTarget.entryId === null;
+            return <section
+              key={day}
+              aria-label={day}
+              onDragOver={(event) => {
+                if (!draggedEntryId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDropTarget({ day: index, entryId: null });
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const entryId = draggedId(event);
+                if (entryId) moveEntry(entryId, index);
+              }}
+              className={`min-w-0 rounded-2xl border bg-white p-4 shadow-sm transition ${dayIsDropTarget ? "border-cyan-500 bg-cyan-50/60 ring-2 ring-cyan-200" : "border-slate-200"}`}
+            >
               <div className="mb-4 flex items-center justify-between"><h2 className="font-bold">{day}</h2><span className="text-xs text-slate-400">{entries.length}/3</span></div>
               {!entries.length && <div className="mb-4 rounded-xl border border-dashed border-slate-200 px-3 py-10 text-center text-sm leading-6 text-slate-500">A little space for possibility.<br />Choose an objective to begin.</div>}
-              {entries.map((entry) => <article key={entry.id} className="mb-5 space-y-4 border-b border-slate-200 pb-5">
+              {entries.map((entry) => {
+                const entryIsDropTarget =
+                  draggedEntryId && dropTarget?.entryId === entry.id;
+                return <article
+                  key={entry.id}
+                  onDragOver={(event) => {
+                    if (!draggedEntryId || draggedEntryId === entry.id) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.dataTransfer.dropEffect = "move";
+                    setDropTarget({ day: index, entryId: entry.id });
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const entryId = draggedId(event);
+                    if (entryId && entryId !== entry.id) {
+                      moveEntry(entryId, index, entry.id);
+                    }
+                  }}
+                  className={`mb-5 space-y-4 rounded-xl border-b pb-5 transition ${entryIsDropTarget ? "bg-indigo-50 ring-2 ring-indigo-300" : "border-slate-200"} ${draggedEntryId === entry.id ? "opacity-50" : ""}`}
+                >
+                <div className="planner-drag-handle justify-center pt-1">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(event) => startDragging(event, entry.id)}
+                    onDragEnd={finishDragging}
+                    aria-label={`Drag ${entry.objective} to another day`}
+                    className="group flex h-7 w-full cursor-grab items-center justify-center rounded-lg active:cursor-grabbing"
+                  >
+                    <span className="h-1 w-14 rounded-full bg-slate-200 transition group-hover:bg-cyan-500" aria-hidden="true" />
+                  </button>
+                </div>
                 <div className="rounded-xl bg-cyan-50 p-3"><p className="text-[11px] font-bold uppercase tracking-wide text-cyan-800">{entry.area}</p><h3 className="mt-2 text-sm font-semibold leading-6">{entry.objective}</h3>{entry.target && <p className="mt-2 text-xs leading-5 text-slate-600">Level {entry.level}: {entry.target}</p>}</div>
-                <div className="flex flex-wrap gap-2"><button className={`${button} !px-2 !text-xs`} onClick={() => void generate(entry)}>Explore 2 ideas</button><button className="text-xs text-slate-500 underline" onClick={() => { if (window.confirm("Remove this objective and its activity from the plan?")) change({ ...plan, entries: plan.entries.filter((item) => item.id !== entry.id) }); }}>Remove</button></div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button className={`${button} !px-2 !text-xs`} onClick={() => void generate(entry)}>Explore 2 ideas</button>
+                  <label className="planner-mobile-move relative">
+                    <span className="sr-only">Move {entry.objective}</span>
+                    <select
+                      aria-label={`Move ${entry.objective}`}
+                      value=""
+                      onChange={(event) => {
+                        const [action, value] = event.target.value.split(":");
+                        if (action === "move") {
+                          moveEntry(entry.id, Number(value));
+                        } else if (action === "swap") {
+                          const target = planRef.current.entries.find(
+                            (item) => item.id === value
+                          );
+                          if (target) moveEntry(entry.id, target.day, target.id);
+                        }
+                      }}
+                      className="h-9 max-w-[9rem] appearance-none rounded-xl border border-slate-300 bg-white py-1 pl-8 pr-3 text-xs font-semibold text-slate-700"
+                    >
+                      <option value="">Move</option>
+                      {PLAN_DAYS.flatMap((targetDayName, targetDay) => {
+                        if (targetDay === entry.day) return [];
+                        const targetEntries = plan.entries.filter(
+                          (item) => item.day === targetDay
+                        );
+                        return [
+                          ...(targetEntries.length < 3
+                            ? [
+                                <option key={`move-${targetDay}`} value={`move:${targetDay}`}>
+                                  Move to {targetDayName}
+                                </option>,
+                              ]
+                            : []),
+                          ...targetEntries.map((targetEntry) => (
+                            <option key={`swap-${targetEntry.id}`} value={`swap:${targetEntry.id}`}>
+                              Swap with {targetDayName}: {targetEntry.objective}
+                            </option>
+                          )),
+                        ];
+                      })}
+                    </select>
+                    <span className="pointer-events-none absolute left-2.5 top-1.5 text-sm text-slate-500" aria-hidden="true">↔</span>
+                  </label>
+                  <button className="text-xs text-slate-500 underline" onClick={() => { if (window.confirm("Remove this objective and its activity from the plan?")) change({ ...plan, entries: plan.entries.filter((item) => item.id !== entry.id) }); }}>Remove</button>
+                </div>
                 {ACTIVITY_FIELDS.map((field) => <div key={field}><label htmlFor={`${entry.id}-${field}`} className="mb-1 block text-xs font-bold text-slate-600">{labels[field]}</label><textarea id={`${entry.id}-${field}`} value={entry[field]} maxLength={1200} rows={field === "resources" ? 2 : 4} className={input} placeholder={field === "questions" ? "What do you notice?\nHow could you try it another way?" : "Write your own or explore ideas…"} onChange={(event) => updateEntry(entry.id, { [field]: event.target.value })} /></div>)}
                 <section aria-label={`Room provocation for ${entry.objective}`} className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50/50 p-3">
                   <div><h4 className="text-sm font-bold text-cyan-900">Room provocation</h4><p className="mt-1 text-xs leading-5 text-slate-600">One invitation to explore this objective through play, beyond the short activity.</p></div>
@@ -230,7 +378,8 @@ export default function WeeklyPlanner() {
                   {roomJob?.id === entry.id && <p role="status" className="text-xs text-cyan-800">{roomJob.kind === "image" ? "Creating one matching visual. Your written plan is safe." : "Finding a practical invitation for this objective…"}</p>}
                   {roomError?.id === entry.id && <p role="alert" className="text-xs leading-5 text-amber-900">{roomError.message}</p>}
                 </section>
-              </article>)}
+              </article>;
+              })}
               <button className={`${button} w-full !px-2`} disabled={!context || entries.length >= 3} onClick={() => { setChosen(""); setLevel(""); setSearch(""); setOnlyGaps(false); setOpenArea(null); setPickerDay(index); }}>+ Add from framework</button>
             </section>;
           })}

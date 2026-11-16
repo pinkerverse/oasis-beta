@@ -25,3 +25,23 @@ test("the weekly planner uses the shared intelligence page styling", () => {
   assert.match(planner, /function PlanningIcon/);
   assert.match(planner, /sm:text-4xl/);
 });
+
+test("the weekly planner offers drag-and-drop and a touch move control", () => {
+  const planner = readFileSync(
+    new URL("../app/planning/WeeklyPlanner.tsx", import.meta.url),
+    "utf8"
+  );
+  const styles = readFileSync(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(planner, /draggable/);
+  assert.match(planner, /cursor-grab/);
+  assert.match(planner, /Drop it onto another activity to swap them/);
+  assert.match(planner, /planner-mobile-move/);
+  assert.match(planner, /rearrangePlanEntries/);
+  assert.match(styles, /pointer: fine/);
+  assert.match(styles, /\.planner-drag-handle/);
+  assert.match(styles, /\.planner-mobile-move/);
+});

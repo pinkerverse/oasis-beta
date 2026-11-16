@@ -181,3 +181,22 @@ html[data-oasis-embedded-overlay="true"] .oasis-install-fab {
     -webkit-overflow-scrolling: touch;
   }
 }
+/* Weekly planning uses native dragging only when a precise pointer is available.
+   Touch devices keep the explicit move control, including wide tablets. */
+.planner-drag-handle {
+  display: none;
+}
+
+.planner-mobile-move {
+  display: inline-block;
+}
+
+@media (min-width: 768px) and (pointer: fine) {
+  .planner-drag-handle {
+    display: flex;
+  }
+
+  .planner-mobile-move {
+    display: none;
+  }
+}

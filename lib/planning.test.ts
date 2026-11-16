@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildObjectiveCoverage, mondayOf, upcomingMonday, planningHeatClasses, planningIdeaInput, parsePlan, parseProvocation, parseProvocationImage, type PlanEntry } from "./planning.ts";
+import { buildObjectiveCoverage, mondayOf, upcomingMonday, planningHeatClasses, planningIdeaInput, parsePlan, parseProvocation, parseProvocationImage, rearrangePlanEntries, type PlanEntry } from "./planning.ts";
 import type { FrameworkDefinition } from "./framework.ts";
 
 const framework: FrameworkDefinition = { key: "test", name: "Test", assessmentLevels: [], areas: ["Physical"], areaDefinitions: [{ id: "physical", name: "Physical", statements: [{ id: "balance", text: "Balances" }, { id: "grip", text: "Uses tools" }] }] };
@@ -84,4 +84,46 @@ test("plan validation rejects oversized text, duplicate IDs and invalid days", (
   assert.throws(() => parsePlan({ ...plan, entries: [{ ...entry, activity: "x".repeat(1201) }] }));
   assert.throws(() => parsePlan({ ...plan, entries: Array.from({ length: 4 }, (_, i) => ({ ...entry, id: String(i) })) }));
   assert.throws(() => parsePlan({ ...plan, week: "2026-10-20" }));
+});
+
+test("planned activities move into open days and swap with occupied slots", () => {
+  const monday = entry;
+  const tuesday = {
+    ...entry,
+    id: "tuesday-entry",
+    day: 1,
+    objective: "Uses tools",
+    statementId: "grip",
+  };
+
+  const moved = rearrangePlanEntries([monday], monday.id, 1);
+  assert.equal(moved[0].day, 1);
+  assert.equal(moved[0].activity, monday.activity);
+
+  const swapped = rearrangePlanEntries(
+    [monday, tuesday],
+    monday.id,
+    1,
+    tuesday.id
+  );
+  assert.equal(swapped.find((item) => item.id === monday.id)?.day, 1);
+  assert.equal(swapped.find((item) => item.id === tuesday.id)?.day, 0);
+  assert.equal(
+    swapped.find((item) => item.id === monday.id)?.provocationSetup,
+    monday.provocationSetup
+  );
+});
+
+test("a full day requires an explicit activity swap", () => {
+  const fullTuesday = Array.from({ length: 3 }, (_, index) => ({
+    ...entry,
+    id: `tuesday-${index}`,
+    day: 1,
+  }));
+
+  assert.throws(
+    () => rearrangePlanEntries([entry, ...fullTuesday], entry.id, 1),
+    /Tuesday is full/
+  );
+  assert.throws(() => rearrangePlanEntries([entry], entry.id, 8));
 });
