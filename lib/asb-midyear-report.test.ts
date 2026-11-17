@@ -23,12 +23,11 @@ test("the mid-year teacher allowance reserves the sample's specialist words", ()
   assert.equal(ASB_MIDYEAR_TEACHER_WORD_LIMIT, 466);
 });
 
-test("the report uses the three current POI units and excludes the unstarted unit", () => {
+test("the report uses the two agreed POI units and excludes the unstarted unit", () => {
   assert.deepEqual(
     ASB_MIDYEAR_ACTIVE_UNITS.map((unit) => unit.title),
     [
       "Who we are",
-      "How we express ourselves",
       "Where we are in place and time",
     ]
   );
@@ -43,6 +42,10 @@ test("the report uses the three current POI units and excludes the unstarted uni
     ASB_MIDYEAR_ACTIVE_UNITS[0].centralIdea,
     "Being kind, strong, and well helps us grow, build relationships, and belong in a community."
   );
+  assert.match(
+    ASB_MIDYEAR_ACTIVE_UNITS[1].evidenceLens,
+    /Indian festivals.*hands-on classroom arts/
+  );
 });
 
 test("the mid-year template is restricted to the ASB school", () => {
@@ -53,7 +56,7 @@ test("the mid-year template is restricted to the ASB school", () => {
   assert.equal(getMidYearReportTemplateForSchool("another-school"), null);
 });
 
-test("normalization keeps two distinct active units and stays within 466 words", () => {
+test("normalization keeps the two required units in order and stays within 466 words", () => {
   const longParagraph = Array.from(
     { length: 150 },
     (_, index) => `word${index}`
@@ -73,7 +76,7 @@ test("normalization keeps two distinct active units and stays within 466 words",
         { unitKey: "who_we_are", text: `${longParagraph}.` },
         { unitKey: "who_we_are", text: "Duplicate unit." },
         {
-          unitKey: "how_we_express_ourselves",
+          unitKey: "where_we_are_in_place_and_time",
           text: `${longParagraph}.`,
         },
         { unitKey: "how_the_world_works", text: "Not started." },
@@ -84,7 +87,7 @@ test("normalization keeps two distinct active units and stays within 466 words",
 
   assert.deepEqual(
     report.unitsOfInquiry.map((unit) => unit.unitKey),
-    ["who_we_are", "how_we_express_ourselves"]
+    ["who_we_are", "where_we_are_in_place_and_time"]
   );
   assert.deepEqual(report.introduction.evidenceEntryIds, ["entry-1"]);
   assert.equal(countReportWords(report.introduction.text), 100);

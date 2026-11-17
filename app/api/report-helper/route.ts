@@ -434,7 +434,7 @@ FIXED REPORT STRUCTURE
 1. INTRODUCTION: one paragraph about the whole learner: their sense of belonging and adjustment to classroom life, learning disposition, relationships, self-management, organization, and social-emotional development. Begin with ${learnerInitials} as a person and learner, not with an academic skill or favorite activity.
 2. COMMUNICATION AND EARLY LITERACY: one substantial paragraph about collaboration, social communication, listening, speaking, exchanging information, expression, interpretation, and emergent literacy. Include concrete examples from conversations, group experiences, play, books, storytelling, mark-making, phonological awareness, or early reading and writing only when they are directly evidenced. Show how the learner communicates with children and adults, not only how they participate in a group.
 3. RESEARCH, THINKING AND EMERGING MATH: one substantial paragraph about research skills, information literacy, creative and critical thinking, transfer, reflection, metacognition, mindset, and mathematical thinking. Treat the Thinking Skills (Emergent Math) framework as part of this paragraph. Include directly evidenced examples of number sense, shape, pattern, measurement, classification, spatial reasoning, comparison, or mathematical problem solving. Do not omit mathematical learning when relevant evidence is supplied.
-4. UNITS OF INQUIRY: exactly two separate paragraphs. Choose the two most strongly evidenced units from the three active units supplied below. Name each unit and use its current 2026-27 central idea accurately. Connect documented learner actions to the unit without claiming participation or understanding that is not in the evidence.
+4. UNITS OF INQUIRY: exactly two separate paragraphs, in this order: Who we are; Where we are in place and time. Name each unit and use its current 2026-27 central idea accurately. Connect documented learner actions to the unit without claiming participation or understanding that is not in the evidence.
 5. CONCLUSION: one concise paragraph bringing together distinctive interests, strengths, relationships, growth, and a proportionate forward-looking goal.
 
 Do not write a specialist paragraph. Art, music, physical education, and swimming specialists add their own contribution outside OASIS. Do not use How the world works; it has not started.
@@ -457,9 +457,11 @@ VOICE AND ACCURACY
 - The PRIOR PTC PORTRAIT below is an exclusion baseline, not prose or evidence to recycle. The mid-year report must not copy, closely paraphrase, or reuse its sentence structure, descriptive sequence, concrete examples, activities, anecdotes, or learning moments. Select different documented evidence and show development since the PTC. A broad disposition may remain true, but express it through a different synthesis and different examples.
 - Give the communication and thinking paragraphs enough detail to be useful: normally three or four connected sentences, each grounded in supplied evidence. Do not pad a paragraph by repeating the same example or restating a framework label.
 - Allocate every concrete classroom example to one paragraph only. Even when an observation connects to several learning areas, do not retell or lightly paraphrase the same moment elsewhere. Conclusions synthesise; they do not repeat an earlier anecdote.
+- For Where we are in place and time, actively search all supplied evidence for India, the local environment, Indian festivals and traditions, cultural stories, food, clothing, music, dance, visual symbols, maps and places, and comparisons between India and a learner's home country. A hands-on classroom arts or making experience counts only when the evidence explicitly connects it to India, culture, tradition or place. Never repurpose a generic creative activity or a specialist Art or Music comment as unit evidence.
+- If evidence for either required unit is limited, write a brief, cautious synthesis from the strongest direct evidence available. Never fill the gap with a generic unit description or invented participation.
 - Do not include dates, full names, diagnoses, medical information, safeguarding information, family case details, IDs, citations, headings, bullet points, or source labels in the prose.
 
-CURRENT 2026-27 POI — ONLY THESE THREE UNITS HAVE STARTED
+CURRENT 2026-27 REPORT UNITS — USE BOTH, IN THIS ORDER
 ${JSON.stringify(ASB_MIDYEAR_ACTIVE_UNITS, null, 2)}
 
 OASIS OBSERVATIONS
@@ -685,9 +687,11 @@ function reviewReportContract(
 
   if (
     report.unitsOfInquiry.length !== 2 ||
-    new Set(report.unitsOfInquiry.map((unit) => unit.unitKey)).size !== 2
+    report.unitsOfInquiry.some(
+      (unit, index) => unit.unitKey !== ASB_MIDYEAR_ACTIVE_UNITS[index]?.key
+    )
   ) {
-    issues.push("The draft must contain two distinct active UOI paragraphs.");
+    issues.push("The draft must contain Who we are followed by Where we are in place and time.");
   }
 
   if (report.wordCount < 340) {

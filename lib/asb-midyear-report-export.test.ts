@@ -27,8 +27,8 @@ const report: AsbMidYearReport = {
       evidenceEntryIds: ["e1"],
     },
     {
-      unitKey: "how_we_express_ourselves",
-      text: "In How we express ourselves, AB combined drawing and construction to share an idea.",
+      unitKey: "where_we_are_in_place_and_time",
+      text: "In Where we are in place and time, AB compared an Indian festival tradition with a celebration familiar from home.",
       evidenceEntryIds: ["e2"],
     },
   ],
@@ -72,5 +72,5 @@ test("Word export labels every school report paragraph in order", async () => {
   assert.match(documentXml, /w:rFonts w:ascii="Arial"[^>]*w:hAnsi="Arial"/);
   assert.match(documentXml, /Add the specialist contribution here/);
   assert.match(documentXml, /Who we are/);
-  assert.match(documentXml, /How we express ourselves/);
+  assert.match(documentXml, /Where we are in place and time/);
 });

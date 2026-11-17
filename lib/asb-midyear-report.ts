@@ -20,17 +20,8 @@ export const ASB_MIDYEAR_ACTIVE_UNITS = [
       "How our choices and actions impact relationships and belonging",
       "How we take care of ourselves and others",
     ],
-  },
-  {
-    key: "how_we_express_ourselves",
-    title: "How we express ourselves",
-    centralIdea:
-      "We can use our Hundred Languages to express ourselves.",
-    linesOfInquiry: [
-      "Exploring tools, materials, and media",
-      "Being inspired by others and the world around us",
-      "Reflecting on our and others' work",
-    ],
+    evidenceLens:
+      "Look for documented choices about well-being, food, movement, hygiene, relationships, belonging, caring for self or others, and the learner's explanation of why a choice matters.",
   },
   {
     key: "where_we_are_in_place_and_time",
@@ -42,6 +33,8 @@ export const ASB_MIDYEAR_ACTIVE_UNITS = [
       "Indian traditions and cultures",
       "Similarities and differences between host and home country",
     ],
+    evidenceLens:
+      "Look across all evidence for India and the local environment; Indian festivals, traditions, stories, food, clothing, music, dance, visual symbols and cultural practices; maps, places and journeys; similarities and differences between India and a home country; and hands-on classroom arts or making experiences only when they are explicitly connected to these cultural ideas. Do not treat a generic art activity or a specialist Art or Music comment as evidence for this unit.",
   },
 ] as const;
 
@@ -312,33 +305,25 @@ export function normaliseGeneratedAsbMidYearReport({
     value && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
-  const validUnitKeys = new Set<AsbMidYearUnitKey>(
-    ASB_MIDYEAR_ACTIVE_UNITS.map((unit) => unit.key)
-  );
   const units = Array.isArray(report.unitsOfInquiry)
     ? report.unitsOfInquiry
     : [];
-  const seenUnitKeys = new Set<AsbMidYearUnitKey>();
-  const unitsOfInquiry = units.flatMap((value) => {
-    const candidate =
-      value && typeof value === "object"
-        ? (value as Record<string, unknown>)
-        : {};
-    const unitKey = candidate.unitKey as AsbMidYearUnitKey;
-
-    if (!validUnitKeys.has(unitKey) || seenUnitKeys.has(unitKey)) return [];
-    seenUnitKeys.add(unitKey);
-
-    return [
-      {
-        unitKey,
-        ...normaliseParagraph(
-          candidate,
-          SECTION_WORD_LIMITS.unit,
-          validEntryIds
-        ),
-      },
-    ];
+  const unitsOfInquiry = ASB_MIDYEAR_ACTIVE_UNITS.flatMap((unit) => {
+    const candidate = units.find(
+      (value) =>
+        value &&
+        typeof value === "object" &&
+        (value as Record<string, unknown>).unitKey === unit.key
+    );
+    if (!candidate) return [];
+    return [{
+      unitKey: unit.key,
+      ...normaliseParagraph(
+        candidate,
+        SECTION_WORD_LIMITS.unit,
+        validEntryIds
+      ),
+    }];
   });
   const normalized: AsbMidYearReport = {
     learnerId,
