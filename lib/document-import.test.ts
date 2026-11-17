@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canRecoverDocument, emptyDocumentSection, DOCUMENT_CONTEXT_RULES, matchDocumentLearner, validateDocumentFile, validateDocumentSections } from "./document-import.ts";
+import { canRecoverDocument, emptyDocumentSection, DOCUMENT_CONTEXT_RULES, matchDocumentLearner, prepareGeneratedDocumentSections, traceDocumentQuote, validateDocumentFile, validateDocumentSections } from "./document-import.ts";
 
 const source = "AB takes turns with a verbal prompt. Next steps: AB will name basic shapes. CD enjoys building.";
 const section = { sourceLabel: "AB", learnerId: "learner-a", status: "unknown", documentDate: "", items: [
@@ -31,6 +31,23 @@ test("invented source quotes, empty reviews, long summaries and invalid dates ar
 });
 test("source quotes tolerate layout whitespace but retain wording", () => {
   assert.equal(validateDocumentSections([section], source.replaceAll(" ", "\n"))[0].items.length, 2);
+});
+test("source quotes are re-anchored after harmless punctuation and spelling drift", () => {
+  const original = "DD: He recognises two-dimensional shapes and practises writing his name.";
+  const generated = "DD: He recognizes two-dimensional shapes and practices writing his name.";
+  assert.equal(traceDocumentQuote(generated, original), original);
+  const parsed = validateDocumentSections([{ ...section, sourceLabel: "DD", items: [{ kind: "current_skill", text: "Recognizes shapes and practices writing his name.", quote: generated }] }], original);
+  assert.equal(parsed[0].items[0].quote, original);
+});
+test("materially rewritten quotes remain rejected while other generated points survive", () => {
+  const original = "DD cooperates and shares materials. DD sometimes needs a reminder to wait for his turn to speak.";
+  assert.equal(traceDocumentQuote("DD independently leads every group activity.", original), "");
+  const prepared = prepareGeneratedDocumentSections([{ ...section, sourceLabel: "DD", items: [
+    { kind: "current_skill", text: "Cooperates and shares materials.", quote: "DD cooperates and shares materials." },
+    { kind: "current_skill", text: "Leads every group independently.", quote: "DD independently leads every group activity." },
+  ] }], original);
+  assert.equal(prepared.skippedItems, 1);
+  assert.equal((prepared.sections as Array<{ items: unknown[] }>)[0].items.length, 1);
 });
 test("only supported bounded document files enter the parser", () => {
   for (const name of ["report.DOCX", "report.pdf", "learners.csv", "notes.txt"]) assert.doesNotThrow(() => validateDocumentFile(name, 100));

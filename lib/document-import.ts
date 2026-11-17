@@ -51,6 +51,117 @@ export function documentText(value: unknown) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
+type DocumentQuoteToken = { value: string; start: number; end: number };
+
+function documentQuoteTokens(value: string): DocumentQuoteToken[] {
+  const tokens: DocumentQuoteToken[] = [];
+  const pattern = /[\p{L}\p{N}]+(?:[’'][\p{L}\p{N}]+)*/gu;
+  for (const match of value.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    tokens.push({
+      value: match[0]
+        .normalize("NFKD")
+        .replace(/\p{M}/gu, "")
+        .replace(/’/g, "'")
+        .toLocaleLowerCase(),
+      start,
+      end: start + match[0].length,
+    });
+  }
+  return tokens;
+}
+
+function differsByOneCharacter(left: string, right: string) {
+  if (left === right) return true;
+  if (Math.abs(left.length - right.length) > 1) return false;
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let differences = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    if (left[leftIndex] === right[rightIndex]) {
+      leftIndex += 1;
+      rightIndex += 1;
+      continue;
+    }
+    differences += 1;
+    if (differences > 1) return false;
+    if (left.length > right.length) leftIndex += 1;
+    else if (right.length > left.length) rightIndex += 1;
+    else {
+      leftIndex += 1;
+      rightIndex += 1;
+    }
+  }
+  if (leftIndex < left.length || rightIndex < right.length) differences += 1;
+  return differences <= 1;
+}
+
+function isSafeQuoteTokenVariant(left: string, right: string) {
+  return left === right || (left.length >= 5 && right.length >= 5 && differsByOneCharacter(left, right));
+}
+
+// Model-generated excerpts occasionally change curly punctuation, capitalization, or a
+// single British/American spelling even when asked to quote verbatim. Re-anchor those
+// near-identical excerpts to the exact source span; materially rewritten text still fails.
+export function traceDocumentQuote(quote: string, source: string) {
+  const normalizedQuote = documentText(quote);
+  const normalizedSource = documentText(source);
+  if (!normalizedQuote || !normalizedSource) return "";
+  if (normalizedSource.includes(normalizedQuote)) return normalizedQuote;
+
+  const quoteTokens = documentQuoteTokens(normalizedQuote);
+  const sourceTokens = documentQuoteTokens(normalizedSource);
+  if (quoteTokens.length < 3 || quoteTokens.length > sourceTokens.length) return "";
+  const maximumVariants = quoteTokens.length >= 8 ? 2 : 1;
+
+  for (let start = 0; start <= sourceTokens.length - quoteTokens.length; start += 1) {
+    let variants = 0;
+    let matches = true;
+    for (let offset = 0; offset < quoteTokens.length; offset += 1) {
+      const expected = quoteTokens[offset].value;
+      const actual = sourceTokens[start + offset].value;
+      if (expected === actual) continue;
+      if (!isSafeQuoteTokenVariant(expected, actual)) {
+        matches = false;
+        break;
+      }
+      variants += 1;
+      if (variants > maximumVariants) {
+        matches = false;
+        break;
+      }
+    }
+    if (!matches) continue;
+    let end = sourceTokens[start + quoteTokens.length - 1].end;
+    while (end < normalizedSource.length && /[^\p{L}\p{N}\s]/u.test(normalizedSource[end])) end += 1;
+    return normalizedSource.slice(sourceTokens[start].start, end);
+  }
+  return "";
+}
+
+export function prepareGeneratedDocumentSections(value: unknown, source: string) {
+  if (!Array.isArray(value)) return { sections: value, skippedItems: 0 };
+  let skippedItems = 0;
+  const sections = value.flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [raw];
+    const section = raw as Record<string, unknown>;
+    if (!Array.isArray(section.items)) return [raw];
+    const items = section.items.flatMap((rawItem) => {
+      if (!rawItem || typeof rawItem !== "object") return [rawItem];
+      const item = rawItem as Record<string, unknown>;
+      const tracedQuote = traceDocumentQuote(documentText(item.quote), source);
+      if (!tracedQuote) {
+        skippedItems += 1;
+        return [];
+      }
+      return [{ ...item, quote: tracedQuote }];
+    });
+    if (!items.length) return [];
+    return [{ ...section, items }];
+  });
+  return { sections, skippedItems };
+}
+
 export function validateDocumentFile(name: string, size: number) {
   if (!/\.(docx|pdf|csv|txt)$/i.test(name)) throw new Error("Choose a Word (.docx), text-based PDF, CSV, or text file.");
   if (!size || size > MAX_DOCUMENT_BYTES) throw new Error("Choose a non-empty document of 4 MB or less.");
@@ -84,8 +195,9 @@ export function validateDocumentSections(value: unknown, source: string, learner
       const item = rawItem as Record<string, unknown>;
       const text = documentText(item.text);
       const quote = documentText(item.quote);
-      if (!DOCUMENT_KINDS.includes(item.kind as DocumentKind) || !text || text.length > 700 || quote.length < 5 || quote.length > 1500 || !normalizedSource.includes(quote)) throw new Error("An extracted point could not be traced to the source. Please review or reread the document.");
-      return { kind: item.kind as DocumentKind, text, quote };
+      const tracedQuote = traceDocumentQuote(quote, normalizedSource);
+      if (!DOCUMENT_KINDS.includes(item.kind as DocumentKind) || !text || text.length > 700 || quote.length < 5 || quote.length > 1500 || !tracedQuote) throw new Error("An extracted point could not be traced to the source. Please review or reread the document.");
+      return { kind: item.kind as DocumentKind, text, quote: tracedQuote };
     });
     return { sourceLabel, learnerId, documentDate, status: section.status as DocumentSection["status"], items };
   });
