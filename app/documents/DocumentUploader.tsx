@@ -198,8 +198,13 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
       const body = await responseBody(response);
       if (!response.ok) throw new Error(body.error);
       setSections(body.sections);
+      setExpandedSections(new Set(
+        (body.sections as DocumentSection[])
+          .map((section, index) => section.frameworkReview?.frameworkMatches?.length ? index : -1)
+          .filter((index) => index >= 0)
+      ));
       setFrameworkReviewConfirmed(false);
-      setNotice("OASIS found framework links. Check the areas, objectives and attainment labels below before confirming them.");
+      setNotice("OASIS found framework links and opened them below. Review the current attainment and future targets, then confirm your professional judgement.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "The framework walkthrough could not be analyzed.");
     } finally {
@@ -293,6 +298,15 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
     try { validateDocumentSections(sections, current.source_text, new Set(learners.map((learner) => learner.id))); }
     catch (e) { reviewIssue = e instanceof Error ? e.message : "Complete the learner matches and source excerpts."; }
   }
+  const hasFrameworkMatches = sections.some((section) => section.frameworkReview?.frameworkMatches?.length);
+  const frameworkNextStep = !frameworkReviewMode
+    ? ""
+    : !hasFrameworkMatches
+      ? "Next: analyze this walkthrough against the active framework."
+      : !frameworkReviewConfirmed
+        ? "Next: review the opened framework matches and confirm your professional judgement."
+        : "Framework review complete. This walkthrough is ready to add to the learner record."
+  const canSave = !busy && confirmed && !reviewIssue && (!frameworkReviewMode || frameworkReviewConfirmed);
   function sectionTitle(section: DocumentSection) {
     const learner = learners.find((item) => item.id === section.learnerId);
     return learner?.label || (section.sourceLabel === "Unidentified learner" ? "Learner not matched yet" : section.sourceLabel);
@@ -389,8 +403,33 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
           {section.frameworkReview?.frameworkMatches?.length ? <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-cyan-800">Proposed framework review</p><div className="mt-3 space-y-3">{section.frameworkReview.frameworkMatches.map((match) => <div key={match.strand} className="rounded-xl bg-white p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-bold text-slate-900">{match.strand}</p><span className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-bold text-cyan-900">{match.suggestedLevel}</span></div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">{match.statementMatches.map((statement) => <li key={statement.statementId}>{statement.statementText}{statement.developmentalLevel ? ` · Level ${statement.developmentalLevel}` : ""}<span className="block text-slate-500">{statement.evidence}</span></li>)}</ul></div>)}</div></div> : null}
           </div>
         </details>)}
-        {(current.status === "draft" || current.status === "imported") && <div className="space-y-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 sm:p-5"><label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={frameworkReviewMode} disabled={Boolean(busy)} onChange={(event) => { setFrameworkReviewMode(event.target.checked); setFrameworkReviewConfirmed(false); }} /><span><span className="block font-bold text-slate-900">This is my teacher framework walkthrough</span><span className="block text-xs text-slate-600">Use this only when you deliberately described the learner’s current development against the framework. Final, dated and explicitly confirmed matches may update Learner Progress and Today’s Focus.</span></span></label>{frameworkReviewMode && <><button className={button} disabled={Boolean(busy)} onClick={() => void analyzeFrameworkReview()}>Analyze against the active framework</button>{sections.some((section) => section.frameworkReview?.frameworkMatches?.length) && <label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={frameworkReviewConfirmed} disabled={Boolean(busy)} onChange={(event) => setFrameworkReviewConfirmed(event.target.checked)} />I reviewed the proposed areas, objectives and attainment labels and confirm that they represent my professional judgement.</label>}{current.status === "imported" && <button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !frameworkReviewConfirmed} onClick={() => void confirmImportedFrameworkReview()}>Confirm framework review</button>}</>}</div>}
-        {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5"><button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { const nextIndex = sections.length; setSections((previous) => [...previous, emptyDocumentSection()]); setExpandedSections((previous) => new Set([...previous, nextIndex])); setConfirmed(false); setFrameworkReviewConfirmed(false); }}>Add a learner section</button>{reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}<label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} />I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context.</label><button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !confirmed || Boolean(reviewIssue) || (frameworkReviewMode && !frameworkReviewConfirmed)} onClick={() => void save()}>Add to learner records</button></div>}
+        {(current.status === "draft" || current.status === "imported") && <div className="space-y-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 sm:p-5">
+          <label className="flex items-start gap-3 text-sm leading-6">
+            <input type="checkbox" className="mt-1" checked={frameworkReviewMode} disabled={Boolean(busy)} onChange={(event) => { setFrameworkReviewMode(event.target.checked); setFrameworkReviewConfirmed(false); }} />
+            <span>
+              <span className="block font-bold text-slate-900">Use this walkthrough as current attainment and next-step evidence</span>
+              <span className="block text-xs text-slate-600">Choose this when you deliberately described where the learner currently is against the framework. Confirmed current skills can inform Learner Progress, Today’s Focus and reports. Future targets guide next steps without being marked as achieved.</span>
+            </span>
+          </label>
+          {frameworkReviewMode && <div className="space-y-4 rounded-xl border border-cyan-200 bg-white p-4">
+            <div className="grid gap-3 text-sm sm:grid-cols-3">
+              <div className={`rounded-xl border p-3 ${hasFrameworkMatches ? "border-emerald-200 bg-emerald-50" : "border-blue-200 bg-blue-50"}`}><span className="font-bold">1. Analyze</span><span className="mt-1 block text-xs text-slate-600">Map current skills and future targets to the active framework.</span></div>
+              <div className={`rounded-xl border p-3 ${frameworkReviewConfirmed ? "border-emerald-200 bg-emerald-50" : hasFrameworkMatches ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"}`}><span className="font-bold">2. Review and confirm</span><span className="mt-1 block text-xs text-slate-600">Check the proposed areas, objectives and attainment labels.</span></div>
+              <div className={`rounded-xl border p-3 ${frameworkReviewConfirmed ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"}`}><span className="font-bold">3. Add to learner record</span><span className="mt-1 block text-xs text-slate-600">Make the confirmed evidence available to progress, focus and reports.</span></div>
+            </div>
+            <button className={`${button} ${!hasFrameworkMatches ? "!border-slate-900 !bg-slate-900 !text-white" : ""}`} disabled={Boolean(busy)} onClick={() => void analyzeFrameworkReview()}>{hasFrameworkMatches ? "Re-analyze against the active framework" : "Analyze against the active framework"}</button>
+            {hasFrameworkMatches && <label className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6"><input type="checkbox" className="mt-1" checked={frameworkReviewConfirmed} disabled={Boolean(busy)} onChange={(event) => setFrameworkReviewConfirmed(event.target.checked)} /><span><span className="block font-bold text-slate-900">Confirm my professional judgement</span><span className="block text-xs text-slate-600">I reviewed the proposed areas, objectives and attainment labels. They accurately describe the learner’s current attainment; future targets remain next steps.</span></span></label>}
+            <p id="framework-review-next-step" className={`text-sm font-semibold ${frameworkReviewConfirmed ? "text-emerald-700" : "text-blue-800"}`}>{frameworkNextStep}</p>
+            {current.status === "imported" && <button className={`${button} !bg-slate-900 !text-white`} disabled={Boolean(busy) || !frameworkReviewConfirmed} onClick={() => void confirmImportedFrameworkReview()}>Confirm framework review</button>}
+          </div>}
+        </div>}
+        {!readonly && <div className="space-y-4 border-t border-slate-200 pt-5">
+          <button className={button} disabled={Boolean(busy) || sections.length >= 40} onClick={() => { const nextIndex = sections.length; setSections((previous) => [...previous, emptyDocumentSection()]); setExpandedSections((previous) => new Set([...previous, nextIndex])); setConfirmed(false); setFrameworkReviewConfirmed(false); }}>Add a learner section</button>
+          {reviewIssue && <p className="text-sm text-slate-600">Before saving: {reviewIssue}</p>}
+          <label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1" checked={confirmed} disabled={Boolean(busy)} onChange={(event) => setConfirmed(event.target.checked)} /><span>{frameworkReviewMode ? "I checked the learner match, source excerpts, support details, current attainment and future targets." : "I checked the learner matches, source excerpts, support details, and future targets. Add these points as private context."}</span></label>
+          {frameworkReviewMode && !frameworkReviewConfirmed && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{frameworkNextStep} The final button will become available after confirmation.</p>}
+          <button aria-describedby={frameworkReviewMode ? "framework-review-next-step" : undefined} className={`${button} !bg-slate-900 !text-white`} disabled={!canSave} onClick={() => void save()}>{frameworkReviewMode ? "Add confirmed walkthrough to learner records" : "Add to learner records"}</button>
+        </div>}
       </section>}
       {modal && <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" onClick={onClose} className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-100">Close</button></div>}
     </main>

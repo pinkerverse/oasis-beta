@@ -154,3 +154,14 @@ test("an existing review draft offers an explicit latest-reader refresh without 
   assert.match(previewRoute, /existing\.data\.status !== "draft"/);
   assert.match(previewRoute, /fallbackLearnerId/);
 });
+
+test("a framework walkthrough explains every step before learner records can be updated", () => {
+  const uploader = readFileSync(new URL("../app/documents/DocumentUploader.tsx", import.meta.url), "utf8");
+  assert.match(uploader, /Use this walkthrough as current attainment and next-step evidence/);
+  assert.match(uploader, /Confirmed current skills can inform Learner Progress, Today’s Focus and reports/);
+  assert.match(uploader, /Future targets guide next steps without being marked as achieved/);
+  assert.match(uploader, /Confirm my professional judgement/);
+  assert.match(uploader, /The final button will become available after confirmation/);
+  assert.match(uploader, /Add confirmed walkthrough to learner records/);
+  assert.match(uploader, /setExpandedSections\(new Set\(/);
+});
