@@ -144,3 +144,13 @@ test("automatic rereading returns a recovery ID on failure and cannot report a l
     if (mode === "duplicate") assert.equal(body.id, "existing");
   }
 });
+
+test("an existing review draft offers an explicit latest-reader refresh without reuploading", () => {
+  const uploader = readFileSync(new URL("../app/documents/DocumentUploader.tsx", import.meta.url), "utf8");
+  const previewRoute = readFileSync(new URL("../app/api/document-imports/preview/route.ts", import.meta.url), "utf8");
+  assert.match(uploader, /Reread with latest reader/);
+  assert.match(uploader, /action: "reread"/);
+  assert.match(previewRoute, /jsonBody\?\.action === "reread"/);
+  assert.match(previewRoute, /existing\.data\.status !== "draft"/);
+  assert.match(previewRoute, /fallbackLearnerId/);
+});

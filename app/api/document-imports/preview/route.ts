@@ -20,10 +20,48 @@ export async function POST(request: Request) {
   try {
     const { learners, identities } = await documentImportLearners(context);
     if (!learners.length) return Response.json({ error: "Add learners to this class before importing documents." }, { status: 400 });
+    const multipart = request.headers.get("content-type")?.includes("multipart/form-data") ?? false;
+    const jsonBody = multipart ? null : await request.json() as Record<string, unknown>;
+    if (jsonBody?.action === "reread") {
+      const rereadId = typeof jsonBody.id === "string" ? jsonBody.id : "";
+      if (!rereadId) throw new Error("Choose a saved review draft to reread.");
+      const existing = await db.from("learner_document_imports").select("id, filename, status, source_text, sections")
+        .eq("id", rereadId).eq("school_id", context.schoolId).eq("workspace_id", context.workspaceId).maybeSingle();
+      if (existing.error || !existing.data) return Response.json({ error: "Document not found." }, { status: 404 });
+      if (existing.data.status !== "draft") return Response.json({ error: "Only an unsaved review draft can be reread. Saved learner context remains unchanged." }, { status: 409 });
+      const text = String(existing.data.source_text ?? "");
+      if (text.length < 20 || text.length > MAX_DOCUMENT_TEXT) throw new Error("Use 20–60,000 characters of readable learner text. Split longer documents into smaller files.");
+      const review = reviewPrivacyText(text);
+      if (review.requiresReview) return Response.json({ ...privacyReviewResponse(review), sourceText: text, filename: existing.data.filename }, { status: 422 });
+      const { count, error: quotaError } = await db.from("learner_document_imports").select("id", { count: "exact", head: true })
+        .eq("created_by", context.userId).eq("school_id", context.schoolId).gte("created_at", new Date(Date.now() - 3600000).toISOString());
+      if (quotaError) throw new Error("Document storage could not be checked.");
+      if ((count ?? 0) >= 20) return Response.json({ error: "You've read 20 documents this hour. Please try again later." }, { status: 429 });
+      draftId = rereadId;
+      const result = await analyzeLearnerDocument(text);
+      const previousSections = Array.isArray(existing.data.sections) ? existing.data.sections as Array<Record<string, unknown>> : [];
+      const learnerByLabel = new Map(previousSections.flatMap((section) => {
+        const sourceLabel = documentText(section.sourceLabel).toLocaleLowerCase();
+        const learnerId = typeof section.learnerId === "string" && learners.some((learner) => learner.id === section.learnerId) ? section.learnerId : "";
+        return sourceLabel && learnerId ? [[sourceLabel, learnerId] as const] : [];
+      }));
+      const previousLearnerIds = [...new Set(previousSections.map((section) => typeof section.learnerId === "string" ? section.learnerId : "").filter((id) => learners.some((learner) => learner.id === id)))];
+      const fallbackLearnerId = previousLearnerIds.length === 1 ? previousLearnerIds[0] : "";
+      const sections = result.sections.map((section) => ({
+        ...section,
+        learnerId: learnerByLabel.get(documentText(section.sourceLabel).toLocaleLowerCase()) || fallbackLearnerId || matchDocumentLearner(section.sourceLabel, learners),
+      }));
+      const outputPrivacy = reviewPrivacyText(sections.flatMap((section) => section.items.map((item) => item.text)).join("\n"));
+      if (outputPrivacy.requiresReview) throw new Error("The reading includes sensitive details. Remove those details from the source and try again.");
+      const saved = await db.from("learner_document_imports").update({ document_type: result.documentType, sections })
+        .eq("id", rereadId).eq("school_id", context.schoolId).eq("workspace_id", context.workspaceId).eq("status", "draft").select("id").maybeSingle();
+      if (saved.error || !saved.data) throw new Error("The review draft changed while it was being reread. Reopen it and try again.");
+      return Response.json({ id: rereadId, status: "draft", reread: true, warnings: result.warnings });
+    }
     let text: string;
     let filename: string;
     let requestedLearnerId = "";
-    if (request.headers.get("content-type")?.includes("multipart/form-data")) {
+    if (multipart) {
       const form = await request.formData();
       const file = form.get("file");
       if (!(file instanceof File)) throw new Error("Choose a document to read.");
@@ -31,7 +69,7 @@ export async function POST(request: Request) {
       filename = file.name;
       requestedLearnerId = typeof form.get("learnerId") === "string" ? String(form.get("learnerId")) : "";
     } else {
-      const body = await request.json();
+      const body = jsonBody ?? {};
       text = typeof body.text === "string" ? body.text.trim() : "";
       filename = typeof body.filename === "string" ? body.filename : "Document";
       requestedLearnerId = typeof body.learnerId === "string" ? body.learnerId : "";

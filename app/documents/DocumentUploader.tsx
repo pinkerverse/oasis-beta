@@ -71,8 +71,8 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty]);
 
-  async function open(id: string) {
-    if (current?.status === "draft" && !window.confirm("Leave this review? Unsaved edits will be lost; the original reading remains available.")) return;
+  async function open(id: string, skipDiscardConfirmation = false) {
+    if (!skipDiscardConfirmation && current?.status === "draft" && !window.confirm("Leave this review? Unsaved edits will be lost; the original reading remains available.")) return;
     setError("");
     const response = await fetch(`/api/document-imports?id=${encodeURIComponent(id)}`, { cache: "no-store" });
     const body = await responseBody(response);
@@ -99,7 +99,7 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
     if (body.id && body.status !== "imported") await open(body.id);
     if (!response.ok) throw new Error(body.error);
     if (!body.id) throw new Error("The reading response was interrupted. Check Your documents for the saved reading and recovery options.");
-    if (body.duplicate) return `${filename}: ${body.status === "imported" ? "already imported — no duplicate added" : body.status === "reading" ? "already being read; try again in a few minutes if interrupted" : "already has a review draft below"}.`;
+    if (body.duplicate) return `${filename}: ${body.status === "imported" ? "already imported — no duplicate added" : body.status === "reading" ? "already being read; try again in a few minutes if interrupted" : "already has a review draft below. Use Reread with latest reader to refresh all points"}.`;
     return `${filename}: ready to review.${body.warnings?.length ? ` ${body.warnings.join(" ")}` : ""}`;
   }
 
@@ -126,6 +126,21 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
       await refresh().catch((e) => setError(e.message));
       setBusy(""); inFlight.current = false;
     }
+  }
+
+  async function rereadDraft() {
+    if (!current || current.status !== "draft" || inFlight.current) return;
+    if (!window.confirm("Reread this saved source with the latest reader? This replaces the current unsaved review suggestions, but does not change any learner records.")) return;
+    inFlight.current = true; setError(""); setNotice(""); setBusy("Rereading the complete document…");
+    try {
+      const response = await fetch("/api/document-imports/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: current.id, action: "reread" }) });
+      const body = await responseBody(response);
+      if (!response.ok) throw new Error(body.error);
+      await open(body.id, true);
+      setNotice(`Rereading complete. OASIS found ${body.warnings?.length ? `the full review with ${body.warnings.length} note${body.warnings.length === 1 ? "" : "s"}` : "the full source-linked review"}. Check every point before saving.`);
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "The document could not be reread. Your existing draft is unchanged."); }
+    finally { setBusy(""); inFlight.current = false; }
   }
 
   async function upload(files: File[]) {
@@ -346,7 +361,7 @@ export default function DocumentUploader({ modal = false, initialLearnerId = "",
       </section>
 
       {current && <section aria-labelledby="document-review" className="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 sm:p-8">
-        <div><h2 ref={reviewHeading} tabIndex={-1} id="document-review" className="text-2xl font-bold">{current.status === "imported" ? "Saved private learner context" : current.status === "draft" ? "Review and match learners" : "Document reading — not added to learners"}</h2><p className="mt-2 text-sm text-slate-500">{current.filename} · {current.document_type}</p></div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 ref={reviewHeading} tabIndex={-1} id="document-review" className="text-2xl font-bold">{current.status === "imported" ? "Saved private learner context" : current.status === "draft" ? "Review and match learners" : "Document reading — not added to learners"}</h2><p className="mt-2 text-sm text-slate-500">{current.filename} · {current.document_type}</p></div>{current.status === "draft" && <button type="button" className={button} disabled={Boolean(busy)} onClick={() => void rereadDraft()}>Reread with latest reader</button>}</div>
         <p className="text-sm leading-6 text-slate-600">Check who each section belongs to, the wording, and whether this is a final teacher-reviewed report or a draft. Targets stay separate from current skills. Unknown dates stay unknown—not today’s date.</p>
         {recoverable ? <div className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
           <h3 className="font-semibold">Your text is saved. Learner matching hasn’t finished.</h3>
