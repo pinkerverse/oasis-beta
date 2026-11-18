@@ -32,6 +32,13 @@ test("invented source quotes, empty reviews, long summaries and invalid dates ar
 test("source quotes tolerate layout whitespace but retain wording", () => {
   assert.equal(validateDocumentSections([section], source.replaceAll(" ", "\n"))[0].items.length, 2);
 });
+test("long walkthroughs retain every source-linked point beyond the old twelve-point limit", () => {
+  const points = Array.from({ length: 39 }, (_, index) => `NE evidence point ${index + 1} is recorded here.`);
+  const walkthrough = points.join("\n");
+  const parsed = validateDocumentSections([{ ...section, sourceLabel: "NE", items: points.map((quote) => ({ kind: "current_skill", text: quote, quote })) }], walkthrough);
+  assert.equal(parsed[0].items.length, 39);
+  assert.equal(parsed[0].items.at(-1)?.quote, points.at(-1));
+});
 test("source quotes are re-anchored after harmless punctuation and spelling drift", () => {
   const original = "DD: He recognises two-dimensional shapes and practises writing his name.";
   const generated = "DD: He recognizes two-dimensional shapes and practices writing his name.";

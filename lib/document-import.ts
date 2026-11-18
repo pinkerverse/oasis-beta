@@ -1,5 +1,6 @@
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_DOCUMENT_TEXT = 60000;
+export const MAX_DOCUMENT_ITEMS_PER_SECTION = 1000;
 export const DOCUMENT_ACCEPT = ".docx,.pdf,.csv,.txt";
 export const DOCUMENT_KINDS = ["current_skill", "support", "interest", "next_step", "context"] as const;
 export type DocumentKind = typeof DOCUMENT_KINDS[number];
@@ -189,7 +190,7 @@ export function validateDocumentSections(value: unknown, source: string, learner
     if (learnerIds && !learnerIds.has(learnerId)) throw new Error("Confirm a current-class learner for every included section.");
     if (!["final", "draft", "unknown"].includes(String(section.status))) throw new Error("Confirm the report's status.");
     if (documentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(documentDate) || Number.isNaN(Date.parse(documentDate)) || new Date(documentDate).toISOString().slice(0, 10) !== documentDate || documentDate > new Date().toISOString().slice(0, 10))) throw new Error("Choose a valid document date, or leave it unknown.");
-    if (!Array.isArray(section.items) || !section.items.length || section.items.length > 12) throw new Error("Keep 1–12 useful points per learner section.");
+    if (!Array.isArray(section.items) || !section.items.length || section.items.length > MAX_DOCUMENT_ITEMS_PER_SECTION) throw new Error(`Keep 1–${MAX_DOCUMENT_ITEMS_PER_SECTION} useful points per learner section.`);
     const items = section.items.map((rawItem) => {
       if (!rawItem || typeof rawItem !== "object") throw new Error("Invalid extracted point.");
       const item = rawItem as Record<string, unknown>;
