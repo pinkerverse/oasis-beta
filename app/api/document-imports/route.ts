@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         loadPlanningFramework(context),
         db
           .from("school_assessment_settings")
-          .select("status_labels")
+          .select("status_labels, expectation_mode")
           .eq("school_id", context.schoolId)
           .maybeSingle(),
       ]);
@@ -76,7 +76,17 @@ export async function POST(request: Request) {
         body.sections,
         sections,
         frameworkRecord.definition,
-        labels
+        labels,
+        Object.fromEntries(
+          learners.map((learner) => [
+            learner.id,
+            {
+              className: learner.className,
+              dateOfBirth: learner.dateOfBirth,
+              expectationMode: settingsResult.data?.expectation_mode,
+            },
+          ])
+        )
       );
       if (!sections.some((section) => section.frameworkReview?.confirmed)) {
         return Response.json(

@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         loadPlanningFramework(context),
         db
           .from("school_assessment_settings")
-          .select("status_labels")
+          .select("status_labels, expectation_mode")
           .eq("school_id", context.schoolId)
           .maybeSingle(),
       ]);
@@ -87,12 +87,23 @@ export async function POST(request: Request) {
       );
     }
     const labels = assessmentLabels(settingsResult.data, frameworkRecord.definition);
+    const learnerContexts = Object.fromEntries(
+      learners.map((learner) => [
+        learner.id,
+        {
+          className: learner.className,
+          dateOfBirth: learner.dateOfBirth,
+          expectationMode: settingsResult.data?.expectation_mode,
+        },
+      ])
+    );
 
     if (action === "analyze") {
       const proposedSections = await analyzeDocumentFrameworkWalkthrough(
         sections,
         frameworkRecord.definition,
-        labels
+        labels,
+        learnerContexts
       );
       if (!proposedSections.some((section) => section.frameworkReview)) {
         return Response.json(
@@ -124,7 +135,8 @@ export async function POST(request: Request) {
       confirmedInput,
       sections,
       frameworkRecord.definition,
-      labels
+      labels,
+      learnerContexts
     );
     if (!confirmedSections.some((section) => section.frameworkReview?.confirmed)) {
       return Response.json(

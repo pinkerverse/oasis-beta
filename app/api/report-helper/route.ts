@@ -30,6 +30,11 @@ import {
   getRelevantAsbSupplementalReportingItems,
 } from "@/lib/asb-supplemental-reporting-framework";
 import { recordSecurityEvent } from "@/lib/security-audit";
+import { loadPlanningFramework } from "@/lib/planning-server";
+import {
+  learnerDevelopmentPrompt,
+  resolveLearnerDevelopmentContext,
+} from "@/lib/learner-development-context";
 import {
   getCurrentWorkspaceContext,
   isSchoolAdmin,
@@ -144,9 +149,10 @@ export async function POST(request: Request) {
     }
 
     const db = await createServerSupabaseClient();
+    const frameworkRecord = await loadPlanningFramework(context);
     let learnerQuery = db
       .from("learners")
-      .select("id, first_name, last_name, class_name")
+      .select("id, first_name, last_name, class_name, date_of_birth")
       .eq("id", learnerId)
       .eq("school_id", context.schoolId)
       .eq("active", true);
@@ -274,6 +280,12 @@ export async function POST(request: Request) {
     const learnerInitials = getLearnerInitials({
       firstName: learner.first_name,
       lastName: learner.last_name,
+    });
+    const developmentContext = resolveLearnerDevelopmentContext({
+      className: learner.class_name,
+      dateOfBirth: learner.date_of_birth,
+      framework: frameworkRecord.definition,
+      referenceDate: new Date(),
     });
     const observations = (observationResult.data ?? [])
       .filter(
@@ -423,6 +435,10 @@ export async function POST(request: Request) {
 You are an experienced Pre-K teacher writing an ASB mid-year narrative report for learner ${learnerInitials}.
 
 Write a warm, precise report that sounds like a teacher who knows the learner well. Use only the supplied evidence. Use ${learnerInitials} and they/their; never infer a full name or gender.
+
+LEARNER DEVELOPMENT CONTEXT
+${learnerDevelopmentPrompt(developmentContext)}
+Use this to keep interpretation and next steps proportionate for the learner's exact age and class placement. Do not lower or erase a demonstrated skill. Do not compare a younger learner in a mixed-age class with an older learner's expectation. Do not state the learner's age or birth information in the report.
 
 ${EARLY_YEARS_REPORT_WRITING_PROMPT}
 

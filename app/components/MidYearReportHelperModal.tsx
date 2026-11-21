@@ -76,6 +76,7 @@ export default function MidYearReportHelperModal({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [copiedLearnerId, setCopiedLearnerId] = useState("");
   const [readiness, setReadiness] = useState<LearnerReportReadiness[]>([]);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState("");
@@ -89,6 +90,12 @@ export default function MidYearReportHelperModal({
       learners.filter((learner) => selectedLearnerIds.includes(learner.id)),
     [learners, selectedLearnerIds]
   );
+
+  useEffect(() => {
+    if (!copiedLearnerId) return;
+    const timeoutId = window.setTimeout(() => setCopiedLearnerId(""), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [copiedLearnerId]);
 
   useEffect(() => {
     if (selectedLearnerIds.length === 0) {
@@ -155,6 +162,7 @@ export default function MidYearReportHelperModal({
     setActiveLearnerId("");
     setError("");
     setCopyMessage("");
+    setCopiedLearnerId("");
   }
 
   function toggleLearner(learnerId: string) {
@@ -193,6 +201,7 @@ export default function MidYearReportHelperModal({
     setCompletedCount(0);
     setError("");
     setCopyMessage("");
+    setCopiedLearnerId("");
 
     const queue = [...selectedLearnerIds];
     const generatedReports: AsbMidYearReport[] = [];
@@ -247,8 +256,10 @@ export default function MidYearReportHelperModal({
       await navigator.clipboard.writeText(
         asbMidYearReportToPlainText(activeReport)
       );
+      setCopiedLearnerId(activeReport.learnerId);
       setCopyMessage(`${activeReport.learnerInitials}'s report copied.`);
     } catch {
+      setCopiedLearnerId("");
       setCopyMessage("The report could not be copied automatically.");
     }
   }
@@ -259,6 +270,7 @@ export default function MidYearReportHelperModal({
     setExporting(true);
     setError("");
     setCopyMessage("");
+    setCopiedLearnerId("");
 
     try {
       const response = await fetch("/api/report-helper/export", {
@@ -474,6 +486,7 @@ export default function MidYearReportHelperModal({
                     onClick={() => {
                       setActiveLearnerId(report.learnerId);
                       setCopyMessage("");
+                      setCopiedLearnerId("");
                     }}
                     className={`flex h-14 w-14 items-center justify-center rounded-full border-4 text-sm font-bold transition ${
                       activeReport?.learnerId === report.learnerId
@@ -508,9 +521,16 @@ export default function MidYearReportHelperModal({
                     <button
                       type="button"
                       onClick={handleCopy}
-                      className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      aria-live="polite"
+                      className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                        copiedLearnerId === activeReport.learnerId
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
                     >
-                      Copy full report
+                      {copiedLearnerId === activeReport.learnerId
+                        ? "Copied!"
+                        : "Copy full report"}
                     </button>
                     <button
                       type="button"

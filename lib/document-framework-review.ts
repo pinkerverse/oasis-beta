@@ -4,6 +4,18 @@ import type {
   DocumentFrameworkReview,
   DocumentSection,
 } from "@/lib/document-import";
+import {
+  contextualAssessmentLabel,
+  resolveLearnerDevelopmentContext,
+  type ExpectationMode,
+} from "./learner-development-context.ts";
+
+export type FrameworkReviewLearnerContext = {
+  className?: string | null;
+  dateOfBirth?: string | null;
+  expectationMode?: ExpectationMode | string | null;
+  referenceDate?: Date | string;
+};
 
 function cleanText(value: unknown, maximum: number) {
   return typeof value === "string"
@@ -16,6 +28,7 @@ function frameworkLookup(framework: FrameworkDefinition) {
     string,
     {
       area: string;
+      definition: FrameworkDefinition["areaDefinitions"][number]["statements"][number];
       text: string;
       levels: Set<number>;
     }
@@ -25,6 +38,7 @@ function frameworkLookup(framework: FrameworkDefinition) {
     for (const statement of area.statements) {
       statements.set(statement.id, {
         area: area.name,
+        definition: statement,
         text: statement.text,
         levels: new Set((statement.progression ?? []).map((level) => level.level)),
       });
@@ -37,7 +51,8 @@ function frameworkLookup(framework: FrameworkDefinition) {
 export function validateDocumentFrameworkReview(
   value: unknown,
   framework: FrameworkDefinition,
-  assessmentLabels: string[]
+  assessmentLabels: string[],
+  learner?: FrameworkReviewLearnerContext
 ): DocumentFrameworkReview | null {
   if (!value || typeof value !== "object") return null;
   const review = value as Record<string, unknown>;
@@ -53,8 +68,23 @@ export function validateDocumentFrameworkReview(
     assessmentLabels.map((label, index) => [label.trim().toLocaleLowerCase(), index])
   );
   const grouped = new Map<string, DocumentFrameworkMatch>();
+  const developmentContext = learner
+    ? resolveLearnerDevelopmentContext({
+        className: learner.className,
+        dateOfBirth: learner.dateOfBirth,
+        framework,
+        referenceDate: learner.referenceDate,
+      })
+    : null;
+  const maximumFrameworkMatches = Math.max(
+    1,
+    framework.areaDefinitions.reduce(
+      (total, area) => total + area.statements.length,
+      0
+    )
+  );
 
-  for (const rawMatch of review.frameworkMatches.slice(0, 20)) {
+  for (const rawMatch of review.frameworkMatches.slice(0, maximumFrameworkMatches)) {
     if (!rawMatch || typeof rawMatch !== "object") continue;
     const match = rawMatch as Record<string, unknown>;
     const assessmentLabel = allowedLabels.get(
@@ -62,7 +92,10 @@ export function validateDocumentFrameworkReview(
     );
     if (!assessmentLabel || !Array.isArray(match.statementMatches)) continue;
 
-    for (const rawStatement of match.statementMatches.slice(0, 20)) {
+    for (const rawStatement of match.statementMatches.slice(
+      0,
+      maximumFrameworkMatches
+    )) {
       if (!rawStatement || typeof rawStatement !== "object") continue;
       const statement = rawStatement as Record<string, unknown>;
       const statementId = cleanText(statement.statementId, 180);
@@ -76,20 +109,30 @@ export function validateDocumentFrameworkReview(
         definition.levels.has(rawLevel)
           ? rawLevel
           : null;
+      const contextualLabel = developmentContext
+        ? contextualAssessmentLabel({
+            assessmentLabels,
+            context: developmentContext,
+            developmentalLevel,
+            expectationMode: learner?.expectationMode,
+            statement: definition.definition,
+          })
+        : null;
+      const calibratedAssessmentLabel = contextualLabel ?? assessmentLabel;
       const existing = grouped.get(definition.area) ?? {
         strand: definition.area,
         source: "teacher" as const,
         objectives: [],
         statementMatches: [],
-        assessmentStatus: assessmentLabel,
-        suggestedLevel: assessmentLabel,
+        assessmentStatus: calibratedAssessmentLabel,
+        suggestedLevel: calibratedAssessmentLabel,
         confidence: null,
       };
       const existingOrder = labelOrder.get(existing.suggestedLevel.toLocaleLowerCase()) ?? 0;
-      const candidateOrder = labelOrder.get(assessmentLabel.toLocaleLowerCase()) ?? 0;
+      const candidateOrder = labelOrder.get(calibratedAssessmentLabel.toLocaleLowerCase()) ?? 0;
       if (candidateOrder < existingOrder) {
-        existing.assessmentStatus = assessmentLabel;
-        existing.suggestedLevel = assessmentLabel;
+        existing.assessmentStatus = calibratedAssessmentLabel;
+        existing.suggestedLevel = calibratedAssessmentLabel;
       }
 
       if (!existing.statementMatches.some((item) => item.statementId === statementId)) {
@@ -117,7 +160,8 @@ export function mergeConfirmedDocumentFrameworkReviews(
   rawSections: unknown,
   validatedSections: DocumentSection[],
   framework: FrameworkDefinition,
-  assessmentLabels: string[]
+  assessmentLabels: string[],
+  learnerContexts: Record<string, Omit<FrameworkReviewLearnerContext, "referenceDate">> = {}
 ) {
   const candidates = Array.isArray(rawSections) ? rawSections : [];
 
@@ -130,7 +174,11 @@ export function mergeConfirmedDocumentFrameworkReviews(
     const frameworkReview = validateDocumentFrameworkReview(
       rawReview,
       framework,
-      assessmentLabels
+      assessmentLabels,
+      {
+        ...learnerContexts[section.learnerId],
+        referenceDate: section.documentDate,
+      }
     );
 
     return frameworkReview && section.status === "final" && section.documentDate

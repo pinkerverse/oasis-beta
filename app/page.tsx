@@ -60,6 +60,7 @@ import {
   observationOverviewLevel,
   teacherNoteCanSetOverviewAttainment,
 } from "@/lib/learner-overview-evidence";
+import { resolveLearnerDevelopmentContext } from "@/lib/learner-development-context";
 
 
 
@@ -2790,55 +2791,21 @@ const buildFocusItems = (
   );
   focusWeekStart.setHours(0, 0, 0, 0);
 
-  const getLearnerAgeMonths = (dateOfBirth: unknown) => {
-    if (
-      typeof dateOfBirth !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)
-    ) {
-      return null;
-    }
-
-    const birthDate = new Date(`${dateOfBirth}T00:00:00`);
-    const today = new Date(focusDate);
-
-    if (Number.isNaN(birthDate.getTime()) || birthDate > today) {
-      return null;
-    }
-
-    const months =
-      (today.getFullYear() - birthDate.getFullYear()) * 12 +
-      today.getMonth() -
-      birthDate.getMonth();
-
-    return months;
-  };
-
   const getAgeAppropriateFocus = (
     area: (typeof activeAreas)[number],
     dateOfBirth: unknown,
+    className: string | null | undefined,
     rotationSeed: number,
     statementEvidence: Map<string, StatementEvidenceSummary>
   ) => {
-    const ageMonths = getLearnerAgeMonths(dateOfBirth);
-    const orderedStages = [
-      ...(activeFramework.stages ?? []),
-    ].sort((first, second) => first.order - second.order);
-
-    const matchingStage =
-      ageMonths === null
-        ? null
-        : orderedStages
-            .filter(
-              (stage) =>
-                (stage.minAgeMonths === undefined ||
-                  ageMonths >= stage.minAgeMonths) &&
-                (stage.maxAgeMonths === undefined ||
-                  ageMonths <= stage.maxAgeMonths)
-            )
-            .sort(
-              (first, second) =>
-                second.order - first.order
-            )[0] ?? null;
+    const developmentContext = resolveLearnerDevelopmentContext({
+      className,
+      dateOfBirth: typeof dateOfBirth === "string" ? dateOfBirth : null,
+      framework: activeFramework,
+      referenceDate: focusDate,
+    });
+    const ageMonths = developmentContext.ageInMonths;
+    const matchingStage = developmentContext.expectationStage;
 
     const eligibleStatements = area.statements.filter(
       (statement) =>
@@ -3109,6 +3076,7 @@ const buildFocusItems = (
         ? getAgeAppropriateFocus(
             focusArea,
             learner.dateOfBirth,
+            learner.className,
             focusDayNumber + learnerIndex,
             statementEvidence
           )

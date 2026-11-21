@@ -6,11 +6,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
 import { getLearnerInitials } from "@/lib/learner-privacy";
+import type { FrameworkDefinition } from "@/lib/framework";
+import {
+  contextualAssessmentLabel,
+  resolveLearnerDevelopmentContext,
+} from "@/lib/learner-development-context";
 
 type Learner = {
   id: string;
   firstName: string;
   lastName: string;
+  className?: string | null;
+  dateOfBirth?: string | null;
 };
 
 type Observation = {
@@ -22,6 +29,7 @@ type Observation = {
     strand?: string | null;
     statementMatches?: Array<{
       statementId?: string | null;
+      developmentalLevel?: number | null;
     }> | null;
     teacherOverride?: string | null;
     finalLevel?: string | null;
@@ -140,6 +148,9 @@ export default function ClassAttainmentPage() {
     FrameworkAreaReference[]
   >([]);
   const [frameworkName, setFrameworkName] = useState("");
+  const [activeFramework, setActiveFramework] =
+    useState<FrameworkDefinition | null>(null);
+  const [expectationMode, setExpectationMode] = useState<string | null>(null);
   const [statusLabels, setStatusLabels] = useState(DEFAULT_STATUS_LABELS);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,6 +223,9 @@ export default function ClassAttainmentPage() {
                     "the characteristics of effective teaching and learning"
               ) ?? [];
           loadedFrameworkName = activeFramework?.definition?.name ?? "";
+          setActiveFramework(
+            (activeFramework?.definition as FrameworkDefinition | undefined) ?? null
+          );
         }
 
         if (settingsResponse.ok) {
@@ -226,6 +240,7 @@ export default function ClassAttainmentPage() {
           if (configuredLabels?.length >= 2) {
             loadedStatusLabels = configuredLabels;
           }
+          setExpectationMode(settingsResult.settings?.expectation_mode ?? null);
         }
 
         if (!loadedFrameworkAreas.length) {
@@ -300,7 +315,37 @@ export default function ClassAttainmentPage() {
             match.assessmentStatus?.trim() ||
             match.suggestedLevel?.trim() ||
             "";
-          const status = assessmentDisplayLabel(rawStatus, statusLabels);
+          const learner = learners.find((candidate) => candidate.id === learnerId);
+          const contextualStatuses =
+            !match.teacherOverride && learner && activeFramework
+              ? (match.statementMatches ?? []).flatMap((statementMatch) => {
+                  const statement = activeFramework.areaDefinitions
+                    .flatMap((definition) => definition.statements)
+                    .find((candidate) => candidate.id === statementMatch.statementId);
+                  if (!statement) return [];
+                  const context = resolveLearnerDevelopmentContext({
+                    className: learner.className,
+                    dateOfBirth: learner.dateOfBirth,
+                    framework: activeFramework,
+                    referenceDate: entry.observation_date || entry.created_at || new Date(),
+                  });
+                  const label = contextualAssessmentLabel({
+                    assessmentLabels: statusLabels,
+                    context,
+                    developmentalLevel: statementMatch.developmentalLevel ?? null,
+                    expectationMode,
+                    statement,
+                  });
+                  return label ? [label] : [];
+                })
+              : [];
+          const calibratedStatus = contextualStatuses.sort(
+            (first, second) => statusLabels.indexOf(first) - statusLabels.indexOf(second)
+          )[0];
+          const status = assessmentDisplayLabel(
+            calibratedStatus ?? rawStatus,
+            statusLabels
+          );
 
           if (!area || !status) continue;
 
@@ -356,6 +401,8 @@ export default function ClassAttainmentPage() {
   }, [
     frameworkAreaReferences,
     frameworkAreas,
+    activeFramework,
+    expectationMode,
     learners,
     observations,
     statusLabels,

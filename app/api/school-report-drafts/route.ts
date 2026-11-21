@@ -30,6 +30,11 @@ import {
   isSchoolAdmin,
 } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
+import type { FrameworkDefinition } from "@/lib/framework";
+import {
+  learnerDevelopmentPrompt,
+  resolveLearnerDevelopmentContext,
+} from "@/lib/learner-development-context";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -77,7 +82,7 @@ export async function POST(request: Request) {
     }
 
     let learnerQuery = db.from("learners")
-      .select("id, first_name, last_name")
+      .select("id, first_name, last_name, class_name, date_of_birth")
       .eq("id", learnerId)
       .eq("school_id", context.schoolId)
       .eq("active", true);
@@ -133,6 +138,17 @@ export async function POST(request: Request) {
 
     const privacyIdentities = (classResult.data ?? []).map((learner) => ({ firstName: learner.first_name, lastName: learner.last_name }));
     const learnerInitials = getLearnerInitials({ firstName: learnerResult.data.first_name, lastName: learnerResult.data.last_name });
+    const activeFramework = frameworkResult.data?.definition as
+      | FrameworkDefinition
+      | null;
+    const developmentContext = activeFramework
+      ? resolveLearnerDevelopmentContext({
+          className: learnerResult.data.class_name,
+          dateOfBirth: learnerResult.data.date_of_birth,
+          framework: activeFramework,
+          referenceDate: new Date(),
+        })
+      : null;
     const observations = (observationResult.data ?? []).flatMap((entry) => {
       const observation = replaceLearnerNamesWithInitials(cleanText(entry.observation), privacyIdentities);
       if (!observation) return [];
@@ -196,6 +212,8 @@ export async function POST(request: Request) {
       reportKind === "ptc" ? "" : EARLY_YEARS_REPORT_NARRATIVE_STYLE_PROMPT;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const prompt = `You are an experienced early-years educator writing a ${reportKind} draft for learner ${learnerInitials}. Use only the supplied learner evidence. Never invent, diagnose, infer family information, or turn support into independence. Use initials only.
+
+${developmentContext ? `LEARNER DEVELOPMENT CONTEXT\n${learnerDevelopmentPrompt(developmentContext)}\nUse this to keep interpretation and next steps proportionate for the learner's exact age and class placement. Do not lower a demonstrated skill, compare a younger learner with an older mixed-age class expectation, or state age/birth information in the report.\n` : ""}
 
 ${EARLY_YEARS_REPORT_WRITING_PROMPT}
 

@@ -10,6 +10,11 @@ import {
 } from "@/lib/learner-privacy";
 import { useClassAccessRedirect } from "@/app/components/useClassAccessRedirect";
 import { createFrameworkAreaResolver } from "@/lib/framework-area-matching";
+import type { FrameworkDefinition } from "@/lib/framework";
+import {
+  contextualAssessmentLabel,
+  resolveLearnerDevelopmentContext,
+} from "@/lib/learner-development-context";
 
 type Learner = {
   id: string;
@@ -36,6 +41,7 @@ type JournalEntry = {
       statementId?: string;
       statementText?: string;
       evidence?: string;
+      developmentalLevel?: number | null;
     }>;
   }> | null;
 };
@@ -169,7 +175,10 @@ function evidenceMomentKey(
 function buildLearnerIntelligence(
   entries: JournalEntry[],
   frameworkAreas: string[],
-  statusLabels: string[]
+  statusLabels: string[],
+  learner?: Learner,
+  framework?: FrameworkDefinition | null,
+  expectationMode?: string | null
 ) {
   const resolveArea = createFrameworkAreaResolver(
     frameworkAreas.map((name) => ({ name }))
@@ -238,8 +247,34 @@ function buildLearnerIntelligence(
 
       const statementEvidenceText =
         match.statementMatches?.[0]?.evidence?.trim() || "";
+      const contextualStatuses =
+        !match.teacherOverride && learner && framework
+          ? (match.statementMatches ?? []).flatMap((statementMatch) => {
+              const statement = framework.areaDefinitions
+                .flatMap((definition) => definition.statements)
+                .find((candidate) => candidate.id === statementMatch.statementId);
+              if (!statement) return [];
+              const context = resolveLearnerDevelopmentContext({
+                className: learner.className,
+                dateOfBirth: learner.dateOfBirth,
+                framework,
+                referenceDate: entry.observation_date || entry.created_at || new Date(),
+              });
+              const label = contextualAssessmentLabel({
+                assessmentLabels: statusLabels,
+                context,
+                developmentalLevel: statementMatch.developmentalLevel ?? null,
+                expectationMode,
+                statement,
+              });
+              return label ? [label] : [];
+            })
+          : [];
+      const contextualStatus = contextualStatuses.sort(
+        (first, second) => statusLabels.indexOf(first) - statusLabels.indexOf(second)
+      )[0];
       const statusIndex = getStatusIndex(
-        finalAssessmentStatus(match)
+        contextualStatus ?? finalAssessmentStatus(match)
       );
       const existingAreaEvidence = areaEvidence.get(area) ?? [];
 
@@ -668,6 +703,9 @@ export default function LearnerIntelligencePage() {
   const [frameworkAreas, setFrameworkAreas] = useState(
     DEFAULT_FRAMEWORK_AREAS
   );
+  const [activeFramework, setActiveFramework] =
+    useState<FrameworkDefinition | null>(null);
+  const [expectationMode, setExpectationMode] = useState<string | null>(null);
   const [statusLabels, setStatusLabels] = useState(
     DEFAULT_STATUS_LABELS
   );
@@ -752,6 +790,9 @@ export default function LearnerIntelligencePage() {
             if (activeAreas?.length) {
               setFrameworkAreas(activeAreas);
             }
+            setActiveFramework(
+              (activeFramework?.definition as FrameworkDefinition | undefined) ?? null
+            );
           }
 
           if (settingsResponse.ok) {
@@ -769,6 +810,7 @@ export default function LearnerIntelligencePage() {
             if (configuredLabels?.length >= 2) {
               setStatusLabels(configuredLabels);
             }
+            setExpectationMode(settingsResult.settings?.expectation_mode ?? null);
 
             const configuredWeeklyTarget =
               settingsResult.settings
@@ -1052,9 +1094,19 @@ export default function LearnerIntelligencePage() {
       buildLearnerIntelligence(
         privacySafeEntries,
         frameworkAreas,
-        statusLabels
+        statusLabels,
+        selectedLearner,
+        activeFramework,
+        expectationMode
       ),
-    [privacySafeEntries, frameworkAreas, statusLabels]
+    [
+      privacySafeEntries,
+      frameworkAreas,
+      statusLabels,
+      selectedLearner,
+      activeFramework,
+      expectationMode,
+    ]
   );
 
   const displayedIntelligence = useMemo(() => {

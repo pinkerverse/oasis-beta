@@ -1,4 +1,8 @@
 import type { FrameworkDefinition } from "@/lib/framework";
+import {
+  resolveLearnerDevelopmentContext,
+  resolveStatementExpectation,
+} from "./learner-development-context.ts";
 
 export const ASB_PTC_SCHOOL_ID =
   "6efecf9d-6567-465a-bbe5-7bec87a8e184";
@@ -1365,6 +1369,9 @@ export function buildAsbPtcFrameworkAlignedDomains({
   entries,
   framework,
   calibrationNotes = [],
+  learnerDateOfBirth,
+  learnerClassName,
+  referenceDate = new Date(),
 }: {
   entries: AsbPtcFrameworkEvidenceEntry[];
   framework: FrameworkDefinition;
@@ -1373,6 +1380,12 @@ export function buildAsbPtcFrameworkAlignedDomains({
   learnerClassName?: string | null;
   referenceDate?: Date;
 }): Record<AsbPtcDomainKey, AsbPtcDomainReport> {
+  const developmentContext = resolveLearnerDevelopmentContext({
+    className: learnerClassName,
+    dateOfBirth: learnerDateOfBirth,
+    framework,
+    referenceDate,
+  });
   type CandidateVariant = {
     count: number;
     currentDescriptor: string;
@@ -1390,6 +1403,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
     string,
     {
       areaName: string;
+      statement: FrameworkDefinition["areaDefinitions"][number]["statements"][number];
       progression: NonNullable<
         FrameworkDefinition["areaDefinitions"][number]["statements"][number]["progression"]
       >;
@@ -1400,6 +1414,7 @@ export function buildAsbPtcFrameworkAlignedDomains({
     area.statements.forEach((statement) => {
       statementDefinitions.set(statement.id, {
         areaName: area.name,
+        statement,
         progression: [...(statement.progression ?? [])].sort(
           (first, second) => first.level - second.level
         ),
@@ -1545,11 +1560,18 @@ export function buildAsbPtcFrameworkAlignedDomains({
     const maximumTargetLevel = getAsbPreKTargetLevelMaximum(
       definition.areaName
     );
+    const ageExpectation = resolveStatementExpectation({
+      context: developmentContext,
+      statement: definition.statement,
+    });
+    const ageAppropriateMaximum = ageExpectation?.range.maxExpectedLevel ?? null;
     const nextProgression = definition.progression.find(
       (level) =>
         level.level > directProgression.level &&
         (maximumTargetLevel === null ||
-          level.level <= maximumTargetLevel)
+          level.level <= maximumTargetLevel) &&
+        (ageAppropriateMaximum === null ||
+          level.level <= ageAppropriateMaximum)
     );
     const candidates =
       candidatesByDomain.get(domain) ?? new Map<string, Candidate>();

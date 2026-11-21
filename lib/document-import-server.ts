@@ -6,12 +6,17 @@ import { type DocumentSection } from "./document-import.ts";
 
 export async function documentImportLearners(context: CurrentWorkspaceContext) {
   const db = await createClient();
-  let query = db.from("learners").select("id, first_name, last_name, class_name").eq("school_id", context.schoolId).eq("active", true);
+  let query = db.from("learners").select("id, first_name, last_name, class_name, date_of_birth").eq("school_id", context.schoolId).eq("active", true);
   query = isSchoolAdmin(context.role) ? query.or(`workspace_id.eq.${context.workspaceId},workspace_id.is.null`) : query.eq("workspace_id", context.workspaceId);
   const { data, error } = await query;
   if (error) throw new Error("The class could not be verified.");
   const identities = (data ?? []).map((row) => ({ firstName: row.first_name, lastName: row.last_name }));
-  const learners = (data ?? []).map((row) => ({ id: row.id as string, label: getLearnerInitials({ firstName: row.first_name, lastName: row.last_name }), className: String(row.class_name ?? "") }));
+  const learners = (data ?? []).map((row) => ({
+    id: row.id as string,
+    label: getLearnerInitials({ firstName: row.first_name, lastName: row.last_name }),
+    className: String(row.class_name ?? ""),
+    dateOfBirth: typeof row.date_of_birth === "string" ? row.date_of_birth : null,
+  }));
   return { learners, identities };
 }
 

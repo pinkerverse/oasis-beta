@@ -23,6 +23,12 @@ import {
   getAsbPreKProgressionGuidance,
   getPtcTemplateForSchool,
 } from "@/lib/asb-ptc";
+import {
+  contextualAssessmentLabel,
+  frameworkExpectationPrompt,
+  learnerDevelopmentPrompt,
+  resolveLearnerDevelopmentContext,
+} from "@/lib/learner-development-context";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -34,96 +40,8 @@ type SelectedLearner = {
   dateOfBirth?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  className?: string | null;
 };
-
-function parseDateOfBirth(value: unknown) {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(value)
-  ) {
-    return null;
-  }
-
-  const [year, month, day] = value
-    .split("-")
-    .map(Number);
-
-  const date = new Date(
-    Date.UTC(year, month - 1, day)
-  );
-
-  const isValid =
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
-
-  return isValid ? date : null;
-}
-
-function getAgeInMonthsAtDate(
-  dateOfBirth: unknown,
-  referenceDate: Date
-) {
-  const birthDate =
-    parseDateOfBirth(dateOfBirth);
-
-  if (!birthDate) {
-    return null;
-  }
-
-  const ageInMonths =
-    (referenceDate.getUTCFullYear() -
-      birthDate.getUTCFullYear()) *
-      12 +
-    (referenceDate.getUTCMonth() -
-      birthDate.getUTCMonth());
-
-  return ageInMonths >= 0
-    ? ageInMonths
-    : null;
-}
-
-function resolveSuggestedFrameworkStage(
-  framework: FrameworkDefinition,
-  ageInMonths: number | null
-) {
-  if (
-    ageInMonths === null ||
-    !Array.isArray(framework.stages) ||
-    framework.stages.length === 0
-  ) {
-    return null;
-  }
-
-  const orderedStages = [...framework.stages].sort(
-    (first, second) =>
-      first.order - second.order
-  );
-
-  const matchingStage = orderedStages.find(
-    (stage) => {
-      const meetsMinimum =
-        typeof stage.minAgeMonths !== "number" ||
-        ageInMonths >= stage.minAgeMonths;
-
-      const meetsMaximum =
-        typeof stage.maxAgeMonths !== "number" ||
-        ageInMonths <= stage.maxAgeMonths;
-
-      return meetsMinimum && meetsMaximum;
-    }
-  );
-
-  if (!matchingStage) {
-    return null;
-  }
-
-  return {
-    id: matchingStage.id,
-    label: matchingStage.label,
-    order: matchingStage.order,
-  };
-}
 
 export async function POST(request: Request) {
   try {
@@ -178,7 +96,7 @@ export async function POST(request: Request) {
 
     let schoolLearnersQuery = authenticatedSupabase
       .from("learners")
-      .select("id, first_name, last_name, date_of_birth")
+      .select("id, first_name, last_name, date_of_birth, class_name")
       .eq("school_id", context.schoolId)
       .eq("active", true);
 
@@ -227,6 +145,7 @@ export async function POST(request: Request) {
             dateOfBirth: learner.date_of_birth,
             firstName: learner.first_name,
             lastName: learner.last_name,
+            className: learner.class_name,
           },
         ];
       });
@@ -370,43 +289,36 @@ const observationDateText =
   requestedObservationDate;
 
 const learnerAges = learners.map((learner) => {
-  const ageInMonths = getAgeInMonthsAtDate(
-    learner.dateOfBirth,
-    observationDate
-  );
-
+  const context = resolveLearnerDevelopmentContext({
+    className: learner.className,
+    dateOfBirth: learner.dateOfBirth,
+    framework,
+    referenceDate: observationDate,
+  });
   return {
     id: learner.id,
     name: learner.name,
-    ageInMonths,
-    suggestedStage:
-      resolveSuggestedFrameworkStage(
-        framework,
-        ageInMonths
-      ),
+    ageInMonths: context.ageInMonths,
+    suggestedStage: context.expectationStage
+      ? {
+          id: context.expectationStage.id,
+          label: context.expectationStage.label,
+          order: context.expectationStage.order,
+        }
+      : null,
+    context,
   };
 });
 
 const learnersWithoutValidDob = learnerAges
   .filter(
-    (learner) => learner.ageInMonths === null
+    (learner) => learner.context.ageInMonths === null
   )
   .map((learner) => learner.name);
 
 const learnerAgeContext = learnerAges
   .map((learner) => {
-    if (learner.ageInMonths === null) {
-      return `- ${learner.name}: age unavailable`;
-    }
-
-    const years = Math.floor(
-      learner.ageInMonths / 12
-    );
-
-    const remainingMonths =
-      learner.ageInMonths % 12;
-
-    return `- ${learner.name}: ${learner.ageInMonths} months (${years} years, ${remainingMonths} months)`;
+    return `- ${learner.name}: ${learnerDevelopmentPrompt(learner.context)}`;
   })
   .join("\n");
 
@@ -451,7 +363,13 @@ const frameworkStatementsText =
           .join("\n")
       : "    No developmental progression supplied.";
 
-  return `  - ${statement.id}: ${statement.text}\n${progressionText}`;
+  const expectationText = statement.expectedProgression?.length
+    ? `\n    Age/class expectations: ${statement.expectedProgression
+        .map((range) => `${range.stageId}=levels ${range.minExpectedLevel}-${range.maxExpectedLevel}`)
+        .join(", ")}`
+    : "";
+
+  return `  - ${statement.id}: ${statement.text}\n${progressionText}${expectationText}`;
 }
               )
               .join("\n")
@@ -589,6 +507,9 @@ ${assessmentLevelsText}
 Framework areas and statements:
 ${frameworkStatementsText}
 
+Age/class expectation index:
+${frameworkExpectationPrompt(framework) || "No statement-specific age/class ranges are mapped."}
+
 School-specific progression boundary:
 ${
   asbPreKProgressionGuidance.length > 0
@@ -617,6 +538,8 @@ Assessment rules:
 - Suggested levels must use one of the allowed assessment-level labels supplied above.
 - assessmentStatus is the contextual assessment judgement for the matched learning area and must use one of the allowed assessment-level labels supplied above.
 - assessmentStatus must consider the learner's developmental evidence in context, including the framework's expectations where they are explicitly available.
+- Use the learner's exact age in months as the primary early-years expectation and class placement as secondary context. In a mixed-age class, never judge a younger learner against the older class expectation.
+- A learner's developmentalLevel never changes because of age or class. Age and class affect only assessmentStatus and the proportional next step.
 - Do not use assessmentStatus to change developmentalLevel. developmentalLevel describes the evidence itself; assessmentStatus interprets that evidence against expectations.
 - For temporary interface compatibility, set suggestedLevel to exactly the same value as assessmentStatus.
 - Base each suggested level on the relevant level description supplied above.
@@ -942,6 +865,7 @@ const validStatementsById = new Map(
          {
   areaName: area.name,
   statementText: statement.text,
+  statement,
   progressionLevels: Array.isArray(
     statement.progression
   )
@@ -993,7 +917,8 @@ function isRecord(
 }
 
 function validateFrameworkMatches(
-  rawMatches: unknown
+  rawMatches: unknown,
+  learnerId?: string
 ): ValidatedFrameworkMatch[] {
   if (!Array.isArray(rawMatches)) {
     return [];
@@ -1028,7 +953,7 @@ if (!assessmentStatus) {
   continue;
 }
 
-const suggestedLevel = assessmentStatus;
+let suggestedLevel = assessmentStatus;
 
     const validatedStatementMatches:
       ValidatedStatementMatch[] =
@@ -1139,6 +1064,32 @@ return {
 
     if (sameAreaStatementMatches.length === 0) {
       continue;
+    }
+
+    const learnerContext = learnerId
+      ? learnerAges.find((candidate) => candidate.id === learnerId)?.context
+      : null;
+    const contextualLabels = learnerContext
+      ? sameAreaStatementMatches.flatMap((statementMatch) => {
+          const definition = validStatementsById.get(statementMatch.statementId);
+          const label = definition
+            ? contextualAssessmentLabel({
+                assessmentLabels: assessmentLevelLabels,
+                context: learnerContext,
+                developmentalLevel: statementMatch.developmentalLevel,
+                expectationMode: assessmentSettings?.expectation_mode,
+                statement: definition.statement,
+              })
+            : null;
+          return label ? [label] : [];
+        })
+      : [];
+    if (contextualLabels.length > 0) {
+      suggestedLevel = contextualLabels.sort(
+        (first, second) =>
+          assessmentLevelLabels.indexOf(first) -
+          assessmentLevelLabels.indexOf(second)
+      )[0];
     }
 
     // The statement ID is authoritative. This preserves a genuine
@@ -1287,7 +1238,8 @@ const validatedLearnerAnalyses:
       confidence,
       frameworkMatches:
         validateFrameworkMatches(
-          rawAnalysis.frameworkMatches
+          rawAnalysis.frameworkMatches,
+          learner.id
         ),
       nextSteps,
     };

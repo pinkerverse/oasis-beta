@@ -33,7 +33,12 @@ export type DocumentSection = {
   status: "final" | "draft" | "unknown"; items: DocumentItem[];
   frameworkReview?: DocumentFrameworkReview;
 };
-export type ImportLearner = { id: string; label: string; className: string };
+export type ImportLearner = {
+  id: string;
+  label: string;
+  className: string;
+  dateOfBirth?: string | null;
+};
 export type DocumentImport = {
   id: string; filename: string; document_type: string; status: "reading" | "draft" | "imported" | "failed" | "removed";
   source_text: string; sections: DocumentSection[]; created_at: string;

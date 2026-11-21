@@ -2,12 +2,24 @@ import OpenAI from "openai";
 
 import type { FrameworkDefinition } from "@/lib/framework";
 import type { DocumentSection } from "@/lib/document-import";
-import { validateDocumentFrameworkReview } from "@/lib/document-framework-review";
+import {
+  validateDocumentFrameworkReview,
+  type FrameworkReviewLearnerContext,
+} from "@/lib/document-framework-review";
+import {
+  frameworkExpectationPrompt,
+  learnerDevelopmentPrompt,
+  resolveLearnerDevelopmentContext,
+} from "@/lib/learner-development-context";
 
 export async function analyzeDocumentFrameworkWalkthrough(
   sections: DocumentSection[],
   framework: FrameworkDefinition,
-  assessmentLabels: string[]
+  assessmentLabels: string[],
+  learnerContexts: Record<
+    string,
+    Omit<FrameworkReviewLearnerContext, "referenceDate">
+  > = {}
 ) {
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -25,22 +37,47 @@ export async function analyzeDocumentFrameworkWalkthrough(
                   `Level ${level.level}: ${level.descriptors.join(" | ")}`
               )
               .join("\n    ");
+            const expectations = statement.expectedProgression?.length
+              ? `\n    Age/class expectations: ${statement.expectedProgression
+                  .map(
+                    (range) =>
+                      `${range.stageId}=levels ${range.minExpectedLevel}-${range.maxExpectedLevel}`
+                  )
+                  .join(", ")}`
+              : "";
             return `- ${statement.id}: ${statement.text}${
               progression ? `\n    ${progression}` : ""
-            }`;
+            }${expectations}`;
           })
           .join("\n")}`
     )
     .join("\n\n");
-  const reviewSections = sections.map((section, sectionIndex) => ({
-    sectionIndex,
-    learnerId: section.learnerId,
-    items: section.items.map((item, itemIndex) => ({
-      itemIndex,
-      kind: item.kind,
-      text: item.text,
-    })),
-  }));
+  const reviewSections = sections.map((section, sectionIndex) => {
+    const learner = learnerContexts[section.learnerId];
+    const development = resolveLearnerDevelopmentContext({
+      className: learner?.className,
+      dateOfBirth: learner?.dateOfBirth,
+      framework,
+      referenceDate: section.documentDate,
+    });
+    return {
+      sectionIndex,
+      learnerId: section.learnerId,
+      learnerDevelopment: learnerDevelopmentPrompt(development),
+      items: section.items.map((item, itemIndex) => ({
+        itemIndex,
+        kind: item.kind,
+        text: item.text,
+      })),
+    };
+  });
+  const maximumMatchesPerSection = Math.max(
+    1,
+    framework.areaDefinitions.reduce(
+      (total, area) => total + area.statements.length,
+      0
+    )
+  );
   const response = await client.responses.create({
     model: process.env.DOCUMENT_IMPORT_MODEL || "gpt-4.1-mini",
     store: false,
@@ -61,16 +98,22 @@ RULES
 - Preserve every qualification about prompting, adult help, inconsistency, frequency, uncertainty and negation.
 - Never convert a target into an achieved skill.
 - Choose the lowest assessment label consistent with the evidence when support or consistency is unclear.
+- Keep developmentalLevel faithful to the demonstrated skill. Use exact age in months and class placement only to contextualise the assessment label and next step.
+- For mixed-age classes, the younger/earlier applicable expectation protects the learner from being judged against an older class target.
 - Use the highest label only for explicit, repeated, independent application with additional depth or complexity.
 - developmentalLevel identifies the exact progression descriptor supported by the text. Use null when no descriptor is directly supported.
 - evidence must be a short paraphrase traceable to the supplied current-skill text, including support or frequency qualifications.
 - Return no match when the text is too broad or does not clearly concern a framework statement.
+- Check every active framework area before finishing. Do not stop after the first areas in the framework; include every clearly evidenced area, including areas listed near the end.
 
 ASSESSMENT LABELS, LOWEST TO HIGHEST
 ${assessmentLabels.join("\n")}
 
 ACTIVE FRAMEWORK
 ${frameworkText}
+
+AGE/CLASS EXPECTATION INDEX
+${frameworkExpectationPrompt(framework) || "No statement-specific age/class ranges are mapped."}
 
 REVIEWED TEACHER SECTIONS
 ${JSON.stringify(reviewSections)}
@@ -96,7 +139,7 @@ ${JSON.stringify(reviewSections)}
                   sectionIndex: { type: "integer" },
                   matches: {
                     type: "array",
-                    maxItems: 20,
+                    maxItems: maximumMatchesPerSection,
                     items: {
                       type: "object",
                       additionalProperties: false,
@@ -161,7 +204,11 @@ ${JSON.stringify(reviewSections)}
     const validated = validateDocumentFrameworkReview(
       rawReview,
       framework,
-      assessmentLabels
+      assessmentLabels,
+      {
+        ...learnerContexts[section.learnerId],
+        referenceDate: section.documentDate,
+      }
     );
 
     return validated

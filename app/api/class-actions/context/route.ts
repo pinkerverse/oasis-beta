@@ -5,6 +5,11 @@ import {
   isSchoolAdmin,
 } from "@/lib/supabase/current-workspace";
 import { createClient } from "@/lib/supabase/server";
+import {
+  contextualAssessmentLabel,
+  resolveLearnerDevelopmentContext,
+  resolveStatementExpectation,
+} from "@/lib/learner-development-context";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +64,7 @@ function createFocusItems({
   evidence,
   framework,
   learners,
+  expectationMode,
 }: {
   assessmentLabels: string[];
   evidence: EvidenceRecord[];
@@ -68,7 +74,9 @@ function createFocusItems({
     firstName: string | null;
     lastName: string | null;
     dateOfBirth: string | null;
+    className: string | null;
   }>;
+  expectationMode?: string | null;
 }) {
   const weekStart = mondayKey();
   const daySeed = Math.floor(Date.now() / 86_400_000);
@@ -79,6 +87,12 @@ function createFocusItems({
 
   return learners
     .map((learner, learnerIndex) => {
+      const developmentContext = resolveLearnerDevelopmentContext({
+        className: learner.className,
+        dateOfBirth: learner.dateOfBirth,
+        framework,
+        referenceDate: new Date(),
+      });
       const learnerEvidence = evidence
         .filter((record) => record.learnerId === learner.id)
         .sort((first, second) =>
@@ -119,7 +133,23 @@ function createFocusItems({
           latest.match.suggestedLevel ||
           ""
         : "";
-      const latestStatusIndex = statusIndex(latestStatus, assessmentLabels);
+      const latestStatement = latest?.match.statementMatches?.[0];
+      const latestStatementDefinition = latestStatement?.statementId
+        ? framework.areaDefinitions
+            .flatMap((area) => area.statements)
+            .find((statement) => statement.id === latestStatement.statementId)
+        : undefined;
+      const contextualLatestStatus = latestStatementDefinition
+        ? contextualAssessmentLabel({
+            assessmentLabels,
+            context: developmentContext,
+            developmentalLevel: latestStatement?.developmentalLevel ?? null,
+            expectationMode,
+            statement: latestStatementDefinition,
+          })
+        : null;
+      const effectiveStatus = contextualLatestStatus ?? latestStatus;
+      const latestStatusIndex = statusIndex(effectiveStatus, assessmentLabels);
       const latestAreaCount = latest?.match.strand
         ? areaCounts.get(latest.match.strand) ?? 0
         : 0;
@@ -142,9 +172,17 @@ function createFocusItems({
               return firstDate.localeCompare(secondDate);
             })[0]
           : areas.find((area) => area.name === latest?.match.strand) ?? areas[0];
-      const latestStatement = latest?.match.statementMatches?.[0];
       const latestStatementBelongsToSelectedArea =
         latest?.match.strand === selectedArea?.name;
+      const eligibleStatements = (selectedArea?.statements ?? []).filter(
+        (candidate) =>
+          !candidate.stageIds?.length ||
+          !developmentContext.expectationStage ||
+          candidate.stageIds.includes(developmentContext.expectationStage.id)
+      );
+      const statementPool = eligibleStatements.length
+        ? eligibleStatements
+        : selectedArea?.statements ?? [];
       const statement =
         kind !== "Observe" &&
         latestStatement &&
@@ -152,16 +190,40 @@ function createFocusItems({
           ? selectedArea?.statements.find(
               (candidate) => candidate.id === latestStatement.statementId
             )
-          : selectedArea?.statements.length
-            ? selectedArea.statements[
-                (daySeed + learnerIndex) % selectedArea.statements.length
+          : statementPool.length
+            ? statementPool[
+                (daySeed + learnerIndex) % statementPool.length
               ]
             : undefined;
-      const progression = statement?.progression?.length
-        ? statement.progression[
-            kind === "Stretch" ? statement.progression.length - 1 : 0
-          ]
-        : undefined;
+      const orderedProgression = [...(statement?.progression ?? [])].sort(
+        (first, second) => first.level - second.level
+      );
+      const expectation = statement
+        ? resolveStatementExpectation({
+            context: developmentContext,
+            expectationMode,
+            statement,
+          })
+        : null;
+      const currentLevel = latestStatementBelongsToSelectedArea
+        ? latestStatement?.developmentalLevel ?? null
+        : null;
+      const targetLevel = expectation
+        ? kind === "Stretch" && currentLevel !== null
+          ? currentLevel >= expectation.range.maxExpectedLevel
+            ? currentLevel
+            : Math.min(
+                expectation.range.maxExpectedLevel,
+                Math.max(expectation.targetLevel, currentLevel + 1)
+              )
+          : expectation.targetLevel
+        : kind === "Stretch"
+          ? orderedProgression.at(-1)?.level
+          : orderedProgression[0]?.level;
+      const progression =
+        orderedProgression.find((level) => level.level === targetLevel) ??
+        orderedProgression.find((level) => level.level >= (targetLevel ?? 0)) ??
+        orderedProgression.at(-1);
       const frameworkStatement =
         statement?.text ||
         (latestStatementBelongsToSelectedArea
@@ -182,7 +244,7 @@ function createFocusItems({
         area: selectedArea?.name ?? "Current learning",
         reason:
           kind === "Support"
-            ? `Recent evidence was recorded as ${latestStatus}.`
+            ? "Recent evidence is developing toward this learner’s age-appropriate expectation."
             : kind === "Stretch"
               ? "Repeated evidence suggests a deeper application may be useful."
               : "This is one of the learner’s least represented areas this week.",
@@ -225,7 +287,7 @@ export async function GET() {
     const frameworkRecord = await loadPlanningFramework(context);
     let learnerQuery = db
       .from("learners")
-      .select("id, first_name, last_name, date_of_birth")
+      .select("id, first_name, last_name, date_of_birth, class_name")
       .eq("school_id", context.schoolId)
       .eq("active", true);
     learnerQuery = isSchoolAdmin(context.role)
@@ -262,7 +324,7 @@ export async function GET() {
           .limit(500),
         db
           .from("school_assessment_settings")
-          .select("status_labels, expected_observations_per_learner_per_week")
+          .select("status_labels, expectation_mode, expected_observations_per_learner_per_week")
           .eq("school_id", context.schoolId)
           .maybeSingle(),
       ]);
@@ -276,6 +338,7 @@ export async function GET() {
       firstName: learner.first_name as string | null,
       lastName: learner.last_name as string | null,
       dateOfBirth: learner.date_of_birth as string | null,
+      className: learner.class_name as string | null,
     }));
     const evidence: EvidenceRecord[] = [
       ...(observationResult.data ?? []).flatMap((observation) =>
@@ -346,6 +409,7 @@ export async function GET() {
           evidence,
           framework: frameworkRecord.definition,
           learners,
+          expectationMode: settingsResult.data?.expectation_mode,
         }),
       },
       { headers: { "Cache-Control": "private, no-store" } }
